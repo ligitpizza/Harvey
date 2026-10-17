@@ -1452,5 +1452,14 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   health record (and the payment receipt) failed on the emulators. `StorageFileStore` now sets
   `STORAGE_EMULATOR_HOST` from it. Cloud Run was not affected.
 - Test totals: backend 696 (+3 skipped); Flutter 595; rules 209; lint clean.
-- **Increment 3 complete** (pending the end-of-increment redeploy and live smoke test).
+- End-of-increment redeploy (Ping, `tasks.py deploy-all` + `phone-live`): Firestore rules and
+  indexes, Cloud Run `careflow-api-00050-lf2` (asia-southeast1, deployed 2026-10-18 01:07 MYT),
+  staff portal on Hosting, scheduler jobs. Includes D-76, D-77, D-78 and the Storage fix.
+- Live smoke test (portal in Chrome + release app on Ping's phone), **10/10 PASS**: gradient top
+  bar; dashboard as home; grey nav with Settings; bell receives a phone message; doctor
+  Prescriptions page; Admin center request answered on Staff requests; "my bp was 200/150"
+  produced the Harvey AI note in the chat and an urgent doctor alert; new Home (greeting
+  header, bell, dose progress, tinted Latest BP); Vitals dev tools shown; weekly summary card in
+  the Harvey Assistant.
+- **Increment 3 complete.** Next: Phase 5 (integration testing and refinement).
 
