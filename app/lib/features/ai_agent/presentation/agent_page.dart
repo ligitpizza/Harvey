@@ -10,6 +10,7 @@ import '../../messaging/presentation/chat_ui.dart';
 import '../../messaging/state/messaging_providers.dart';
 import '../data/agent_repository.dart';
 import '../state/agent_providers.dart';
+import '../../notifications/state/notification_providers.dart';
 
 /// Fig 4.3.7.1 AI Health Agent chat (FR-14.1; UC2.6, UC2.6 A1/E1; D-34).
 class AgentPage extends ConsumerStatefulWidget {
@@ -37,6 +38,15 @@ class _AgentPageState extends ConsumerState<AgentPage> {
   String? _unsent; // the patient's message when the request failed
 
   @override
+  void initState() {
+    super.initState();
+    // D-79: the weekly summary's bell entry is read once the assistant is open.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => clearChatNotifications(ref, 'weekly_summary'),
+    );
+  }
+
+  @override
   void dispose() {
     _input.dispose();
     _scroll.dispose();
@@ -46,8 +56,9 @@ class _AgentPageState extends ConsumerState<AgentPage> {
   void _scrollToEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scroll.hasClients) {
+        // D-79: the list is reversed, so the newest message is at offset 0.
         _scroll.animateTo(
-          _scroll.position.maxScrollExtent,
+          _scroll.position.minScrollExtent,
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeOut,
         );
@@ -128,11 +139,13 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                   ),
                 ),
               ),
+              // D-79: reversed so the chat opens at the newest message.
               data: (_) => ListView(
                 key: const Key('agent-list'),
                 controller: _scroll,
+                reverse: true,
                 padding: const EdgeInsets.all(16),
-                children: [
+                children: <Widget>[
                   if (list.isEmpty && _pending == null) const _Welcome(),
                   for (final m in list)
                     if (m.kind == 'weekly_summary')
@@ -175,7 +188,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                       ),
                     ),
                   if (_emergency) const _EmergencyCard(),
-                ],
+                ].reversed.toList(),
               ),
             ),
           ),

@@ -223,8 +223,10 @@ class _Summary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final change = summary['changeFromPrevious'] as num?;
+    // D-79: every tile the same size.
     Widget card(String key, String title, Object? value, String note, Color color) => SizedBox(
       width: 240,
+      height: 132,
       child: Card(
         key: Key(key),
         shape: RoundedRectangleBorder(
@@ -236,9 +238,9 @@ class _Summary extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title.toUpperCase(), style: Theme.of(context).textTheme.labelLarge),
-              Text('${value ?? 0}', style: Theme.of(context).textTheme.displaySmall),
-              Text(note),
+              Text(title.toUpperCase(), style: Theme.of(context).textTheme.labelLarge, maxLines: 1),
+              Text('${value ?? 0}', style: Theme.of(context).textTheme.headlineMedium, maxLines: 1),
+              Flexible(child: Text(note, maxLines: 2, overflow: TextOverflow.ellipsis)),
             ],
           ),
         ),

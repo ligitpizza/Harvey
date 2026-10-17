@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../data/order_models.dart';
 import '../state/orders_providers.dart';
 import 'order_widgets.dart';
+import '../../staff_shell/dashboards.dart' show StatTile;
 import 'pharmacy_shared.dart';
 
 /// Fig 4.3.13.1 Pharmacist view (UC13.6; FR-13.3; D-66): the paid-order queue, recurring
@@ -19,7 +20,8 @@ class PharmacyPage extends ConsumerWidget {
     return LayoutBuilder(
       builder: (context, box) {
         final wide = box.maxWidth >= 1000;
-        const main = [_QueueCard(), SizedBox(height: 16), _PriceCard()];
+        // D-79: counts on top, then the queue by stage, then what waits for the patient.
+        const main = [_QueueCard(), SizedBox(height: 16), _WaitingForPatient(), _PriceCard()];
         const side = [_QuickActions()];
         return ListView(
           padding: const EdgeInsets.all(24),
@@ -42,17 +44,25 @@ class PharmacyPage extends ConsumerWidget {
               'Prepare paid orders and price older prescriptions. Stock and the catalogue are under Inventory.',
             ),
             const SizedBox(height: 16),
+            const _StatusStrip(),
+            const SizedBox(height: 16),
             if (wide)
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Expanded(flex: 2, child: Column(children: main)),
+                  const Expanded(
+                    flex: 3,
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: main),
+                  ),
                   const SizedBox(width: 16),
-                  const Expanded(child: Column(children: side)),
+                  const SizedBox(width: 280, child: Column(children: side)),
                 ],
               )
             else
-              const Column(children: [...main, SizedBox(height: 16), ...side]),
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [...main, SizedBox(height: 16), ...side],
+              ),
           ],
         );
       },
@@ -156,105 +166,229 @@ class _QueueCard extends ConsumerWidget {
     );
   }
 
+  Widget _row(BuildContext context, WidgetRef ref, MedicationOrder o) {
+    final theme = Theme.of(context);
+    final initials = (o.patientName ?? '?')
+        .trim()
+        .split(' ')
+        .map((w) => w.isEmpty ? '' : w[0])
+        .take(2)
+        .join();
+    final actions = <Widget>[
+      if (o.status == Fulfilment.preparing || o.status == Fulfilment.outOfStock)
+        FilledButton(
+          key: Key('ready-${o.id}'),
+          onPressed: () => _ready(context, ref, o),
+          child: const Text('Mark ready'),
+        ),
+      if (o.status == Fulfilment.preparing)
+        OutlinedButton(
+          key: Key('oos-${o.id}'),
+          onPressed: () => _outOfStock(context, ref, o),
+          child: const Text('Out of stock'),
+        ),
+      if (o.status == Fulfilment.readyForCollection)
+        FilledButton.tonal(
+          key: Key('collected-${o.id}'),
+          onPressed: () => runPharmacyAction(
+            context,
+            ref,
+            () => ref.read(ordersRepositoryProvider).collected(o.id),
+            'Marked as collected.',
+          ),
+          child: const Text('Collected'),
+        ),
+    ];
+    return Card(
+      key: Key('queue-${o.id}'),
+      margin: const EdgeInsets.only(bottom: 8),
+      color: theme.colorScheme.surfaceContainerLowest,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        // D-69: the patient's dispensing details.
+        onTap: () => context.go('/pharmacy/patients/${o.patientId}'),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(child: Text(initials)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(o.patientName ?? 'Patient', style: theme.textTheme.titleMedium),
+                        OrderStatusChip(status: o.status),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      o.items.isEmpty
+                          ? o.medicationDetails
+                          : o.items.map((i) => '${i.label} ×${i.quantity}').join(', '),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      [
+                        o.ref,
+                        if (o.isDelivery) 'Home delivery' else 'Self-collection',
+                        ?o.courierRef,
+                        if (o.status == Fulfilment.failed && o.failureReason != null)
+                          o.failureReason!,
+                      ].join(' · '),
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              if (actions.isNotEmpty) ...[
+                const SizedBox(width: 12),
+                // Equal-width buttons, stacked on the right.
+                IntrinsicWidth(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final a in actions)
+                        Padding(padding: const EdgeInsets.only(bottom: 6), child: a),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final queue = ref.watch(pharmacyQueueProvider);
     return PharmacySection(
       icon: Icons.receipt_long_outlined,
       title: 'Active prescription queue',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          queue.when(
-            loading: () => const LinearProgressIndicator(),
-            error: (_, _) => TextButton(
-              onPressed: () => ref.invalidate(pharmacyQueueProvider),
-              child: const Text('Could not load the queue. Retry'),
+      child: queue.when(
+        loading: () => const LinearProgressIndicator(),
+        error: (_, _) => TextButton(
+          onPressed: () => ref.invalidate(pharmacyQueueProvider),
+          child: const Text('Could not load the queue. Retry'),
+        ),
+        data: (q) {
+          if (q.orders.isEmpty) {
+            return const Padding(
+              key: Key('queue-empty'),
+              padding: EdgeInsets.all(8),
+              child: Text('No paid orders to prepare.'),
+            );
+          }
+          // D-79: grouped by stage, so what needs doing next is on top.
+          final groups = <(String, IconData, List<MedicationOrder>)>[
+            (
+              'To prepare',
+              Icons.medication_outlined,
+              [
+                for (final o in q.orders)
+                  if (o.status == Fulfilment.preparing || o.status == Fulfilment.outOfStock) o,
+              ],
             ),
-            data: (q) => q.orders.isEmpty
-                ? const Padding(
-                    key: Key('queue-empty'),
-                    padding: EdgeInsets.all(8),
-                    child: Text('No paid orders to prepare.'),
-                  )
-                : Column(
-                    children: [
-                      for (final o in q.orders)
-                        ListTile(
-                          key: Key('queue-${o.id}'),
-                          contentPadding: EdgeInsets.zero,
-                          // D-69: the patient's dispensing details.
-                          onTap: () => context.go('/pharmacy/patients/${o.patientId}'),
-                          leading: CircleAvatar(
-                            child: Text(
-                              (o.patientName ?? '?')
-                                  .trim()
-                                  .split(' ')
-                                  .map((w) => w.isEmpty ? '' : w[0])
-                                  .take(2)
-                                  .join(),
-                            ),
-                          ),
-                          title: Text(
-                            o.items.isEmpty
-                                ? '${o.patientName ?? 'Patient'} · ${o.medicationDetails}'
-                                : '${o.patientName ?? 'Patient'} · '
-                                      '${o.items.map((i) => '${i.label} ×${i.quantity}').join(', ')}',
-                          ),
-                          subtitle: Wrap(
-                            spacing: 8,
-                            runSpacing: 4,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              OrderStatusChip(status: o.status),
-                              Text(
-                                [
-                                  o.ref,
-                                  if (o.isDelivery) 'Delivery' else 'Pick-up',
-                                  ?o.courierRef,
-                                  if (o.status == Fulfilment.failed && o.failureReason != null)
-                                    o.failureReason!,
-                                ].join(' · '),
-                              ),
-                            ],
-                          ),
-                          trailing: Wrap(
-                            spacing: 4,
-                            children: [
-                              if (o.status == Fulfilment.preparing ||
-                                  o.status == Fulfilment.outOfStock)
-                                FilledButton(
-                                  key: Key('ready-${o.id}'),
-                                  onPressed: () => _ready(context, ref, o),
-                                  child: const Text('Mark ready'),
-                                ),
-                              if (o.status == Fulfilment.preparing)
-                                OutlinedButton(
-                                  key: Key('oos-${o.id}'),
-                                  onPressed: () => _outOfStock(context, ref, o),
-                                  child: const Text('Out of stock'),
-                                ),
-                              if (o.status == Fulfilment.readyForCollection)
-                                FilledButton.tonal(
-                                  key: Key('collected-${o.id}'),
-                                  onPressed: () => runPharmacyAction(
-                                    context,
-                                    ref,
-                                    () => ref.read(ordersRepositoryProvider).collected(o.id),
-                                    'Marked as collected.',
-                                  ),
-                                  child: const Text('Collected'),
-                                ),
-                            ],
-                          ),
+            (
+              'Ready for collection',
+              Icons.storefront_outlined,
+              [
+                for (final o in q.orders)
+                  if (o.status == Fulfilment.readyForCollection) o,
+              ],
+            ),
+            (
+              'Delivery',
+              Icons.local_shipping_outlined,
+              [
+                for (final o in q.orders)
+                  if (o.status != Fulfilment.preparing &&
+                      o.status != Fulfilment.outOfStock &&
+                      o.status != Fulfilment.readyForCollection)
+                    o,
+              ],
+            ),
+          ];
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final (title, icon, orders) in groups)
+                if (orders.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, bottom: 6),
+                    child: Row(
+                      children: [
+                        Icon(icon, size: 18),
+                        const SizedBox(width: 6),
+                        Text(
+                          '$title (${orders.length})',
+                          style: Theme.of(context).textTheme.titleSmall,
                         ),
-                    ],
+                      ],
+                    ),
                   ),
-          ),
-          // D-74: prescriptions waiting for the patient appear here as soon as issued.
-          const _WaitingForPatient(),
-        ],
+                  for (final o in orders) _row(context, ref, o),
+                ],
+            ],
+          );
+        },
       ),
+    );
+  }
+}
+
+/// D-79: the queue at a glance.
+class _StatusStrip extends ConsumerWidget {
+  const _StatusStrip();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final orders = ref.watch(pharmacyQueueProvider).value?.orders ?? const <MedicationOrder>[];
+    final waiting =
+        ref.watch(ordersOverviewProvider((group: 'awaiting_patient', query: ''))).value?.orders ??
+        const <MedicationOrder>[];
+    int n(bool Function(MedicationOrder) t) => orders.where(t).length;
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        StatTile(
+          icon: Icons.medication_outlined,
+          color: Colors.blue.shade600,
+          label: 'To prepare',
+          value:
+              '${n((o) => o.status == Fulfilment.preparing || o.status == Fulfilment.outOfStock)}',
+        ),
+        StatTile(
+          icon: Icons.storefront_outlined,
+          color: Colors.green.shade600,
+          label: 'Ready for collection',
+          value: '${n((o) => o.status == Fulfilment.readyForCollection)}',
+        ),
+        StatTile(
+          icon: Icons.local_shipping_outlined,
+          color: Colors.purple.shade400,
+          label: 'Delivery',
+          value:
+              '${n((o) => o.status == Fulfilment.readyForDelivery || o.status == Fulfilment.failed)}',
+          onTap: () => context.go('/pharmacy/tracking'),
+        ),
+        StatTile(
+          icon: Icons.hourglass_top_outlined,
+          color: Colors.orange.shade700,
+          label: 'Waiting for patient',
+          value: '${waiting.length}',
+        ),
+      ],
     );
   }
 }
@@ -399,24 +533,24 @@ class _QuickActions extends ConsumerWidget {
       key: Key(key),
       onPressed: () => context.go(path),
       icon: Icon(icon),
-      label: Text(label),
+      label: Align(alignment: Alignment.centerLeft, child: Text(label)),
     );
     return PharmacySection(
       icon: Icons.bolt_outlined,
       title: 'Quick actions',
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Chip(
-            avatar: const Icon(Icons.pending_actions_outlined, size: 18),
-            label: Text('$ready order${ready == 1 ? '' : 's'} to prepare'),
+          Text(
+            '$ready order${ready == 1 ? '' : 's'} to prepare',
+            style: Theme.of(context).textTheme.bodyMedium,
           ),
+          const SizedBox(height: 8),
           OutlinedButton.icon(
             key: const Key('quick-new-stock'),
             onPressed: () => addStockItem(context, ref),
             icon: const Icon(Icons.add_box_outlined),
-            label: const Text('New stock'),
+            label: const Align(alignment: Alignment.centerLeft, child: Text('New stock')),
           ),
           link(
             'quick-tracking',
@@ -427,7 +561,7 @@ class _QuickActions extends ConsumerWidget {
           link('quick-inventory', Icons.inventory_2_outlined, 'Inventory', '/pharmacy/inventory'),
           link('quick-patients', Icons.people_outline, 'Patients', '/pharmacy/patients'),
           link('quick-messages', Icons.chat_bubble_outline, 'Messages', '/pharmacy/messages'),
-        ],
+        ].expand((w) => [w, const SizedBox(height: 8)]).toList(),
       ),
     );
   }
@@ -443,39 +577,39 @@ class _WaitingForPatient extends ConsumerWidget {
     final waiting = ref.watch(ordersOverviewProvider((group: 'awaiting_patient', query: '')));
     final orders = waiting.value?.orders ?? const <MedicationOrder>[];
     if (orders.isEmpty) return const SizedBox.shrink();
-    return Column(
+    return PharmacySection(
       key: const Key('waiting-for-patient'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Divider(height: 24),
-        Text(
-          'Waiting for the patient to confirm and pay (${orders.length})',
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
-        for (final o in orders)
-          ListTile(
-            key: Key('incoming-${o.id}'),
-            contentPadding: EdgeInsets.zero,
-            onTap: () => context.go('/pharmacy/patients/${o.patientId}'),
-            leading: const Icon(Icons.hourglass_top_outlined),
-            title: Text(
-              '${o.patientName ?? 'Patient'} · '
-              '${o.items.isEmpty ? o.medicationDetails : o.items.map((i) => '${i.label} ×${i.quantity}').join(', ')}',
+      icon: Icons.hourglass_top_outlined,
+      title: 'Waiting for the patient (${orders.length})',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Issued by the doctor; the patient still has to confirm and pay.'),
+          for (final o in orders)
+            ListTile(
+              key: Key('incoming-${o.id}'),
+              contentPadding: EdgeInsets.zero,
+              onTap: () => context.go('/pharmacy/patients/${o.patientId}'),
+              leading: const Icon(Icons.hourglass_top_outlined),
+              title: Text(
+                '${o.patientName ?? 'Patient'} · '
+                '${o.items.isEmpty ? o.medicationDetails : o.items.map((i) => '${i.label} ×${i.quantity}').join(', ')}',
+              ),
+              subtitle: Text(
+                [
+                  o.ref,
+                  o.status.label,
+                  if (o.total != null) rm(o.total!) else 'awaiting price',
+                ].join(' · '),
+              ),
+              trailing: TextButton(
+                key: Key('cancel-${o.id}'),
+                onPressed: () => cancelOrderWithReason(context, ref, o),
+                child: const Text('Cancel'),
+              ),
             ),
-            subtitle: Text(
-              [
-                o.ref,
-                o.status.label,
-                if (o.total != null) rm(o.total!) else 'awaiting price',
-              ].join(' · '),
-            ),
-            trailing: TextButton(
-              key: Key('cancel-${o.id}'),
-              onPressed: () => cancelOrderWithReason(context, ref, o),
-              child: const Text('Cancel'),
-            ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }

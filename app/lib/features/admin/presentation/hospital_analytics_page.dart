@@ -10,6 +10,8 @@ import '../../medications/domain/med_schedule.dart' show toMyt;
 import '../../settings/state/settings_providers.dart';
 import '../data/analytics_models.dart';
 import '../state/admin_providers.dart';
+import 'chart_kit.dart';
+import 'custom_charts.dart';
 
 const _months = [
   'Jan',
@@ -162,6 +164,8 @@ class HospitalAnalyticsPage extends ConsumerWidget {
             ],
           ),
         ),
+        // D-79: the admin's own charts under the default ones.
+        const CustomChartsSection(page: 'hospital'),
       ],
     );
   }
@@ -225,35 +229,20 @@ class _RiskDonut extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              PieChart(
-                PieChartData(
-                  centerSpaceRadius: 60,
-                  sectionsSpace: 2,
-                  sections: total == 0
-                      ? [PieChartSectionData(value: 1, color: Colors.grey.shade300, title: '')]
-                      : [
-                          for (final l in RiskLevel.values)
-                            if (risk.counts[l]! > 0)
-                              PieChartSectionData(
-                                value: risk.counts[l]!.toDouble(),
-                                color: riskColor(l),
-                                title: '',
-                                radius: 36,
-                              ),
-                        ],
-                ),
-              ),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('$total', style: Theme.of(context).textTheme.headlineMedium),
-                  Text('of $activePatients patients', style: Theme.of(context).textTheme.bodySmall),
-                ],
-              ),
+          // D-79: hover a slice to see its level and count.
+          child: HoverDonut(
+            centerSpace: 60,
+            radius: 36,
+            slices: [
+              for (final l in RiskLevel.values) (_levelLabel(l), risk.counts[l]!, riskColor(l)),
             ],
+            center: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('$total', style: Theme.of(context).textTheme.headlineMedium),
+                Text('of $activePatients patients', style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
           ),
         ),
         Column(
@@ -321,6 +310,14 @@ class _RiskTrend extends StatelessWidget {
   @override
   Widget build(BuildContext context) => BarChart(
     BarChartData(
+      // D-79: hover shows the month's counts per level.
+      barTouchData: stackedBarTouch(
+        groupLabels: [for (final m in trend) monthShort(m.month)],
+        seriesNames: [for (final l in RiskLevel.values) _levelLabel(l)],
+        values: [
+          for (final m in trend) [for (final l in RiskLevel.values) m.risk.counts[l]!],
+        ],
+      ),
       titlesData: _titles([for (final m in trend) monthShort(m.month)]),
       gridData: const FlGridData(drawVerticalLine: false),
       borderData: FlBorderData(show: false),
@@ -348,6 +345,13 @@ class _Consultations extends StatelessWidget {
       Expanded(
         child: BarChart(
           BarChartData(
+            barTouchData: stackedBarTouch(
+              groupLabels: [for (final m in months) monthShort(m.month)],
+              seriesNames: const ['Completed', 'No-show', 'Cancelled', 'Upcoming'],
+              values: [
+                for (final m in months) [m.completed, m.noShow, m.cancelled, m.upcoming],
+              ],
+            ),
             titlesData: _titles([for (final m in months) monthShort(m.month)]),
             gridData: const FlGridData(drawVerticalLine: false),
             borderData: FlBorderData(show: false),
@@ -416,6 +420,7 @@ class _Adherence extends StatelessWidget {
       LineChartData(
         minY: 0,
         maxY: 100,
+        lineTouchData: lineTouch([for (final (d, _) in days) '${d.day}/${d.month}'], unit: '%'),
         gridData: const FlGridData(drawVerticalLine: false),
         borderData: FlBorderData(show: false),
         titlesData: _titles([
@@ -469,3 +474,5 @@ class _Delivery extends StatelessWidget {
     );
   }
 }
+
+String _levelLabel(RiskLevel l) => '${l.value[0].toUpperCase()}${l.value.substring(1)}';

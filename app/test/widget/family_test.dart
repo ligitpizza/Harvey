@@ -300,7 +300,9 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('Siti Aminah'), findsOneWidget);
       expect(find.text('Moderate Risk'), findsOneWidget);
-      expect(find.text('128/82 mmHg · +4 from yesterday'), findsOneWidget);
+      // D-79: big number, then category and change.
+      expect(find.text('128/82 mmHg'), findsOneWidget);
+      expect(find.textContaining('+4 from yesterday'), findsOneWidget);
       expect(find.text('72 BPM (camera estimate)'), findsOneWidget);
       expect(find.byKey(const Key('family-alert-banner')), findsNothing);
     });

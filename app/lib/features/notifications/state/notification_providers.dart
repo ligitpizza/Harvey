@@ -66,3 +66,18 @@ String? notificationRoute(String? type, Map<String, String> data, UserRole? role
     _ => null,
   };
 }
+
+/// D-79: a chat was opened, so its notifications in the bell are read too (they stayed
+/// unread before, which kept the badge up after reading a pharmacy reply).
+Future<void> clearChatNotifications(
+  WidgetRef ref,
+  String type, [
+  Map<String, String> data = const {},
+]) async {
+  try {
+    final r = await ref.read(apiClientProvider).readMatchingNotifications(type, data);
+    if (((r['updated'] as num?) ?? 0) > 0) ref.invalidate(notificationInboxProvider);
+  } catch (_) {
+    // The bell catches up on its next refresh.
+  }
+}

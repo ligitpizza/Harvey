@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/theme_mode.dart';
 import '../../../shared/widgets/confirm_sign_out.dart';
+import '../../../shared/widgets/settings_widgets.dart';
 import '../../auth/domain/app_user.dart';
 import '../../auth/state/auth_providers.dart';
 import '../state/settings_providers.dart';
@@ -42,117 +43,135 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
+      // D-79: grouped, colour-coded settings with a profile header.
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           if (user != null) _ProfileHeader(user: user),
-          const SizedBox(height: 16),
-          Text('Account settings', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Card(
-            child: Column(
-              children: [
-                _NavTile(
-                  key: const Key('settings-personal'),
-                  icon: Icons.person_outline,
-                  title: 'Personal information',
-                  subtitle: 'Update your name, date of birth, gender',
-                  path: '/settings/personal',
-                ),
-                _NavTile(
-                  key: const Key('settings-contact'),
-                  icon: Icons.contact_phone_outlined,
-                  title: 'Contact details',
-                  subtitle: 'Phone number, emergency contact',
-                  path: '/settings/contact',
-                ),
-                // D-69: used to pre-fill medication deliveries.
-                _NavTile(
-                  key: const Key('settings-address'),
-                  icon: Icons.home_outlined,
-                  title: 'Delivery address',
-                  subtitle: 'Pick on the map for medicine deliveries',
-                  path: '/settings/address',
-                ),
-                _NavTile(
-                  key: const Key('settings-health'),
-                  icon: Icons.medical_information_outlined,
-                  title: 'Health profile',
-                  subtitle: 'Allergies, conditions, lifestyle',
-                  path: '/settings/health',
-                ),
-              ],
-            ),
+          SettingsGroup(
+            title: 'Account',
+            children: [
+              _NavTile(
+                key: const Key('settings-personal'),
+                icon: Icons.person_outline,
+                color: Colors.blue.shade600,
+                title: 'Personal information',
+                subtitle: 'Name, date of birth, gender, IC',
+                path: '/settings/personal',
+              ),
+              _NavTile(
+                key: const Key('settings-contact'),
+                icon: Icons.contact_phone_outlined,
+                color: Colors.teal.shade600,
+                title: 'Contact details',
+                subtitle: 'Phone number, emergency contact',
+                path: '/settings/contact',
+              ),
+              // D-69: used to pre-fill medication deliveries.
+              _NavTile(
+                key: const Key('settings-address'),
+                icon: Icons.home_outlined,
+                color: Colors.green.shade600,
+                title: 'Delivery address',
+                subtitle: 'Pick on the map for medicine deliveries',
+                path: '/settings/address',
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          Text('Preferences', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Card(
-            child: Column(
-              children: [
-                SwitchListTile(
-                  key: const Key('pref-medication'),
-                  secondary: const Icon(Icons.alarm_outlined),
-                  title: const Text('Medication reminders'),
-                  subtitle: const Text('Dose reminders and refill alerts'),
-                  value: prefs.medicationReminders,
-                  onChanged: user == null
-                      ? null
-                      : (v) => _setPrefs(
-                          NotificationPrefs(
-                            medicationReminders: v,
-                            healthUpdates: prefs.healthUpdates,
-                          ),
+          SettingsGroup(
+            title: 'Health',
+            children: [
+              _NavTile(
+                key: const Key('settings-health'),
+                icon: Icons.medical_information_outlined,
+                color: Colors.red.shade400,
+                title: 'Health profile',
+                subtitle: 'Allergies, conditions, lifestyle',
+                path: '/settings/health',
+              ),
+            ],
+          ),
+          SettingsGroup(
+            title: 'Notifications',
+            children: [
+              SwitchListTile(
+                key: const Key('pref-medication'),
+                secondary: SettingsIcon(Icons.alarm_outlined, Colors.orange.shade700),
+                title: const Text(
+                  'Medication reminders',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: const Text('Dose reminders and refill alerts'),
+                value: prefs.medicationReminders,
+                onChanged: user == null
+                    ? null
+                    : (v) => _setPrefs(
+                        NotificationPrefs(
+                          medicationReminders: v,
+                          healthUpdates: prefs.healthUpdates,
                         ),
-                ),
-                SwitchListTile(
-                  key: const Key('pref-updates'),
-                  secondary: const Icon(Icons.notifications_outlined),
-                  title: const Text('Health updates'),
-                  subtitle: const Text('Readings, risk changes, messages'),
-                  value: prefs.healthUpdates,
-                  onChanged: user == null
-                      ? null
-                      : (v) => _setPrefs(
-                          NotificationPrefs(
-                            medicationReminders: prefs.medicationReminders,
-                            healthUpdates: v,
-                          ),
+                      ),
+              ),
+              SwitchListTile(
+                key: const Key('pref-updates'),
+                secondary: SettingsIcon(Icons.notifications_outlined, Colors.purple.shade400),
+                title: const Text('Health updates', style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('Readings, risk changes, messages'),
+                value: prefs.healthUpdates,
+                onChanged: user == null
+                    ? null
+                    : (v) => _setPrefs(
+                        NotificationPrefs(
+                          medicationReminders: prefs.medicationReminders,
+                          healthUpdates: v,
                         ),
+                      ),
+              ),
+              ListTile(
+                dense: true,
+                leading: SettingsIcon(Icons.priority_high, Colors.red.shade600),
+                title: const Text(
+                  'Urgent alerts (very high blood pressure, emergencies) are always sent.',
                 ),
-                const ListTile(
-                  dense: true,
-                  leading: Icon(Icons.priority_high),
-                  title: Text(
-                    'Urgent alerts (very high blood pressure, emergencies) are always sent.',
-                  ),
-                ),
-                // Full width under its title, so the three labels never wrap.
-                const ListTile(leading: Icon(Icons.palette_outlined), title: Text('Theme')),
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: ThemeModeSelector(expanded: true),
-                ),
-                if (user?.linkCode != null)
-                  ListTile(
-                    key: const Key('settings-link-code'),
-                    leading: const Icon(Icons.family_restroom),
-                    title: const Text('Family'),
-                    subtitle: Text(
+              ),
+            ],
+          ),
+          SettingsGroup(
+            title: 'Appearance',
+            children: [
+              // Full width under its title, so the three labels never wrap.
+              ListTile(
+                leading: SettingsIcon(Icons.palette_outlined, Colors.indigo.shade400),
+                title: const Text('Theme', style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: ThemeModeSelector(expanded: true),
+              ),
+            ],
+          ),
+          SettingsGroup(
+            title: 'Family and privacy',
+            children: [
+              if (user?.linkCode != null)
+                SettingsTile(
+                  key: const Key('settings-link-code'),
+                  icon: Icons.family_restroom,
+                  color: Colors.cyan.shade700,
+                  title: 'Family',
+                  subtitle:
                       'Link code ${user!.linkCode} · approve requests, manage who follows you',
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/family-requests'),
-                  ),
-                const _NavTile(
-                  key: Key('settings-privacy'),
-                  icon: Icons.shield_outlined,
-                  title: 'Data & privacy',
-                  subtitle: 'Export your data, delete your account',
-                  path: '/settings/privacy',
+                  onTap: () => context.push('/family-requests'),
                 ),
-              ],
-            ),
+              _NavTile(
+                key: const Key('settings-privacy'),
+                icon: Icons.shield_outlined,
+                color: Colors.blueGrey,
+                title: 'Data & privacy',
+                subtitle: 'Export your data, delete your account',
+                path: '/settings/privacy',
+              ),
+            ],
           ),
           const SizedBox(height: 24),
           // D-77: light blue like the rest of the app; deleting the account stays under
@@ -162,6 +181,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             style: FilledButton.styleFrom(
               backgroundColor: theme.colorScheme.primaryContainer,
               foregroundColor: theme.colorScheme.onPrimaryContainer,
+              minimumSize: const Size.fromHeight(48),
             ),
             onPressed: () => confirmAndSignOut(context, ref),
             icon: const Icon(Icons.logout),
@@ -180,27 +200,19 @@ class _ProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final initial = user.name.trim().isEmpty ? '?' : user.name.trim()[0].toUpperCase();
     final shortId = user.uid.length <= 6 ? user.uid : user.uid.substring(0, 6);
-    return Card(
-      color: scheme.primaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            CircleAvatar(radius: 36, child: Text(initial, style: const TextStyle(fontSize: 28))),
-            const SizedBox(height: 12),
-            Text(user.name, style: Theme.of(context).textTheme.titleLarge),
-            Text('Patient ID: #${shortId.toUpperCase()}'),
-            const SizedBox(height: 8),
-            FilledButton.tonal(
-              key: const Key('settings-edit-profile'),
-              onPressed: () => context.push('/settings/personal'),
-              child: const Text('Edit profile'),
-            ),
-          ],
+    return SettingsHeader(
+      name: user.name,
+      lines: ['Patient ID: #${shortId.toUpperCase()}', user.email],
+      action: FilledButton.tonal(
+        key: const Key('settings-edit-profile'),
+        style: FilledButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: Theme.of(context).colorScheme.primary,
+          visualDensity: VisualDensity.compact,
         ),
+        onPressed: () => context.push('/settings/personal'),
+        child: const Text('Edit profile'),
       ),
     );
   }
@@ -213,19 +225,21 @@ class _NavTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.path,
+    this.color = Colors.blue,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final String path;
+  final Color color;
 
   @override
-  Widget build(BuildContext context) => ListTile(
-    leading: CircleAvatar(child: Icon(icon)),
-    title: Text(title),
-    subtitle: Text(subtitle),
-    trailing: const Icon(Icons.chevron_right),
+  Widget build(BuildContext context) => SettingsTile(
+    icon: icon,
+    color: color,
+    title: title,
+    subtitle: subtitle,
     onTap: () => context.push(path),
   );
 }

@@ -1463,3 +1463,22 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   the Harvey Assistant.
 - **Increment 3 complete.** Next: Phase 5 (integration testing and refinement).
 
+### 2026-10-18 — Admin tools, layouts, family/settings refresh, chat fixes (D-79)
+
+- Backend: `services/imports.py` (CSV/JSON parse + row validation; blank cells use defaults),
+  `POST /pharmacy/import`, `POST /admin/users/import` (+ templates); `services/chart_builder.py`
+  and `/admin/analytics/{measures,charts,series}`; `services/health_tools.py` (per-service live
+  test, in-memory error buffer installed on the `careflow` logger) and
+  `/admin/system-health/{service}/{test,errors}`; admin user detail adds the family member's
+  linked patient; `POST /notifications/read-matching`.
+- App: password-changed page shows only the right button (`?for=`); import dialog (preview,
+  template, commit) on Users and Inventory; chart hover tooltips (`chart_kit.dart`) and the
+  chart builder (`custom_charts.dart`); System health cards with Test now / Errors / Open
+  console and a fixed size; equal tiles on usage analytics, audit logs and dashboards; doctor
+  Prescriptions full-width cards; pharmacist Orders with status tiles, queue grouped by stage and
+  a side panel; split-screen staff login; family Home and patient/family Settings restyled
+  (`settings_widgets.dart`); chats and the assistant open at the newest message; opening a chat
+  clears its bell entries.
+- Deviations / additions: `users.analyticsCharts`.
+- Tests: backend 704 (+3 skipped); Flutter 600; rules 209 (unchanged).
+

@@ -1020,6 +1020,13 @@ class InMemoryInboxRepository:
                 n += 1
         return n
 
+    def unread_of_type(self, uid: str, kind: str) -> list[tuple[str, dict[str, Any]]]:
+        return [
+            (i, dict(n))
+            for i, n in self.items.items()
+            if n["userId"] == uid and not n["read"] and n.get("type") == kind
+        ]
+
     def bell_prefs(self, uid: str) -> dict[str, Any]:
         return dict((self._users.users.get(uid) or {}).get("bellPrefs") or {})
 

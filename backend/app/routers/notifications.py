@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.auth import CurrentUser, require_roles
 from app.core.enums import UserRole
@@ -54,6 +54,29 @@ def read_all(
     inbox: InboxRepository = Depends(get_inbox_repository),
 ) -> dict[str, Any]:
     return {"updated": inbox.mark_all_read(user.uid)}
+
+
+class ReadMatching(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: str = Field(min_length=1, max_length=40)
+    # Optional push-data filter, e.g. {"from": doctorUid} or {"id": conversationId}.
+    data: dict[str, str] = Field(default_factory=dict, max_length=4)
+
+
+@router.post("/read-matching")
+def read_matching(
+    body: ReadMatching,
+    user: CurrentUser = Depends(anyone),
+    inbox: InboxRepository = Depends(get_inbox_repository),
+) -> dict[str, Any]:
+    """D-79: opening a chat clears the bell entries for it (they stayed unread before)."""
+    n = 0
+    for nid, item in inbox.unread_of_type(user.uid, body.type):
+        data = item.get("data") or {}
+        if all(str(data.get(k)) == v for k, v in body.data.items()):
+            inbox.mark_read(nid)
+            n += 1
+    return {"updated": n}
 
 
 @router.post("/{notification_id}/read", status_code=status.HTTP_204_NO_CONTENT)

@@ -1,3 +1,4 @@
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/enums.dart';
@@ -44,4 +45,10 @@ final systemAnalyticsProvider = FutureProvider.autoDispose.family<SystemAnalytic
 final adminUserDetailProvider = FutureProvider.autoDispose.family<Map<String, dynamic>, String>(
   (ref, uid) => ref.watch(adminRepositoryProvider).userDetail(uid),
   retry: _noRetry,
+);
+
+/// D-79: opens a web address in a new tab (System health "Open console"); overridable.
+final urlOpenerProvider = Provider<Future<bool> Function(String)>(
+  (ref) =>
+      (url) => launchUrl(Uri.parse(url), webOnlyWindowName: '_blank'),
 );

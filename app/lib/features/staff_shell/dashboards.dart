@@ -68,13 +68,17 @@ class StatTile extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
+  // D-79: fixed size so every tile lines up.
   Widget build(BuildContext context) => SizedBox(
     width: 210,
+    height: 96,
     child: Card(
+      margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Container(
+          height: double.infinity,
           decoration: BoxDecoration(
             border: Border(left: BorderSide(color: color, width: 5)),
           ),
@@ -90,15 +94,17 @@ class StatTile extends StatelessWidget {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
                       value,
+                      maxLines: 1,
                       style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: color,
                       ),
                     ),
-                    Text(label, maxLines: 2, overflow: TextOverflow.ellipsis),
+                    Flexible(child: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis)),
                   ],
                 ),
               ),

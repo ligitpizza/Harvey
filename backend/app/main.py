@@ -51,6 +51,10 @@ def _configure_logging() -> None:
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)
         logger.propagate = False
+    # D-79: System health "Recent errors".
+    from app.services.health_tools import install_error_buffer
+
+    install_error_buffer()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

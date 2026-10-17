@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../appointments/domain/appointment_text.dart' show timeLabel;
 import '../data/admin_repository.dart';
+import '../../../shared/providers/api_providers.dart';
 import '../state/admin_providers.dart';
 
 (String, Color) statusStyle(String status) => switch (status) {
@@ -157,26 +158,130 @@ class _Big extends StatelessWidget {
   );
 }
 
-class _ServiceCard extends StatelessWidget {
+/// D-79: where each service is managed (opens in a new tab).
+const _consoles = {
+  'api': (
+    'Cloud Run logs',
+    'https://console.cloud.google.com/run/detail/asia-southeast1/careflow-api/logs?project=hypertension-dd85f',
+  ),
+  'firestore': (
+    'Firestore console',
+    'https://console.firebase.google.com/project/hypertension-dd85f/firestore',
+  ),
+  'ml': (
+    'Cloud Run service',
+    'https://console.cloud.google.com/run/detail/asia-southeast1/careflow-api/revisions?project=hypertension-dd85f',
+  ),
+  'push': (
+    'Firebase Messaging',
+    'https://console.firebase.google.com/project/hypertension-dd85f/messaging',
+  ),
+  'email': ('Brevo dashboard', 'https://app.brevo.com/'),
+  'ai': ('Google AI Studio', 'https://aistudio.google.com/'),
+  'sms': ('Brevo SMS', 'https://app.brevo.com/sms/campaign/listing'),
+  'stripe': ('Stripe test dashboard', 'https://dashboard.stripe.com/test/payments'),
+  'grab': ('Lalamove partner portal', 'https://partnerportal.lalamove.com/'),
+};
+
+class _ServiceCard extends ConsumerStatefulWidget {
   const _ServiceCard({required this.service});
 
   final ServiceHealth service;
 
+  static const width = 300.0;
+  static const height = 236.0;
+
+  @override
+  ConsumerState<_ServiceCard> createState() => _ServiceCardState();
+}
+
+class _ServiceCardState extends ConsumerState<_ServiceCard> {
+  bool _testing = false;
+  Map<String, dynamic>? _result;
+
+  Future<void> _test() async {
+    setState(() {
+      _testing = true;
+      _result = null;
+    });
+    try {
+      final r = await ref.read(apiClientProvider).testService(widget.service.key);
+      if (mounted) setState(() => _result = r);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _result = {'ok': false, 'message': 'The test could not be run.'});
+      }
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
+  }
+
+  Future<void> _errors() async {
+    final key = widget.service.key;
+    await showDialog<void>(
+      context: context,
+      builder: (c) => Consumer(
+        builder: (context, ref, _) => AlertDialog(
+          title: Text('Recent errors · ${widget.service.name}'),
+          content: SizedBox(
+            width: 560,
+            height: 360,
+            child: FutureBuilder<Map<String, dynamic>>(
+              future: ref.read(apiClientProvider).serviceErrors(key),
+              builder: (context, snap) {
+                if (snap.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snap.hasError) return const Text('Could not load the errors.');
+                final errs = [
+                  for (final e in snap.data?['errors'] as List<dynamic>? ?? const [])
+                    Map<String, dynamic>.from(e as Map),
+                ];
+                if (errs.isEmpty) {
+                  return const Center(
+                    key: Key('no-errors'),
+                    child: Text('No errors since the backend last started.'),
+                  );
+                }
+                return ListView(
+                  children: [
+                    for (final e in errs)
+                      ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.error_outline, color: Colors.red),
+                        title: SelectableText('${e['message']}'),
+                        subtitle: Text(_errorTime('${e['at']}')),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('Close'))],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final s = service;
+    final s = widget.service;
     final (label, color) = statusStyle(s.status);
     final theme = Theme.of(context);
+    final console = _consoles[s.key];
+    final result = _result;
     return SizedBox(
-      width: 300,
+      width: _ServiceCard.width,
+      height: _ServiceCard.height,
       child: Card(
         key: Key('service-${s.key}'),
+        margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
           side: BorderSide(color: color, width: 2),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -184,27 +289,91 @@ class _ServiceCard extends StatelessWidget {
                 children: [
                   Icon(_icon(s.key)),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(s.name, style: theme.textTheme.titleMedium)),
+                  Expanded(
+                    child: Text(
+                      s.name,
+                      style: theme.textTheme.titleMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                   Text('● $label', style: TextStyle(color: color)),
+                  const SizedBox(width: 8),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Row(
+                  children: [
+                    Expanded(child: _Big('Uptime', _percent(s.uptime))),
+                    _Big('Latency', _ms(s.latencyMs)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                result == null ? s.note : '${result['message']}',
+                key: Key('service-note-${s.key}'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: result == null
+                    ? theme.textTheme.bodySmall
+                    : theme.textTheme.bodySmall?.copyWith(
+                        color: result['ok'] == true
+                            ? Colors.green.shade700
+                            : theme.colorScheme.error,
+                        fontWeight: FontWeight.w600,
+                      ),
+              ),
+              const Spacer(),
+              if (_testing)
+                const LinearProgressIndicator(minHeight: 4)
+              else
+                LinearProgressIndicator(value: 1, color: color, minHeight: 4),
+              // D-79: act on the service, not just read it.
               Row(
                 children: [
-                  Expanded(child: _Big('Uptime', _percent(s.uptime))),
-                  _Big('Latency', _ms(s.latencyMs)),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    key: Key('test-${s.key}'),
+                    onPressed: _testing ? null : _test,
+                    child: const Text('Test now'),
+                  ),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    key: Key('errors-${s.key}'),
+                    onPressed: _errors,
+                    child: const Text('Errors'),
+                  ),
+                  const Expanded(child: SizedBox()),
+                  if (console != null)
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      key: Key('console-${s.key}'),
+                      tooltip: 'Open ${console.$1}',
+                      icon: const Icon(Icons.open_in_new, size: 20),
+                      onPressed: () => ref.read(urlOpenerProvider)(console.$2),
+                    ),
                 ],
               ),
-              if (s.note.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(s.note, style: theme.textTheme.bodySmall),
-              ],
-              const SizedBox(height: 8),
-              LinearProgressIndicator(value: 1, color: color, minHeight: 4),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+String _errorTime(String iso) {
+  final t = DateTime.tryParse(iso)?.toLocal();
+  if (t == null) return iso;
+  return '${t.day}/${t.month} ${t.hour.toString().padLeft(2, '0')}:'
+      '${t.minute.toString().padLeft(2, '0')}';
 }

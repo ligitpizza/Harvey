@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/enums.dart';
+import '../../../core/utils/bp_classifier.dart';
 import '../../../core/utils/risk_style.dart';
 import '../../../shared/models/health_models.dart';
 import '../../appointments/domain/appointment_text.dart' show dateLabel, timeLabel;
+import '../../dashboard/domain/dashboard_logic.dart' show greetingFor;
 import '../../dashboard/state/dashboard_providers.dart';
 import '../../medications/domain/med_schedule.dart' show toMyt;
 import '../data/family_repository.dart';
@@ -116,18 +118,54 @@ class _Linked extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Row(
-          children: [
-            CircleAvatar(child: Text((person?.name ?? '?').characters.first.toUpperCase())),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Monitoring patient', style: theme.textTheme.bodySmall),
-                Text(person?.name ?? '…', style: theme.textTheme.titleMedium),
+        // D-79: the same gradient header as the patient app.
+        Container(
+          key: const Key('family-header'),
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                Color.lerp(theme.colorScheme.primary, Colors.indigo, 0.45)!,
               ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-          ],
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 26,
+                backgroundColor: Colors.white,
+                foregroundColor: theme.colorScheme.primary,
+                child: Text(
+                  (person?.name ?? '?').characters.first.toUpperCase(),
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(greetingFor(now), style: const TextStyle(color: Colors.white70)),
+                    Text(
+                      person?.name ?? '…',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Text(
+                      "You're following them · read-only",
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 16),
         if (alert != null)
@@ -148,9 +186,9 @@ class _Linked extends ConsumerWidget {
               onTap: () => context.go('/family/alert/${alert.id}'),
             ),
           ),
-        Card(
+        _Tinted(
           key: const Key('family-status'),
-          color: level == null ? null : riskColor(level).withValues(alpha: 0.12),
+          color: level == null ? theme.colorScheme.outline : riskColor(level),
           child: ListTile(
             title: Text('CURRENT STATUS', style: theme.textTheme.labelLarge),
             subtitle: Column(
@@ -184,24 +222,81 @@ class _Linked extends ConsumerWidget {
         const SizedBox(height: 12),
         Text("Today's vitals", style: theme.textTheme.titleMedium),
         const SizedBox(height: 4),
-        Card(
-          key: const Key('family-bp'),
-          child: ListTile(
-            leading: const Icon(Icons.favorite_border),
-            title: const Text('BLOOD PRESSURE'),
-            subtitle: Text(
-              latestToday == null
-                  ? 'No reading today${latest == null ? '' : ' (last: ${latest.systolic}/${latest.diastolic}, ${dateLabel(latest.timestamp)})'}'
-                  : '${latestToday.systolic}/${latestToday.diastolic} mmHg'
-                        '${prev == null ? '' : ' · ${latestToday.systolic - prev.systolic >= 0 ? '+' : ''}${latestToday.systolic - prev.systolic} from yesterday'}',
-            ),
-            trailing: latestToday == null ? null : Text(timeLabel(latestToday.timestamp)),
-          ),
+        Builder(
+          builder: (context) {
+            final r = latestToday ?? latest;
+            final cat = r == null ? null : BpClassifier.classify(r.systolic, r.diastolic);
+            final color = cat == null ? theme.colorScheme.outline : BpClassifier.color(cat);
+            return _Tinted(
+              key: const Key('family-bp'),
+              color: color,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.favorite, color: color),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'BLOOD PRESSURE',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        if (latestToday != null) Text(timeLabel(latestToday.timestamp)),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    if (latestToday == null)
+                      Text(
+                        'No reading today${latest == null ? '' : ' (last: ${latest.systolic}/${latest.diastolic}, ${dateLabel(latest.timestamp)})'}',
+                      )
+                    else ...[
+                      Text(
+                        '${latestToday.systolic}/${latestToday.diastolic} mmHg',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          color: color,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        [
+                          BpClassifier.label(cat!),
+                          if (prev != null)
+                            '${latestToday.systolic - prev.systolic >= 0 ? '+' : ''}'
+                                '${latestToday.systolic - prev.systolic} from yesterday',
+                        ].join(' · '),
+                      ),
+                    ],
+                    if (cat == BpCategory.crisis)
+                      Container(
+                        key: const Key('family-crisis'),
+                        margin: const EdgeInsets.only(top: 10),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: color,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text(
+                          'Crisis range. Check on them now; call 999 if they have chest pain, '
+                          'breathlessness, weakness or confusion.',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
-        Card(
+        const SizedBox(height: 8),
+        _Tinted(
           key: const Key('family-hr'),
+          color: Colors.pink.shade400,
           child: ListTile(
-            leading: const Icon(Icons.monitor_heart_outlined),
+            leading: Icon(Icons.monitor_heart_outlined, color: Colors.pink.shade400),
             title: const Text('HEART RATE'),
             subtitle: Text(
               hr == null ? 'No heart rate recorded' : '${hr.heartRate} BPM (camera estimate)',
@@ -263,4 +358,31 @@ class _Linked extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// D-79: a softly tinted card with a coloured left edge (as on the patient Home).
+class _Tinted extends StatelessWidget {
+  const _Tinted({super.key, required this.color, required this.child});
+  final Color color;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Material(
+      color: Color.alphaBlend(
+        color.withValues(alpha: 0.08),
+        Theme.of(context).colorScheme.surfaceContainerLow,
+      ),
+      elevation: 1,
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(color: color, width: 5)),
+        ),
+        child: child,
+      ),
+    ),
+  );
 }

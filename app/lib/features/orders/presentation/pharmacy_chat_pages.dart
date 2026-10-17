@@ -12,6 +12,7 @@ import '../../messaging/presentation/conversation_pages.dart';
 import '../../messaging/state/messaging_providers.dart';
 import '../data/order_models.dart';
 import '../state/orders_providers.dart';
+import '../../notifications/state/notification_providers.dart';
 
 /// D-69 pharmacy chat: one 'Harvey Pharmacy' conversation per patient, shared by every
 /// pharmacist. Not end-to-end encrypted (order and refill updates, not clinical advice).
@@ -44,6 +45,9 @@ class _PharmacyChatViewState extends ConsumerState<PharmacyChatView> {
   void initState() {
     super.initState();
     _poll = Timer.periodic(PharmacyChatView.refreshEvery, (_) => _refresh());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => clearChatNotifications(ref, 'pharmacy_chat'),
+    );
   }
 
   @override

@@ -19,6 +19,10 @@ from app.core.auth import CurrentUser, require_roles
 from app.core.config import Settings, get_settings
 from app.core.enums import UserRole
 from app.core.errors import ApiError
+from app.integrations.delivery import CourierClient, get_courier_client
+from app.integrations.email import EmailClient, get_email_client
+from app.integrations.gemini import LlmClient, get_llm_client
+from app.integrations.sms import SmsClient, get_sms_client
 from app.services.analytics import (
     AnalyticsSource,
     get_analytics_source,
@@ -34,6 +38,16 @@ from app.services.audit_view import (
     summarise,
     to_csv,
 )
+from app.services.chart_builder import (
+    CHART_TYPES,
+    MAX_CHARTS,
+    MEASURES,
+    PERIODS,
+    clean_chart,
+    series,
+)
+from app.services.health_tools import ERRORS, SERVICES, test_service
+from app.services.notifications import Notifier, get_notifier
 from app.services.system_health import Probe, get_probe, system_health, uptime
 from app.services.users import UserRepository, get_user_repository
 
@@ -231,3 +245,115 @@ def hospital_report(
         media_type="application/pdf",
         headers={"Content-Disposition": 'attachment; filename="careflow-hospital-report.pdf"'},
     )
+
+
+# ---------------- D-79: System health actions ----------------
+
+
+@router.post("/system-health/{service}/test")
+def test_one_service(
+    service: str,
+    admin: CurrentUser = Depends(admin_only),
+    probe: Probe = Depends(get_probe),
+    settings: Settings = Depends(get_settings),
+    users: UserRepository = Depends(get_user_repository),
+    notifier: Notifier = Depends(get_notifier),
+    email: EmailClient = Depends(get_email_client),
+    sms: SmsClient = Depends(get_sms_client),
+    llm: LlmClient = Depends(get_llm_client),
+    courier: CourierClient = Depends(get_courier_client),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    if service not in SERVICES:
+        raise ApiError("SERVICE_NOT_FOUND", "Unknown service.", status.HTTP_404_NOT_FOUND)
+    me = users.get_user(admin.uid) or {}
+    result = test_service(
+        service,
+        {
+            "settings": settings,
+            "probe": probe,
+            "notifier": notifier,
+            "email": email,
+            "sms": sms,
+            "llm": llm,
+            "courier": courier,
+            "admin": {
+                "uid": admin.uid,
+                "name": me.get("name"),
+                "email": me.get("email"),
+                "phone": me.get("phone"),
+            },
+        },
+    )
+    audit.log(
+        user_id=admin.uid,
+        action="TEST_SERVICE",
+        details=f"System health test of {service}: {'ok' if result['ok'] else 'failed'}.",
+        target_type="system_health",
+        target_id=service,
+    )
+    return {"service": service, **result}
+
+
+@router.get("/system-health/{service}/errors")
+def service_errors(service: str, _: CurrentUser = Depends(admin_only)) -> dict[str, Any]:
+    if service not in SERVICES:
+        raise ApiError("SERVICE_NOT_FOUND", "Unknown service.", status.HTTP_404_NOT_FOUND)
+    return {"service": service, "errors": ERRORS.recent(service)}
+
+
+# ---------------- D-79: custom analytics charts ----------------
+
+
+class ChartsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    charts: list[dict[str, Any]] = Field(max_length=MAX_CHARTS)
+
+
+@router.get("/analytics/measures")
+def chart_measures(_: CurrentUser = Depends(admin_only)) -> dict[str, Any]:
+    return {
+        "measures": [
+            {"key": k, "label": v[0], "kind": v[1], "page": v[2]} for k, v in MEASURES.items()
+        ],
+        "types": list(CHART_TYPES),
+        "periods": list(PERIODS),
+    }
+
+
+@router.get("/analytics/charts")
+def my_charts(
+    admin: CurrentUser = Depends(admin_only),
+    users: UserRepository = Depends(get_user_repository),
+) -> dict[str, Any]:
+    saved = (users.get_user(admin.uid) or {}).get("analyticsCharts") or []
+    return {"charts": [c for c in saved if isinstance(c, dict)]}
+
+
+@router.put("/analytics/charts")
+def save_charts(
+    body: ChartsRequest,
+    admin: CurrentUser = Depends(admin_only),
+    users: UserRepository = Depends(get_user_repository),
+) -> dict[str, Any]:
+    try:
+        charts = [clean_chart(c) for c in body.charts]
+    except ValueError as e:
+        raise ApiError("INVALID_CHART", str(e), status.HTTP_422_UNPROCESSABLE_CONTENT) from e
+    users.update_user(admin.uid, {"analyticsCharts": charts})
+    return {"charts": charts}
+
+
+@router.get("/analytics/series")
+def chart_series(
+    measure: str,
+    days: int = Query(default=30, ge=1, le=90),
+    _: CurrentUser = Depends(admin_only),
+    src: AnalyticsSource = Depends(get_analytics_source),
+    reader: AuditReader = Depends(get_audit_reader),
+) -> dict[str, Any]:
+    if measure not in MEASURES:
+        raise ApiError("UNKNOWN_MEASURE", "Unknown measure.", status.HTTP_404_NOT_FOUND)
+    now = datetime.now(UTC)
+    entries = [e for _, e in reader.between(now - timedelta(days=days), now + timedelta(seconds=1))]
+    return series(measure, days, src, entries, now)

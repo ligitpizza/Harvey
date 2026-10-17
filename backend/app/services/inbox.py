@@ -83,6 +83,10 @@ class InboxRepository(Protocol):
 
     def mark_all_read(self, uid: str) -> int: ...
 
+    def unread_of_type(self, uid: str, kind: str) -> list[tuple[str, dict[str, Any]]]:
+        """D-79: this user's unread notifications of one push type."""
+        ...
+
     def bell_prefs(self, uid: str) -> dict[str, Any]: ...
 
     def set_bell_prefs(self, uid: str, prefs: dict[str, bool]) -> None: ...
@@ -127,6 +131,14 @@ class FirestoreInboxRepository:
         if n:
             batch.commit()
         return n
+
+    def unread_of_type(self, uid: str, kind: str) -> list[tuple[str, dict[str, Any]]]:
+        q = (
+            self._mine(uid)
+            .where(filter=firestore.FieldFilter("read", "==", False))
+            .where(filter=firestore.FieldFilter("type", "==", kind))
+        )
+        return [(d.id, dict(d.to_dict())) for d in q.limit(200).stream()]
 
     def bell_prefs(self, uid: str) -> dict[str, Any]:
         snap = self._db.collection(Collection.USERS.value).document(uid).get()

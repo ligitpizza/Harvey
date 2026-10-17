@@ -662,12 +662,45 @@ class ApiClient {
 
   Future<Map<String, dynamic>> clearReadings() => _send('DELETE', '/vitals', null);
 
+  // D-79 imports, custom charts and System health actions.
+  Future<Map<String, dynamic>> importInventory(String format, String content, bool commit) =>
+      _post('/pharmacy/import', {'format': format, 'content': content, 'commit': commit});
+
+  Future<Map<String, dynamic>> importUsers(String format, String content, bool commit) =>
+      _post('/admin/users/import', {'format': format, 'content': content, 'commit': commit});
+
+  Future<Map<String, dynamic>> inventoryTemplate() => _get('/pharmacy/import/template');
+
+  Future<Map<String, dynamic>> usersTemplate() => _get('/admin/users/import/template');
+
+  Future<Map<String, dynamic>> chartMeasures() => _get('/admin/analytics/measures');
+
+  Future<Map<String, dynamic>> myCharts() => _get('/admin/analytics/charts');
+
+  Future<Map<String, dynamic>> saveCharts(List<Map<String, dynamic>> charts) =>
+      _send('PUT', '/admin/analytics/charts', {'charts': charts});
+
+  Future<Map<String, dynamic>> chartSeries(String measure, int days) =>
+      _getQuery('/admin/analytics/series', {'measure': measure, 'days': days});
+
+  Future<Map<String, dynamic>> testService(String key) =>
+      _post('/admin/system-health/$key/test', const {}, receiveTimeout: agentTimeout);
+
+  Future<Map<String, dynamic>> serviceErrors(String key) =>
+      _get('/admin/system-health/$key/errors');
+
   // D-77 notification bell and staff settings.
   Future<Map<String, dynamic>> notifications() => _get('/notifications');
 
   Future<void> readNotification(String id) => _post('/notifications/$id/read', const {});
 
   Future<Map<String, dynamic>> readAllNotifications() => _post('/notifications/read-all', const {});
+
+  /// D-79: opening a chat marks its bell entries read.
+  Future<Map<String, dynamic>> readMatchingNotifications(
+    String type, [
+    Map<String, String> data = const {},
+  ]) => _post('/notifications/read-matching', {'type': type, 'data': data});
 
   Future<Map<String, dynamic>> bellPrefs() => _get('/notifications/prefs');
 

@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../state/admin_providers.dart';
 import 'hospital_analytics_page.dart' show generateReport;
+import 'chart_kit.dart';
+import 'custom_charts.dart';
 
 const _roles = [
   ('patient', 'Patient app', Color(0xFF0B6E99)),
@@ -142,6 +144,8 @@ class _SystemAnalyticsPageState extends ConsumerState<SystemAnalyticsPage> {
             ],
           ),
         ),
+        // D-79: the admin's own charts under the default ones.
+        const CustomChartsSection(page: 'usage'),
       ],
     );
   }
@@ -157,8 +161,10 @@ class _Stat extends StatelessWidget {
   final Color color;
 
   @override
+  // D-79: every tile the same size.
   Widget build(BuildContext context) => SizedBox(
     width: 240,
+    height: 132,
     child: Card(
       key: Key(keyName),
       shape: RoundedRectangleBorder(
@@ -170,9 +176,9 @@ class _Stat extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: Theme.of(context).textTheme.labelLarge),
-            Text(value, style: Theme.of(context).textTheme.displaySmall),
-            Text(note),
+            Text(title, style: Theme.of(context).textTheme.labelLarge, maxLines: 1),
+            Text(value, style: Theme.of(context).textTheme.headlineMedium, maxLines: 1),
+            Flexible(child: Text(note, maxLines: 2, overflow: TextOverflow.ellipsis)),
           ],
         ),
       ),
@@ -231,6 +237,14 @@ class _Engagement extends StatelessWidget {
         Expanded(
           child: BarChart(
             BarChartData(
+              // D-79: hover shows the day's actions per user type.
+              barTouchData: stackedBarTouch(
+                groupLabels: [for (final (d, _) in days) '${d.day}/${d.month}'],
+                seriesNames: [for (final (_, name, _) in _roles) name],
+                values: [
+                  for (final (_, counts) in days) [for (final (r, _, _) in _roles) counts[r] ?? 0],
+                ],
+              ),
               gridData: const FlGridData(drawVerticalLine: false),
               borderData: FlBorderData(show: false),
               titlesData: FlTitlesData(
@@ -317,34 +331,19 @@ class _Specialties extends StatelessWidget {
     return Column(
       children: [
         Expanded(
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              PieChart(
-                PieChartData(
-                  centerSpaceRadius: 50,
-                  sectionsSpace: 2,
-                  sections: total == 0
-                      ? [PieChartSectionData(value: 1, color: Colors.grey.shade300, title: '')]
-                      : [
-                          for (final (i, (_, n)) in rows.indexed)
-                            PieChartSectionData(
-                              value: n.toDouble(),
-                              color: _colors[i % _colors.length],
-                              title: '',
-                              radius: 28,
-                            ),
-                        ],
-                ),
-              ),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('$totalUsers', style: Theme.of(context).textTheme.headlineMedium),
-                  const Text('total users'),
-                ],
-              ),
+          child: HoverDonut(
+            centerSpace: 50,
+            radius: 28,
+            slices: [
+              for (final (i, (name, n)) in rows.indexed) (name, n, _colors[i % _colors.length]),
             ],
+            center: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('$totalUsers', style: Theme.of(context).textTheme.headlineMedium),
+                const Text('total users'),
+              ],
+            ),
           ),
         ),
         if (rows.isEmpty) const Text('No activity yet.'),

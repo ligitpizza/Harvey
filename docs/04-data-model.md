@@ -39,6 +39,7 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | address, addressLat, addressLng | String, Number, Number | Patient delivery address and map point (D-69) | Optional |
 | phone | String | Staff contact number (D-77, portal Settings) | Optional; doctors, pharmacists, admins |
 | bellPrefs | Map | D-77: bell categories switched on/off (messages, alerts, appointments, orders, medication, other) | Optional; missing = on |
+| analyticsCharts | Array | D-79: an admin's saved custom charts (id, title, measure, type, days, page) | Admin only; max 12 |
 
 ### `health_profiles`  (Table 4.2.3.2)
 

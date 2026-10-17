@@ -77,6 +77,7 @@ class FirebaseAuthRepository implements AuthRepository {
     required FirebaseFirestore firestore,
     required ApiClient api,
     PushService push = const NoopPushService(),
+    this.clientApp = ClientApp.patient,
   }) : _auth = auth, // ignore: prefer_initializing_formals
        _db = firestore,
        _api = api, // ignore: prefer_initializing_formals
@@ -84,6 +85,9 @@ class FirebaseAuthRepository implements AuthRepository {
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _db;
+
+  /// D-79: tells the "Password changed" page which button to show.
+  final ClientApp clientApp;
   final ApiClient _api;
   final PushService _push;
 
@@ -200,7 +204,9 @@ class FirebaseAuthRepository implements AuthRepository {
     try {
       await _auth.sendPasswordResetEmail(
         email: email.trim(),
-        actionCodeSettings: ActionCodeSettings(url: passwordResetContinueUrl),
+        actionCodeSettings: ActionCodeSettings(
+          url: '$passwordResetContinueUrl?for=${clientApp.value}',
+        ),
       );
     } on FirebaseAuthException catch (e) {
       if (e.code == 'too-many-requests') {

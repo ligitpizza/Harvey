@@ -90,6 +90,8 @@ class _Body extends ConsumerWidget {
     final sections = <Widget>[
       if (data['patient'] != null) ..._patient(context, _map(data['patient'])),
       if (data['doctor'] != null) ..._doctor(context, user, _map(data['doctor'])),
+      // D-79: which patient this family member follows.
+      if (data.containsKey('family')) _familyLink(context, _map(data['family'])),
       if (data.containsKey('pharmacist'))
         const _Section(
           key: Key('section-pharmacist'),
@@ -215,6 +217,35 @@ class _Body extends ConsumerWidget {
         const SizedBox(height: 16),
         Wrap(spacing: 16, runSpacing: 16, children: sections),
       ],
+    );
+  }
+
+  Widget _familyLink(BuildContext context, Map<String, dynamic> f) {
+    final patient = f['patient'] == null ? null : _map(f['patient']);
+    return _Section(
+      key: const Key('section-family-link'),
+      title: 'Linked patient',
+      child: patient == null
+          ? const Text('Not linked to a patient yet (waiting for the patient to approve).')
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _Facts({
+                  'Patient': '${patient['name'] ?? 'Unknown'}',
+                  'Email': '${patient['email'] ?? '-'}',
+                  'Assigned doctor': '${patient['assignedDoctor'] ?? 'Not assigned yet'}',
+                  'Account': patient['isActive'] == false ? 'Deactivated' : 'Active',
+                  if (f['linkedAt'] != null) 'Linked since': _when(f['linkedAt']),
+                }),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  key: const Key('open-linked-patient'),
+                  onPressed: () => context.go('/admin/users/${patient['uid']}'),
+                  icon: const Icon(Icons.person_search_outlined),
+                  label: const Text('Open patient record'),
+                ),
+              ],
+            ),
     );
   }
 

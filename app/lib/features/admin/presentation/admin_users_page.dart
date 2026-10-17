@@ -9,6 +9,7 @@ import '../../provider_portal/presentation/portal_widgets.dart' show formatDate;
 import '../data/admin_repository.dart';
 import '../state/admin_providers.dart';
 import 'user_actions.dart';
+import '../../../shared/widgets/import_dialog.dart';
 
 const _pageSize = 10;
 
@@ -140,6 +141,17 @@ class _AdminUsersPageState extends ConsumerState<AdminUsersPage> {
                   leadingIcon: const Icon(Icons.person_add_alt),
                   onPressed: _createPatient,
                   child: const Text('Patient account'),
+                ),
+                // D-79: several staff accounts at once from a CSV / JSON file.
+                MenuItemButton(
+                  key: const Key('import-users'),
+                  leadingIcon: const Icon(Icons.upload_file),
+                  onPressed: () async {
+                    if (await showImportDialog(context, ImportKind.users)) {
+                      ref.invalidate(adminUsersProvider);
+                    }
+                  },
+                  child: const Text('Import staff from file'),
                 ),
               ],
             ),

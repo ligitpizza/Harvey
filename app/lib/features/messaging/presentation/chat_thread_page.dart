@@ -11,6 +11,7 @@ import '../data/messaging_repository.dart';
 import '../state/messaging_providers.dart';
 import 'chat_ui.dart';
 import '../../settings/state/settings_providers.dart';
+import '../../notifications/state/notification_providers.dart';
 
 /// Fig 4.3.15.2 Chat Thread / 4.3.15.3 Flagged Message (FR-10.1, FR-10.3, FR-14.4;
 /// UC10.1, UC10.3; NFR-2.1). Used by the patient app and the doctor portal.
@@ -31,6 +32,15 @@ class ChatThreadPage extends ConsumerStatefulWidget {
 class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
   late final _input = TextEditingController(text: widget.draft);
   final _scroll = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => clearChatNotifications(ref, 'message', {'from': widget.otherId}),
+    );
+  }
+
   bool _sending = false;
   String? _error;
 
@@ -42,7 +52,8 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
   }
 
   void _toBottom() => WidgetsBinding.instance.addPostFrameCallback((_) {
-    if (_scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
+    // D-79: the list is reversed, so the newest message is at offset 0.
+    if (_scroll.hasClients) _scroll.jumpTo(_scroll.position.minScrollExtent);
   });
 
   Future<void> _send(String me, Contact to) async {
@@ -244,10 +255,12 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
                   : ListView.builder(
                       key: const Key('chat-list'),
                       controller: _scroll,
+                      // D-79: opens at the newest message (bottom), like the pharmacy chat.
+                      reverse: true,
                       padding: const EdgeInsets.all(12),
                       itemCount: items.length,
                       itemBuilder: (_, i) {
-                        final item = items[i];
+                        final item = items[items.length - 1 - i];
                         if (item is AgentNote) {
                           return ChatNotice(
                             key: Key('ai-note-${item.id}'),

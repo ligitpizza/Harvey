@@ -166,4 +166,30 @@ void main() {
     await t.pumpAndSettle();
     expect(repo.calls, contains('update:p1:null:null:null:false:'));
   });
+
+  tallTest('D-79 a family member shows the patient they follow', (t) async {
+    repo.details['f1'] = {
+      'user': userJson('f1', 'Ahmad', 'family_member'),
+      'profile': <String, dynamic>{},
+      'family': {
+        'patient': {
+          'uid': 'p1',
+          'name': 'Siti Aminah',
+          'email': 'siti@x.my',
+          'isActive': true,
+          'assignedDoctor': 'Dr John',
+        },
+        'linkedAt': null,
+      },
+      'activity': <dynamic>[],
+    };
+    await t.pumpWidget(host('/admin/users/f1'));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('section-family-link')), findsOneWidget);
+    expect(find.text('Siti Aminah'), findsOneWidget);
+    expect(find.text('Dr John'), findsOneWidget);
+    await t.tap(find.byKey(const Key('open-linked-patient')));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('section-health')), findsOneWidget);
+  });
 }

@@ -430,7 +430,9 @@ void main() {
         ..stockItems = const [stock];
       await t.pumpWidget(host('/pharmacy'));
       await t.pumpAndSettle();
-      expect(find.textContaining('Siti · Amlodipine'), findsOneWidget);
+      // D-79: patient name, then the medicines on their own line.
+      expect(find.text('Siti'), findsOneWidget);
+      expect(find.textContaining('Amlodipine'), findsWidgets);
       await t.tap(find.byKey(const Key('ready-$id')));
       await t.pumpAndSettle();
       await t.tap(find.byKey(const Key('ready-confirm')));

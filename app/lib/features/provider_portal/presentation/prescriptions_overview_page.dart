@@ -206,10 +206,13 @@ class _State extends ConsumerState<PrescriptionsOverviewPage> {
                   padding: EdgeInsets.all(16),
                   child: Text('No prescriptions match.'),
                 )
+              // D-79: every card the full width of the list, one under the other.
               : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     for (final p in shown)
                       Card(
+                        margin: const EdgeInsets.only(bottom: 12),
                         key: Key('rx-${p.id}'),
                         child: Padding(
                           padding: const EdgeInsets.all(16),

@@ -11,9 +11,10 @@ GET   /admin/users/{uid}    detail page for a patient, doctor or pharmacist (D-6
 import html
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Response, status
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.audit import AuditLogger, get_audit_logger
 from app.core.auth import CurrentUser, require_roles
@@ -44,6 +45,7 @@ from app.services.identity import (
     IdentityProvider,
     get_identity_provider,
 )
+from app.services.imports import USER_TEMPLATE, FileImportError, UserRow, parse, validate_rows
 from app.services.settings import SettingsRepository, get_settings_repository
 from app.services.users import UserRepository, get_user_repository
 
@@ -571,6 +573,24 @@ def user_detail(
         out["pharmacist"] = {
             "orders": None,  # D-59: medication orders arrive with Module 13
         }
+    elif role == UserRole.FAMILY_MEMBER.value:
+        # D-79: which patient this family member follows.
+        linked_id = target.get("patientId")
+        patient = people.get(str(linked_id)) if linked_id else None
+        out["family"] = {
+            "patient": None
+            if patient is None
+            else {
+                "uid": linked_id,
+                "name": patient.get("name"),
+                "email": patient.get("email"),
+                "isActive": patient.get("isActive", True) is not False,
+                "assignedDoctor": names.get(str(patient.get("assignedDoctorId")))
+                if patient.get("assignedDoctorId")
+                else None,
+            },
+            "linkedAt": _iso_or_none(target.get("linkedAt")),
+        }
 
     events = [
         e
@@ -586,3 +606,113 @@ def user_detail(
         for e in sorted(events, key=lambda e: e["timestamp"], reverse=True)[:20]
     ]
     return out
+
+
+# ---------------- D-79: import staff accounts (CSV / JSON) ----------------
+
+
+class UserImportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    format: Literal["csv", "json"]
+    content: str = Field(min_length=1, max_length=600_000)
+    commit: bool = False
+
+
+STAFF_ROLES = {UserRole.DOCTOR.value, UserRole.PHARMACIST.value, UserRole.ADMIN.value}
+
+
+@router.get("/users/import/template")
+def users_template(_: CurrentUser = Depends(admin_only)) -> dict[str, Any]:
+    return {"csv": USER_TEMPLATE}
+
+
+@router.post("/users/import")
+def import_users(
+    body: UserImportRequest,
+    admin: CurrentUser = Depends(admin_only),
+    identity: IdentityProvider = Depends(get_identity_provider),
+    repo: UserRepository = Depends(get_user_repository),
+    email_client: EmailClient = Depends(get_email_client),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    """Preview (commit=false) or create staff accounts (doctor / pharmacist / admin), each
+    with a password-setup link (UC1.5). Patients still register themselves."""
+    try:
+        rows = parse(body.content, body.format)
+    except FileImportError as e:
+        raise ApiError("IMPORT_UNREADABLE", str(e), status.HTTP_422_UNPROCESSABLE_CONTENT) from e
+    taken = {str(u.get("email") or "").lower() for _, u in repo.list_users()}
+    seen: set[str] = set()
+    preview = []
+    created = 0
+    for n, parsed, error in validate_rows(rows, UserRow):
+        row = parsed if isinstance(parsed, UserRow) else None
+        if row is not None and error is None:
+            email = row.email.lower()
+            if row.role not in STAFF_ROLES:
+                error = "role: must be doctor, pharmacist or admin"
+            elif email in taken:
+                error = "An account with this email already exists."
+            elif email in seen:
+                error = "Duplicate of an earlier row."
+            seen.add(email)
+        if row is None or error is not None:
+            preview.append(
+                {
+                    "row": n,
+                    "name": rows[n - 1].get("name") or "",
+                    "email": rows[n - 1].get("email") or "",
+                    "role": rows[n - 1].get("role"),
+                    "error": error,
+                    "emailSent": None,
+                    "setupLink": None,
+                }
+            )
+            continue
+        entry: dict[str, Any] = {
+            "row": n,
+            "name": row.name,
+            "email": row.email,
+            "role": row.role,
+            "error": None,
+            "emailSent": None,
+            "setupLink": None,
+        }
+        if body.commit:
+            role = UserRole(row.role)
+            try:
+                uid = identity.create_user(email=row.email, display_name=row.name)
+            except EmailAlreadyRegisteredError:
+                entry["error"] = "An account with this email already exists."
+                preview.append(entry)
+                continue
+            identity.set_role(uid, role)
+            doc = {"email": row.email, "name": row.name, "role": role.value, "isActive": True}
+            if role is UserRole.DOCTOR and row.specialty:
+                doc["specialty"] = row.specialty
+            repo.create_user(uid, doc)
+            link = identity.password_setup_link(row.email)
+            try:
+                sent = email_client.send(staff_setup_email(row.name, row.email, role, link))
+            except Exception:
+                log.exception("Imported staff setup email failed for uid=%s", uid)
+                sent = False
+            entry["emailSent"] = sent
+            entry["setupLink"] = None if sent else link
+            created += 1
+        preview.append(entry)
+    valid = sum(1 for p in preview if p["error"] is None)
+    if body.commit and created:
+        audit.log(
+            user_id=admin.uid,
+            action="IMPORT_STAFF_ACCOUNTS",
+            details=f"Imported {created} staff account(s); {len(preview) - valid} rows skipped.",
+            target_type=Collection.USERS.value,
+        )
+    return {
+        "rows": preview,
+        "valid": valid,
+        "invalid": len(preview) - valid,
+        "committed": body.commit,
+        "created": created,
+    }

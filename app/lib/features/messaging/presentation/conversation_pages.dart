@@ -9,6 +9,7 @@ import '../../auth/state/auth_providers.dart';
 import '../data/conversations_repository.dart';
 import '../state/messaging_providers.dart';
 import 'chat_ui.dart';
+import '../../notifications/state/notification_providers.dart';
 
 /// D-76 team and admin-opened chats: the conversation itself, used by the patient app
 /// and every portal role.
@@ -34,6 +35,9 @@ class _ConversationViewState extends ConsumerState<ConversationView> {
   void initState() {
     super.initState();
     _poll = Timer.periodic(ConversationView.refreshEvery, (_) => _refresh());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => clearChatNotifications(ref, 'conversation', {'id': widget.conversationId}),
+    );
   }
 
   @override

@@ -18,11 +18,12 @@ from __future__ import annotations
 import hmac
 import json
 import logging
-from datetime import UTC, datetime, time
+from datetime import UTC, date, datetime, time
 from time import monotonic
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Header, Request, status
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.audit import AuditLogger, get_audit_logger
 from app.core.auth import CurrentUser, require_roles
@@ -57,6 +58,13 @@ from app.schemas.orders import (
     StockRequest,
 )
 from app.services.catalog import CatalogRepository, catalog_view, get_catalog_repository
+from app.services.imports import (
+    INVENTORY_TEMPLATE,
+    FileImportError,
+    InventoryRow,
+    parse,
+    validate_rows,
+)
 from app.services.medications import MYT
 from app.services.orders import (
     AWAITING_CONFIRMATION,
@@ -1079,4 +1087,125 @@ def courier_settings(
         "webhookUrl": f"{settings.public_base_url}/api/v1/webhooks/"
         + ("grab" if courier.brand == "Grab" else "lalamove"),
         "keysConfigured": not courier.simulated,
+    }
+
+
+# ---------------- D-79: inventory import (CSV / JSON) ----------------
+
+FORMS = {"tablet", "capsule", "syrup", "injection", "other"}
+
+
+class ImportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    format: Literal["csv", "json"]
+    content: str = Field(min_length=1, max_length=600_000)
+    commit: bool = False
+
+
+@router.get("/pharmacy/import/template")
+def inventory_template(_: CurrentUser = Depends(pharmacy_staff)) -> dict[str, Any]:
+    return {"csv": INVENTORY_TEMPLATE}
+
+
+@router.post("/pharmacy/import")
+def import_inventory(
+    body: ImportRequest,
+    user: CurrentUser = Depends(pharmacy_staff),
+    svc: OrderService = Depends(get_order_service),
+    catalog: CatalogRepository = Depends(get_catalog_repository),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    """Preview (commit=false) or apply: each row adds or updates a catalogue medicine
+    (matched by name + strength) and, when `units` is given, sets its stock level."""
+    try:
+        rows = parse(body.content, body.format)
+    except FileImportError as e:
+        raise ApiError("IMPORT_UNREADABLE", str(e), status.HTTP_422_UNPROCESSABLE_CONTENT) from e
+    items = {
+        (str(c.get("name", "")).lower(), str(c.get("strength", "")).lower()): (i, c)
+        for i, c in catalog.all()
+    }
+    stock_by_cat = {
+        str(s.get("catalogId")): (i, s) for i, s in svc.repo.stock() if s.get("catalogId")
+    }
+    seen: set[tuple[str, str]] = set()
+    preview = []
+    added = updated = 0
+    for n, parsed, error in validate_rows(rows, InventoryRow):
+        row = parsed if isinstance(parsed, InventoryRow) else None
+        expiry: date | None = None
+        if row is not None and error is None:
+            key = (row.name.lower(), row.strength.lower())
+            if row.form not in FORMS:
+                error = f"form: must be one of {', '.join(sorted(FORMS))}"
+            elif key in seen:
+                error = "Duplicate of an earlier row."
+            elif row.units is not None:
+                try:
+                    expiry = date.fromisoformat(str(row.expiryDate))
+                except ValueError:
+                    error = "expiryDate: needed as YYYY-MM-DD when units are given"
+            seen.add(key)
+        if row is None or error is not None:
+            preview.append(
+                {"row": n, "name": (rows[n - 1].get("name") or ""), "action": None, "error": error}
+            )
+            continue
+        key = (row.name.lower(), row.strength.lower())
+        existing = items.get(key)
+        action = "update" if existing else "add"
+        if row.units is not None:
+            action += " + stock"
+        preview.append(
+            {"row": n, "name": f"{row.name} {row.strength}", "action": action, "error": None}
+        )
+        if not body.commit:
+            continue
+        now = datetime.now(UTC)
+        fields = {
+            "name": row.name,
+            "strength": row.strength,
+            "form": row.form,
+            "unitLabel": row.form,
+            "drugClass": row.drugClass,
+            "unitPrice": round(row.unitPrice, 2),
+            "updatedAt": now,
+        }
+        if existing:
+            item_id = existing[0]
+            catalog.update(item_id, fields)
+            updated += 1
+        else:
+            item_id = catalog.create({**fields, "active": True})
+            items[key] = (item_id, fields)
+            added += 1
+        if row.units is not None and expiry is not None:
+            stock = {
+                "name": f"{row.name} {row.strength}",
+                "catalogId": item_id,
+                "units": row.units,
+                "lowStockAt": row.lowStockAt,
+                "expiryDate": _expiry(expiry),
+                "updatedAt": now,
+            }
+            if item_id in stock_by_cat:
+                svc.repo.update_stock(stock_by_cat[item_id][0], stock)
+            else:
+                svc.repo.add_stock(stock)
+    valid = sum(1 for p in preview if p["error"] is None)
+    if body.commit and valid:
+        audit.log(
+            user_id=user.uid,
+            action="IMPORT_INVENTORY",
+            details=f"Inventory import: {added} added, {updated} updated, "
+            f"{len(preview) - valid} rows skipped.",
+            target_type=Collection.MEDICATION_CATALOG.value,
+        )
+    return {
+        "rows": preview,
+        "valid": valid,
+        "invalid": len(preview) - valid,
+        "committed": body.commit,
+        "added": added,
+        "updated": updated,
     }

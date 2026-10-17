@@ -33,12 +33,29 @@
     <a id="open-app" class="btn primary"
        href="intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=fyp.hypertension.patient;end">
       Open the Harvey app</a>
-    <a class="btn secondary" href="/">Go to the staff portal</a>
+    <a id="open-portal" class="btn secondary" href="/">Go to the staff portal</a>
     <p style="margin-top:20px;font-size:14px">If the app doesn't open, open Harvey from your home screen.</p>
   </main>
   <script>
+    // D-79: the reset link says who asked (?for=patient|family|staff), so patients and
+    // family only see "Open the Harvey app" and staff only the portal.
+    var who = new URLSearchParams(location.search).get('for');
+    var app = document.getElementById('open-app');
+    var portal = document.getElementById('open-portal');
+    if (who === 'family') {
+      app.href = app.href.replace('fyp.hypertension.patient', 'fyp.hypertension.family');
+      app.textContent = 'Open the Harvey Family app';
+    }
+    if (who === 'patient' || who === 'family') {
+      portal.style.display = 'none';
+    } else if (who === 'staff') {
+      app.style.display = 'none';
+      portal.className = 'btn primary';
+      document.querySelector('main p').textContent =
+        'Your Harvey password has been updated. Sign in to the staff portal with your new password.';
+    }
     // The "open app" link only works on Android phones; elsewhere hide it.
-    if (!/Android/i.test(navigator.userAgent)) document.getElementById('open-app').style.display = 'none';
+    if (!/Android/i.test(navigator.userAgent)) app.style.display = 'none';
   </script>
 </body>
 </html>
