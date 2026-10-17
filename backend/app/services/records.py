@@ -6,6 +6,7 @@ categorised `health_records` document after checking the file, and serves the by
 the patient or, while shared, to the assigned doctor.
 """
 
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
@@ -101,6 +102,11 @@ class StorageFileStore:
     def __init__(self) -> None:
         from firebase_admin import storage
 
+        # Local dev: google-cloud-storage only knows STORAGE_EMULATOR_HOST; without it the
+        # Admin SDK went to the real bucket anonymously (found in the Increment 3 exit test).
+        emulator = os.environ.get("FIREBASE_STORAGE_EMULATOR_HOST")
+        if emulator and not os.environ.get("STORAGE_EMULATOR_HOST"):
+            os.environ["STORAGE_EMULATOR_HOST"] = f"http://{emulator}"
         self._bucket = storage.bucket(get_settings().storage_bucket, app=get_firebase_app())
 
     def stat(self, path: str) -> StoredFile | None:

@@ -1383,3 +1383,74 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Deviations / additions: `staff_requests` collection, `DEV_VITALS_TOOLS` setting.
 - Tests: backend 696 (+3 skipped); Flutter 595; rules 209.
 
+### 2026-10-18 — Increment 3 exit test
+
+- Scenario (docs/08: full end-to-end runs for every role on the emulator, plus the Stripe test
+  card and the courier sandbox). Local Firebase emulators + local FastAPI, demo accounts for
+  all five roles, API calls and Firestore/Storage reads as each user (Security Rules apply).
+  Real third parties in test mode: Stripe test card `pm_card_visa` confirmed a real
+  PaymentIntent in test mode; the Lalamove **sandbox** accepted a real order
+  (`Lalamove order ... placed`); Gemini wrote the Harvey AI note.
+- Result: **55/55 PASS**. Checks covered:
+  - setup: three readings and a risk score
+  - M5 FR-5.1 patient adds a medication
+  - M5 FR-5.3 dose confirmed (taken, adherence updated)
+  - M12 FR-12.1 contact details updated
+  - M12 FR-12.1 notification preferences saved
+  - M12 FR-12.2 data export (JSON) includes readings
+  - M7 FR-7.1 free slots listed
+  - M7 FR-7.1 appointment booked (already had one)
+  - M7 FR-7.4 doctor reads the pre-visit summary
+  - M7 FR-7.2 reschedule request sent
+  - M7 D-55 doctor approves the reschedule
+  - M6 FR-6.1 patient uploads a PDF to Storage
+  - M6 FR-6.1 record saved with a category
+  - M6 FR-6.2 record shared with the doctor
+  - M6 FR-6.2 doctor opens the shared file
+  - M10 FR-10.1 patient stores an encrypted, flagged message (rules allow)
+  - M10 FR-10.3 notify: doctor pushed, flagged alert raised
+  - D-76 Harvey AI posts a note for the crisis BP message
+  - D-76 doctor can read the Harvey AI note in the chat
+  - FR-14.4 flagged-message clinical alert visible to the doctor
+  - D-69 patient writes to Harvey Pharmacy
+  - D-69 pharmacist sees the conversation
+  - D-76 admin opens a chat between pharmacist and patient
+  - D-76 patient sees the admin-opened chat with unread messages
+  - D-76 doctor starts a staff chat with the pharmacist
+  - M8/M13 FR-13.1 doctor issues a recurring catalogue prescription; order created
+  - M13 FR-13.2 patient sees the order awaiting confirmation
+  - M13 FR-13.3 home delivery confirmed; courier fee quoted
+  - M13 FR-13.3 Stripe PaymentIntent created (test mode)
+  - Stripe test card (pm_card_visa) payment succeeded
+  - M13 FR-13.3 order paid and sent to the pharmacy
+  - M13 D-66 payment receipt saved to the patient's records
+  - M13 FR-13.4 pharmacist queue shows the paid order
+  - M13 FR-13.4 pharmacist marks it ready (stock taken)
+  - M13 FR-13.5 courier booked when ready (Lalamove sandbox or simulator)
+  - M11 FR-11.4 admin delivery oversight lists it
+  - D-78 doctor prescription management shows the order status
+  - FR-14.2 patient SOS raises an emergency alert
+  - FR-14.2 linked family member reads the emergency alert
+  - FR-14.2 family acknowledges the alert
+  - FR-14.2 family dashboard reads the patient's readings (read-only)
+  - D-76 weekly summary available in the Harvey Assistant
+  - D-77 doctor's bell holds the day's notifications
+  - D-77 mark all read clears the badge
+  - D-78 pharmacist request answered by the admin
+  - M11 admin users
+  - M11 admin audit logs
+  - M11 admin hospital analytics
+  - M11 admin system analytics
+  - M11 admin system health
+  - M11 FR-11.3 audit log CSV export
+  - M11 FR-11.4 hospital PDF report (with charts)
+  - D-78 dev BP tools flag reported
+  - NFR role boundary: pharmacist cannot open the admin panel
+  - NFR role boundary: patient cannot open prescription management
+- Found and fixed during the exit test: locally, the Admin SDK's Storage client ignored
+  `FIREBASE_STORAGE_EMULATOR_HOST` and called the real bucket anonymously, so saving a
+  health record (and the payment receipt) failed on the emulators. `StorageFileStore` now sets
+  `STORAGE_EMULATOR_HOST` from it. Cloud Run was not affected.
+- Test totals: backend 696 (+3 skipped); Flutter 595; rules 209; lint clean.
+- **Increment 3 complete** (pending the end-of-increment redeploy and live smoke test).
+
