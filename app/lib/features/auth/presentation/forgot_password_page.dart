@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,8 +34,24 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
   String? _error;
   String? _info;
 
+  /// D-80: "Send a new code" waits this long after each code.
+  static const resendWait = 30;
+  int _wait = 0;
+  Timer? _tick;
+
+  void _startCooldown() {
+    _tick?.cancel();
+    setState(() => _wait = resendWait);
+    _tick = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return t.cancel();
+      setState(() => _wait--);
+      if (_wait <= 0) t.cancel();
+    });
+  }
+
   @override
   void dispose() {
+    _tick?.cancel();
     _email.dispose();
     _code.dispose();
     _password.dispose();
@@ -71,6 +89,7 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
         _code.clear();
         if (resend) _info = 'A new code is on its way.';
       });
+      _startCooldown();
     }
   }
 
@@ -199,18 +218,10 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
         const SizedBox(height: 8),
         TextButton(
           key: const Key('reset-resend'),
-          onPressed: _busy ? null : () => _sendCode(resend: true),
-          child: const Text("Didn't get it? Send a new code"),
-        ),
-        TextButton(
-          onPressed: _busy
-              ? null
-              : () => setState(() {
-                  _step = _Step.email;
-                  _error = null;
-                  _info = null;
-                }),
-          child: const Text('Use a different email'),
+          onPressed: _busy || _wait > 0 ? null : () => _sendCode(resend: true),
+          child: Text(
+            _wait > 0 ? 'Send a new code in ${_wait}s' : "Didn't get it? Send a new code",
+          ),
         ),
       ],
     ),

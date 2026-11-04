@@ -219,6 +219,25 @@ void main() {
       expect(find.byKey(const Key('reset-done')), findsOneWidget);
     });
 
+    tallTest('D-80 resend waits 30 seconds; no change-email button', (t) async {
+      final repo = FakeAuthRepository();
+      await t.pumpWidget(harness(const ForgotPasswordPage(), repo: repo));
+      await fill(t, 'reset-email', 'p@x.my');
+      await t.tap(find.byKey(const Key('reset-submit')));
+      await t.pumpAndSettle();
+      expect(find.text('Use a different email'), findsNothing);
+      expect(find.text('Send a new code in 30s'), findsOneWidget);
+      await t.tap(find.byKey(const Key('reset-resend')));
+      await t.pump();
+      expect(repo.calls, ['code:p@x.my']); // disabled while counting down
+      await t.pump(const Duration(seconds: 30));
+      await t.tap(find.byKey(const Key('reset-resend')));
+      await t.pumpAndSettle();
+      expect(repo.calls, ['code:p@x.my', 'code:p@x.my']);
+      expect(find.text('Send a new code in 30s'), findsOneWidget);
+      await t.pump(const Duration(seconds: 31)); // let the countdown finish
+    });
+
     tallTest('D-80 a wrong code shows how many tries are left', (t) async {
       final repo = FakeAuthRepository()
         ..codeError = ApiException('INVALID_CODE', 'That code is wrong. 4 tries left.');
