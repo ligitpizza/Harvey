@@ -78,6 +78,7 @@ GoRouter _guardedRouter(
       final uid = ref.read(authUidProvider);
       final profile = ref.read(currentUserProvider);
       final location = state.matchedLocation;
+      final busy = ref.read(authBusyProvider);
       final target = authRedirect(
         location: location,
         app: app,
@@ -85,9 +86,13 @@ GoRouter _guardedRouter(
         uid: uid.value,
         profileLoading: profile.isLoading && !profile.hasValue,
         profile: profile.value,
-        busy: ref.read(authBusyProvider),
+        busy: busy,
         home: home,
       );
+      // D-80: while sign-in is checking the selected role, the patient/family guard must
+      // not move the page either (a family account on /login jumped to the family home,
+      // then was signed out with no message).
+      if (busy) return null;
       return target ?? roleGuard?.call(location);
     },
     routes: [

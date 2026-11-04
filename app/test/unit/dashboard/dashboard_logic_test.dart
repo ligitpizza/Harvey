@@ -93,4 +93,25 @@ void main() {
     });
     expect((v.systolic, v.diastolic, v.heartRate, v.note), (128, 82, 71, null));
   });
+
+  test('D-80 the morning BP nudge shows 6 AM to noon only', () {
+    bool at(int h) => showMorningBpNudge(
+      now: DateTime(2026, 11, 5, h),
+      latestReading: DateTime(2026, 11, 4, 9),
+      dismissedToday: false,
+    );
+    expect(at(0), isFalse); // midnight: "Good Night", no nudge
+    expect(at(5), isFalse);
+    expect(at(6), isTrue);
+    expect(at(11), isTrue);
+    expect(at(12), isFalse);
+    expect(
+      showMorningBpNudge(
+        now: DateTime(2026, 11, 5, 8),
+        latestReading: DateTime(2026, 11, 5, 7),
+        dismissedToday: false,
+      ),
+      isFalse, // already logged today
+    );
+  });
 }

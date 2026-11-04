@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hypertension/features/leave/leave_pages.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hypertension/core/constants/enums.dart';
 import 'package:hypertension/features/admin/state/admin_providers.dart';
@@ -231,6 +232,9 @@ Future<void> pickReason(WidgetTester t, String code, {String? note}) async {
   await t.pumpAndSettle();
 }
 
+/// D-80: approved leave the calendar shows (null = the API isn't reached).
+List<LeaveRequest>? leaveForCalendar;
+
 Widget app(FakeAppointmentsRepository repo, {String initial = '/appointments', String uid = 'p1'}) {
   final router = GoRouter(
     initialLocation: initial,
@@ -288,6 +292,7 @@ Widget app(FakeAppointmentsRepository repo, {String initial = '/appointments', S
       adminRepositoryProvider.overrideWithValue(admin),
       nowProvider.overrideWithValue(() => now),
       authUidProvider.overrideWith((ref) => Stream.value(uid)),
+      leaveRequestsProvider.overrideWith((ref) async => leaveForCalendar ?? const []),
       assignedPatientsProvider.overrideWith(
         (ref) => Stream.value(const [PortalPatient(uid: 'p1', name: 'Siti Aminah')]),
       ),
@@ -512,6 +517,47 @@ void main() {
       expect(find.byKey(const Key('appointment-details')), findsOneWidget);
       expect(find.byKey(const Key('pre-visit-summary')), findsOneWidget);
     });
+  });
+
+  tallTest('D-80 approved leave is labelled on the doctor and admin calendars', (t) async {
+    leaveForCalendar = [
+      LeaveRequest(
+        id: 'l1',
+        staffId: 'd1',
+        staffName: 'Dr John',
+        staffRole: 'doctor',
+        startDate: DateTime(2026, 10, 21),
+        endDate: DateTime(2026, 10, 22),
+        days: 2,
+        reason: 'Conference',
+        status: 'approved',
+      ),
+      LeaveRequest(
+        id: 'l2',
+        staffId: 'd1',
+        staffName: 'Dr John',
+        staffRole: 'doctor',
+        startDate: DateTime(2026, 10, 27),
+        endDate: DateTime(2026, 10, 27),
+        days: 1,
+        reason: 'Not decided',
+        status: 'pending',
+      ),
+    ];
+    addTearDown(() => leaveForCalendar = null);
+    await t.pumpWidget(app(repo, initial: '/calendar', uid: 'd1'));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('cal-leave-21')), findsOneWidget);
+    expect(find.byKey(const Key('cal-leave-22')), findsOneWidget);
+    expect(find.byKey(const Key('cal-leave-27')), findsNothing); // pending: not on leave yet
+    expect(find.text('On leave'), findsNWidgets(2));
+    await t.tap(find.byKey(const Key('cal-day-21')));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('leave-banner-21')), findsOneWidget);
+
+    await t.pumpWidget(app(repo, initial: '/admin-calendar', uid: 'a1'));
+    await t.pumpAndSettle();
+    expect(find.text('Dr John on leave'), findsNWidgets(2));
   });
 
   tallTest('a cancelled appointment stays on the calendar, struck through and labelled', (t) async {

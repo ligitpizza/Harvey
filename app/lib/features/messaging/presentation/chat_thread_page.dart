@@ -161,34 +161,24 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
       context.go('/doctor/patient/${widget.otherId}/care-plan');
       return;
     }
+    final doctor = ref.read(contactProvider(widget.otherId)).value?.name ?? 'your doctor';
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => Consumer(
-        builder: (context, ref, _) {
-          final plan = ref.watch(carePlanProvider);
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('My care plan', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 8),
-                plan.when(
-                  loading: () => const LinearProgressIndicator(),
-                  error: (_, _) => const Text('Could not load your care plan.'),
-                  data: (CarePlan? p) => Text(
-                    p == null || p.content.trim().isEmpty
-                        ? 'Your doctor has not written a care plan yet.' // UC10.2 E1
-                        : p.content,
-                    key: const Key('chat-care-plan'),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheet) => Consumer(
+        builder: (context, ref, _) => CarePlanSheet(
+          plan: ref.watch(carePlanProvider),
+          doctorName: doctor,
+          onAsk: () {
+            Navigator.of(sheet).pop();
+            _input.text = askAboutPlan;
+            _input.selection = TextSelection.collapsed(offset: _input.text.length);
+          },
+        ),
       ),
     );
   }
@@ -536,6 +526,169 @@ class _FlaggedBanner extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// D-80: what the "Ask about this" button puts in the message box.
+const askAboutPlan = "About my care plan: I don't fully understand this part: ";
+
+/// UC10.2 / D-80: the doctor's care plan as a readable card in the chat.
+class CarePlanSheet extends StatelessWidget {
+  const CarePlanSheet({
+    super.key,
+    required this.plan,
+    required this.doctorName,
+    required this.onAsk,
+  });
+
+  final AsyncValue<CarePlan?> plan;
+  final String doctorName;
+  final VoidCallback onAsk;
+
+  /// One point per line; a single paragraph is split into its sentences.
+  static List<String> points(String content) {
+    final lines = content
+        .split(RegExp(r'\r?\n'))
+        .map((l) => l.replaceFirst(RegExp(r'^\s*([-*•]|\d+[.)])\s*'), '').trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    if (lines.length > 1) return lines;
+    final one = lines.isEmpty ? '' : lines.first;
+    final sentences = one
+        .split(RegExp(r'(?<=[.!?])\s+'))
+        .map((x) => x.trim())
+        .where((x) => x.isNotEmpty)
+        .toList();
+    return sentences.isEmpty ? [one] : sentences;
+  }
+
+  static String _capital(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+
+  static String _date(DateTime t) {
+    const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final l = t.toLocal();
+    return '${l.day} ${m[l.month - 1]} ${l.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final updated = plan.value == null ? '' : ' · updated ${_date(plan.value!.updatedAt)}';
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              key: const Key('care-plan-header'),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                gradient: LinearGradient(
+                  colors: [scheme.primary, Color.lerp(scheme.primary, Colors.teal, 0.45)!],
+                ),
+              ),
+              child: Row(
+                children: [
+                  const CircleAvatar(
+                    backgroundColor: Colors.white,
+                    child: Icon(Icons.assignment_turned_in_outlined),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'My care plan',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          'From $doctorName$updated',
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            plan.when(
+              loading: () => const LinearProgressIndicator(),
+              error: (_, _) => const Text('Could not load your care plan.'),
+              data: (p) {
+                if (p == null || p.content.trim().isEmpty) {
+                  return Container(
+                    key: const Key('chat-care-plan'),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Text(
+                      'Your doctor has not written a care plan yet.', // UC10.2 E1
+                      textAlign: TextAlign.center,
+                    ),
+                  );
+                }
+                final items = points(p.content);
+                return ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.45),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      key: const Key('chat-care-plan'),
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (var i = 0; i < items.length; i++)
+                          Container(
+                            key: Key('care-plan-point-$i'),
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: scheme.primaryContainer.withValues(alpha: 0.45),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border(left: BorderSide(color: scheme.primary, width: 4)),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(Icons.check_circle_outline, size: 20, color: scheme.primary),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(_capital(items[i]), style: theme.textTheme.bodyLarge),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Follow your doctor's plan. Not sure about something? Ask them here.",
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            FilledButton.tonalIcon(
+              key: const Key('care-plan-ask'),
+              onPressed: onAsk,
+              icon: const Icon(Icons.help_outline),
+              label: Text('Ask $doctorName about this'),
+            ),
+          ],
+        ),
       ),
     );
   }

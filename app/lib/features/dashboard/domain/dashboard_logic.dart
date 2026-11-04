@@ -21,13 +21,16 @@ String snapshotLineFor(DateTime now) => switch (greetingFor(now)) {
   _ => "Here's today's summary. Rest well and log your BP in the morning.",
 };
 
-/// D-77: the morning "log your BP" nudge shows until noon if nothing is logged today.
+/// D-77: the morning "log your BP" nudge shows 6 AM to noon if nothing is logged today
+/// (D-80: not after midnight, when it said "Good morning" next to "Good Night").
+const morningNudgeFrom = 6;
+
 bool showMorningBpNudge({
   required DateTime now,
   required DateTime? latestReading,
   required bool dismissedToday,
 }) {
-  if (dismissedToday || now.hour >= 12) return false;
+  if (dismissedToday || now.hour < morningNudgeFrom || now.hour >= 12) return false;
   if (latestReading == null) return true;
   final l = latestReading.toLocal();
   return !(l.year == now.year && l.month == now.month && l.day == now.day);

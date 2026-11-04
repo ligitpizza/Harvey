@@ -14,6 +14,7 @@ import '../appointments/presentation/admin_booking_dialog.dart';
 class LeaveRequest {
   const LeaveRequest({
     required this.id,
+    this.staffId = '',
     required this.staffName,
     required this.staffRole,
     required this.startDate,
@@ -24,9 +25,11 @@ class LeaveRequest {
     this.decidedBy,
     this.decisionNote,
     this.affected,
+    this.updatedAt,
   });
 
   final String id;
+  final String staffId;
   final String staffName;
   final String staffRole;
   final DateTime startDate;
@@ -42,8 +45,12 @@ class LeaveRequest {
   /// Booked appointments in the period (doctors, while pending).
   final int? affected;
 
+  /// When it was last changed (the decision time for decided leave).
+  final DateTime? updatedAt;
+
   factory LeaveRequest.fromJson(Map<String, dynamic> j) => LeaveRequest(
     id: j['id'] as String,
+    staffId: j['staffId'] as String? ?? '',
     staffName: j['staffName'] as String? ?? 'Staff',
     staffRole: j['staffRole'] as String? ?? '',
     startDate: DateTime.parse(j['startDate'] as String),
@@ -54,7 +61,15 @@ class LeaveRequest {
     decidedBy: j['decidedBy'] as String?,
     decisionNote: j['decisionNote'] as String?,
     affected: (j['affectedAppointments'] as num?)?.toInt(),
+    updatedAt: j['updatedAt'] == null ? null : DateTime.tryParse(j['updatedAt'] as String),
   );
+
+  /// Every calendar date the leave covers.
+  Iterable<DateTime> get dates sync* {
+    for (var d = startDate; !d.isAfter(endDate); d = d.add(const Duration(days: 1))) {
+      yield DateTime(d.year, d.month, d.day);
+    }
+  }
 
   bool get canCancel {
     final today = DateTime.now();
@@ -450,7 +465,7 @@ class AdminLeavePage extends ConsumerStatefulWidget {
 }
 
 class _AdminLeavePageState extends ConsumerState<AdminLeavePage> {
-  bool _pendingOnly = true;
+  String? _historyFilter; // null = all decided
 
   void _refresh() {
     ref.invalidate(leaveRequestsProvider);
@@ -543,55 +558,88 @@ class _AdminLeavePageState extends ConsumerState<AdminLeavePage> {
                 ),
         ),
         const SizedBox(height: 20),
-        Row(
-          children: [
-            Expanded(child: Text('Leave requests', style: theme.textTheme.titleMedium)),
-            FilterChip(
-              key: const Key('leave-pending-only'),
-              label: const Text('Pending only'),
-              selected: _pendingOnly,
-              onSelected: (v) => setState(() => _pendingOnly = v),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
         list.when(
           loading: () => const LinearProgressIndicator(),
           error: (_, _) => _error(() => ref.invalidate(leaveRequestsProvider), 'leave requests'),
           data: (rs) {
-            final shown = [
+            // D-80: decided requests stay as a history, newest decision first.
+            final pending = [
               for (final r in rs)
-                if (!_pendingOnly || r.status == 'pending') r,
+                if (r.status == 'pending') r,
             ];
-            if (shown.isEmpty) {
-              return Padding(
-                key: const Key('admin-leave-empty'),
-                padding: const EdgeInsets.all(16),
-                child: Text(_pendingOnly ? 'No leave waiting for a decision.' : 'No leave yet.'),
-              );
-            }
+            final history = [
+              for (final r in rs)
+                if (r.status != 'pending') r,
+            ]..sort((a, b) => (b.updatedAt ?? b.startDate).compareTo(a.updatedAt ?? a.startDate));
+            final shownHistory = _historyFilter == null
+                ? history
+                : history.where((r) => r.status == _historyFilter).toList();
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (final r in shown)
+                Text(
+                  'Waiting for a decision (${pending.length})',
+                  style: theme.textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                if (pending.isEmpty)
+                  const Padding(
+                    key: Key('admin-leave-empty'),
+                    padding: EdgeInsets.all(16),
+                    child: Text('No leave waiting for a decision.'),
+                  ),
+                for (final r in pending)
                   _LeaveCard(
                     r: r,
                     admin: true,
                     actions: [
-                      if (r.status == 'pending') ...[
-                        OutlinedButton(
-                          key: Key('reject-${r.id}'),
-                          onPressed: () => _decide(r, 'reject'),
-                          child: const Text('Reject'),
-                        ),
-                        FilledButton(
-                          key: Key('approve-${r.id}'),
-                          onPressed: () => _decide(r, 'approve'),
-                          child: const Text('Approve'),
-                        ),
-                      ],
+                      OutlinedButton(
+                        key: Key('reject-${r.id}'),
+                        onPressed: () => _decide(r, 'reject'),
+                        child: const Text('Reject'),
+                      ),
+                      FilledButton(
+                        key: Key('approve-${r.id}'),
+                        onPressed: () => _decide(r, 'approve'),
+                        child: const Text('Approve'),
+                      ),
                     ],
                   ),
+                const SizedBox(height: 20),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      'History (${history.length})',
+                      key: const Key('leave-history'),
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    for (final (value, label) in const [
+                      (null, 'All'),
+                      ('approved', 'Approved'),
+                      ('rejected', 'Not approved'),
+                      ('cancelled', 'Cancelled'),
+                    ])
+                      ChoiceChip(
+                        key: Key('history-${value ?? 'all'}'),
+                        label: Text(
+                          '$label (${value == null ? history.length : history.where((r) => r.status == value).length})',
+                        ),
+                        selected: _historyFilter == value,
+                        onSelected: (_) => setState(() => _historyFilter = value),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (shownHistory.isEmpty)
+                  const Padding(
+                    key: Key('leave-history-empty'),
+                    padding: EdgeInsets.all(16),
+                    child: Text('No decided leave yet.'),
+                  ),
+                for (final r in shownHistory) _LeaveCard(r: r, admin: true),
               ],
             );
           },
@@ -660,4 +708,25 @@ class _DecisionDialogState extends State<_DecisionDialog> {
       ],
     );
   }
+}
+
+/// D-80: approved leave per calendar date, as labels for the calendars ("On leave" for the
+/// doctor's own calendar; "Dr John on leave" for the admin, optionally one doctor only).
+Map<DateTime, List<String>> leaveByDay(
+  List<LeaveRequest> all, {
+  required bool admin,
+  String? onlyStaffId,
+}) {
+  final out = <DateTime, List<String>>{};
+  for (final r in all) {
+    if (r.status != 'approved') continue;
+    if (onlyStaffId != null && r.staffId != onlyStaffId) continue;
+    final label = admin
+        ? '${r.staffName} on leave${r.staffRole == 'pharmacist' ? ' (pharmacy)' : ''}'
+        : 'On leave';
+    for (final d in r.dates) {
+      out.putIfAbsent(d, () => []).add(label);
+    }
+  }
+  return out;
 }

@@ -1522,3 +1522,17 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Reset screen: "Send a new code" waits 30 seconds (countdown); "Use a different email" removed.
 - Tests: backend 728 (+3 skipped); Flutter 621.
 
+### 2026-11-05 — Login role guard, morning nudge hours, care plan card, leave on calendars
+
+- Login: on the Harvey app's Patient toggle, a family account briefly opened the family home and
+  was then signed out with no message. The patient/family route guard ran while sign-in was still
+  checking the selected role; it now waits like the main guard (`routers.dart`), so the page shows
+  "The selected role does not match this account." Router test reproduces the old jump.
+- Home: the morning "log your BP" nudge shows 6 AM to noon only (it showed after midnight).
+- Chat: the care plan opens as a card (doctor and update date in a header, one point per line or
+  sentence, "Ask Dr … about this" fills the message box).
+- Portal: approved leave is labelled on the doctor's calendar ("On leave") and the admin calendar
+  ("Dr John on leave"; the doctor filter applies), with banners in the weekly/daily views. Admin
+  Staff leave lists "Waiting for a decision" and a "History" of decided leave with filters.
+- Tests: Flutter 627.
+

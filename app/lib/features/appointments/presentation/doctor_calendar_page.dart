@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../leave/leave_pages.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/enums.dart';
@@ -106,6 +107,16 @@ class _DoctorCalendarPageState extends ConsumerState<DoctorCalendarPage> {
     final requests = active.where((a) => a.pendingChange != null).length;
     final now = ref.watch(nowProvider)();
     final overdue = active.where((a) => a.isOverdue(now)).length;
+    // D-80: approved leave (own for a doctor; everyone's for the admin).
+    final leave = leaveByDay(
+      ref.watch(leaveRequestsProvider).value ?? const <LeaveRequest>[],
+      admin: admin,
+      onlyStaffId: _doctor,
+    );
+    final leaveInRange = [
+      for (final e in leave.entries)
+        if (!e.key.isBefore(start) && e.key.isBefore(end)) e,
+    ]..sort((a, b) => a.key.compareTo(b.key));
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -203,11 +214,20 @@ class _DoctorCalendarPageState extends ConsumerState<DoctorCalendarPage> {
             padding: EdgeInsets.only(bottom: 8),
             child: Text('Cancelled appointments are shown struck through.'),
           ),
+        if (_view != CalendarView.month)
+          for (final e in leaveInRange)
+            _LeaveBanner(
+              key: Key('leave-banner-${e.key.day}'),
+              text:
+                  '${dateLabel(_utc(e.key).add(const Duration(hours: 12)))}: '
+                  '${e.value.join(', ')}',
+            ),
         switch (_view) {
           CalendarView.month => _MonthGrid(
             month: _anchor,
             appointments: list,
             names: names,
+            leave: leave,
             onDay: (d) => setState(() {
               _anchor = d;
               _view = CalendarView.day;
@@ -235,17 +255,37 @@ String _short(String? name) {
   return parts.length == 1 ? parts.first : '${parts.first[0]}. ${parts.last}';
 }
 
+/// D-80: a day of approved leave in the weekly / daily view.
+class _LeaveBanner extends StatelessWidget {
+  const _LeaveBanner({super.key, required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    color: Colors.deepOrange.withValues(alpha: 0.12),
+    child: ListTile(
+      dense: true,
+      leading: const Icon(Icons.beach_access, color: Colors.deepOrange),
+      title: Text(text),
+    ),
+  );
+}
+
 class _MonthGrid extends StatelessWidget {
   const _MonthGrid({
     required this.month,
     required this.appointments,
     required this.names,
     required this.onDay,
+    this.leave = const {},
   });
 
   final DateTime month;
   final List<Appointment> appointments;
   final Map<String, String> names;
+
+  /// D-80: approved leave labels per date.
+  final Map<DateTime, List<String>> leave;
   final ValueChanged<DateTime> onDay;
 
   @override
@@ -278,17 +318,55 @@ class _MonthGrid extends StatelessWidget {
                 builder: (context) {
                   final d = DateTime(month.year, month.month, day);
                   final items = byDay[d] ?? const [];
+                  final off = leave[d] ?? const <String>[];
                   return InkWell(
                     key: Key('cal-day-$day'),
                     onTap: () => onDay(d),
                     child: Card(
                       margin: const EdgeInsets.all(2),
+                      color: off.isEmpty ? null : Colors.deepOrange.withValues(alpha: 0.10),
+                      shape: off.isEmpty
+                          ? null
+                          : RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(color: Colors.deepOrange.shade300),
+                            ),
                       child: Padding(
                         padding: const EdgeInsets.all(4),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text('$day'),
+                            for (final label in off.take(2))
+                              Container(
+                                key: Key('cal-leave-$day'),
+                                margin: const EdgeInsets.only(bottom: 2),
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: Colors.deepOrange.shade400,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.beach_access, size: 10, color: Colors.white),
+                                    const SizedBox(width: 2),
+                                    Flexible(
+                                      child: Text(
+                                        label,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 10, color: Colors.white),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            if (off.length > 2)
+                              Text(
+                                '+${off.length - 2} on leave',
+                                style: const TextStyle(fontSize: 10),
+                              ),
                             for (final a in items.take(3))
                               _Chip(
                                 appointment: a,

@@ -165,9 +165,12 @@ void main() {
       await pump(t, const AdminLeavePage());
       expect(find.byKey(const Key('move-a1')), findsOneWidget);
       expect(find.textContaining('Dr John is on leave'), findsOneWidget);
-      // Pending only by default.
+      // Waiting for a decision, and decided leave kept as history.
       expect(find.byKey(const Key('leave-l1')), findsOneWidget);
-      expect(find.byKey(const Key('leave-l2')), findsNothing);
+      expect(find.byKey(const Key('approve-l1')), findsOneWidget);
+      expect(find.byKey(const Key('leave-l2')), findsOneWidget);
+      expect(find.byKey(const Key('approve-l2')), findsNothing);
+      expect(find.text('History (1)'), findsOneWidget);
       await t.tap(find.byKey(const Key('approve-l1')));
       await t.pumpAndSettle();
       expect(find.textContaining('2 appointment(s) will be flagged'), findsOneWidget);
@@ -176,9 +179,10 @@ void main() {
       await t.pumpAndSettle();
       expect(api.calls, ['decide:l1:approve:Enjoy']);
       expect(find.textContaining('2 appointment(s) to reschedule'), findsOneWidget);
-      await t.tap(find.byKey(const Key('leave-pending-only')));
+      await t.tap(find.byKey(const Key('history-rejected')));
       await t.pumpAndSettle();
-      expect(find.byKey(const Key('leave-l2')), findsOneWidget);
+      expect(find.byKey(const Key('leave-l2')), findsNothing);
+      expect(find.byKey(const Key('leave-history-empty')), findsOneWidget);
     });
   });
 
@@ -229,5 +233,20 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('Enter the 12-digit IC number.'), findsOneWidget);
     });
+  });
+
+  test('D-80 approved leave becomes calendar labels per day', () {
+    final all = [
+      LeaveRequest.fromJson({...leaveJson('l1', 'approved'), 'staffId': 'd1'}),
+      LeaveRequest.fromJson({...leaveJson('l2', 'pending'), 'staffId': 'd1'}),
+      LeaveRequest.fromJson({...leaveJson('l3', 'approved', role: 'pharmacist'), 'staffId': 'ph1'}),
+    ];
+    final day = DateTime(soon.year, soon.month, soon.day);
+    final next = day.add(const Duration(days: 1));
+    final admin = leaveByDay(all, admin: true);
+    expect(admin[day], ['Dr John on leave', 'Dr John on leave (pharmacy)']);
+    expect(admin[next]?.length, 2);
+    expect(leaveByDay(all, admin: true, onlyStaffId: 'd1')[day], ['Dr John on leave']);
+    expect(leaveByDay(all, admin: false, onlyStaffId: 'd1')[day], ['On leave']);
   });
 }

@@ -396,7 +396,33 @@ void main() {
       await t.tap(find.byKey(const Key('chat-care-plan-button')));
       await t.pumpAndSettle();
       expect(find.text('Walk 20 minutes daily'), findsOneWidget);
+      // D-80: styled header with the doctor; "Ask" puts a question in the message box.
+      expect(find.byKey(const Key('care-plan-header')), findsOneWidget);
+      expect(find.textContaining('From Dr John'), findsOneWidget);
+      await t.tap(find.byKey(const Key('care-plan-ask')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('care-plan-header')), findsNothing);
+      expect(
+        t.widget<TextField>(find.byKey(const Key('chat-input'))).controller!.text,
+        askAboutPlan,
+      );
     });
+  });
+
+  test('D-80 care plan text becomes one point per line or sentence', () {
+    expect(CarePlanSheet.points('drink water and dont sleep late, sleep early'), [
+      'drink water and dont sleep late, sleep early',
+    ]);
+    expect(CarePlanSheet.points('Walk daily. Less salt! Sleep early'), [
+      'Walk daily.',
+      'Less salt!',
+      'Sleep early',
+    ]);
+    expect(CarePlanSheet.points('- Walk 20 min\n2. Less salt\n\n• Sleep by 11'), [
+      'Walk 20 min',
+      'Less salt',
+      'Sleep by 11',
+    ]);
   });
 
   test('staff nav picks the most specific destination', () {
