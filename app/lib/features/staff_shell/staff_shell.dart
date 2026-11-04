@@ -169,40 +169,27 @@ class StaffShell extends ConsumerWidget {
     if (!wide || destinations.length < 2) {
       return Scaffold(appBar: header, body: child);
     }
+    final rail = _rail(
+      context,
+      light: light,
+      onSettings: onSettings,
+      selected: selected,
+      destinations: destinations,
+      settingsPath: settingsPath,
+    );
     return Scaffold(
       appBar: header,
       body: Row(
         children: [
-          NavigationRail(
-            // D-77: grey in light mode so the menu stands apart from the page.
-            backgroundColor: light ? Colors.grey.shade200 : null,
-            selectedIndex: onSettings || selected < 0 ? null : selected,
-            labelType: NavigationRailLabelType.all,
-            destinations: [
-              for (final d in destinations)
-                NavigationRailDestination(icon: Icon(d.icon), label: Text(d.label)),
-            ],
-            onDestinationSelected: (i) => context.go(destinations[i].path),
-            trailing: Expanded(
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        key: const Key('staff-settings'),
-                        tooltip: 'Settings',
-                        isSelected: onSettings,
-                        icon: const Icon(Icons.settings_outlined),
-                        selectedIcon: const Icon(Icons.settings),
-                        onPressed: () => context.go(settingsPath),
-                      ),
-                      Text('Settings', style: Theme.of(context).textTheme.labelMedium),
-                    ],
-                  ),
-                ),
+          // D-80: when zoomed in the rail is taller than the window; scroll it so
+          // Settings and the last tabs stay reachable. At normal size it still fills the
+          // height and keeps Settings at the bottom.
+          LayoutBuilder(
+            builder: (context, box) => SingleChildScrollView(
+              key: const Key('staff-rail-scroll'),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: box.maxHeight),
+                child: IntrinsicHeight(child: rail),
               ),
             ),
           ),
@@ -212,6 +199,47 @@ class StaffShell extends ConsumerWidget {
       ),
     );
   }
+
+  Widget _rail(
+    BuildContext context, {
+    required bool light,
+    required bool onSettings,
+    required int selected,
+    required List<StaffDestination> destinations,
+    required String settingsPath,
+  }) => NavigationRail(
+    // D-77: grey in light mode so the menu stands apart from the page.
+    backgroundColor: light ? Colors.grey.shade200 : null,
+    selectedIndex: onSettings || selected < 0 ? null : selected,
+    labelType: NavigationRailLabelType.all,
+    destinations: [
+      for (final d in destinations)
+        NavigationRailDestination(icon: Icon(d.icon), label: Text(d.label)),
+    ],
+    onDestinationSelected: (i) => context.go(destinations[i].path),
+    trailing: Expanded(
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                key: const Key('staff-settings'),
+                tooltip: 'Settings',
+                isSelected: onSettings,
+                icon: const Icon(Icons.settings_outlined),
+                selectedIcon: const Icon(Icons.settings),
+                onPressed: () => context.go(settingsPath),
+              ),
+              Text('Settings', style: Theme.of(context).textTheme.labelMedium),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 /// Placeholder body for portal sections built in later increments.

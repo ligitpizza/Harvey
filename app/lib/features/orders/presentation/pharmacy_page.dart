@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/fill_grid.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -357,9 +358,11 @@ class _StatusStrip extends ConsumerWidget {
         ref.watch(ordersOverviewProvider((group: 'awaiting_patient', query: ''))).value?.orders ??
         const <MedicationOrder>[];
     int n(bool Function(MedicationOrder) t) => orders.where(t).length;
-    return Wrap(
+    // D-80: the counters stretch across the page.
+    return FillGrid(
+      minItemWidth: 200,
       spacing: 12,
-      runSpacing: 12,
+      equalHeight: true,
       children: [
         StatTile(
           icon: Icons.medication_outlined,

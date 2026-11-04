@@ -36,9 +36,16 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => clearChatNotifications(ref, 'message', {'from': widget.otherId}),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      clearChatNotifications(ref, 'message', {'from': widget.otherId});
+      // D-80: Home keeps this thread's listener alive for the unread badge; if it ever
+      // failed (e.g. while signing in) the error stuck, and a chat opened from the bell
+      // showed "Could not load". Reconnect on open.
+      final me = ref.read(authUidProvider).value;
+      if (me != null && ref.read(threadProvider((me, widget.otherId))).hasError) {
+        ref.invalidate(threadProvider((me, widget.otherId)));
+      }
+    });
   }
 
   bool _sending = false;
@@ -242,8 +249,25 @@ class _ChatThreadPageState extends ConsumerState<ChatThreadPage> {
           Expanded(
             child: thread.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, _) => const Center(
-                child: Text('Could not load the conversation. Check your connection.'),
+              error: (_, _) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Could not load the conversation. Check your connection.',
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton.tonal(
+                        key: const Key('chat-retry'),
+                        onPressed: () => ref.invalidate(threadProvider((me, widget.otherId))),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
               ),
               data: (_) => items.isEmpty
                   ? const Center(

@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/fill_grid.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/enums.dart';
@@ -116,9 +117,9 @@ class HospitalAnalyticsPage extends ConsumerWidget {
               child: const Text('Retry'),
             ),
           ),
-          data: (h) => Wrap(
-            spacing: 16,
-            runSpacing: 16,
+          // D-80: panels stretch to fill the width.
+          data: (h) => FillGrid(
+            minItemWidth: 460,
             children: [
               _Panel(
                 key: const Key('panel-risk'),
@@ -187,8 +188,9 @@ class _Panel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: 520,
+    width: double.infinity,
     child: Card(
+      margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(

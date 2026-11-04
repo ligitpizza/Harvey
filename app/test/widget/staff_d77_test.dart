@@ -9,6 +9,7 @@ import 'package:hypertension/features/auth/domain/app_user.dart';
 import 'package:hypertension/features/provider_portal/state/portal_providers.dart';
 import 'package:hypertension/features/auth/state/auth_providers.dart';
 import 'package:hypertension/features/notifications/data/notifications_repository.dart';
+import 'package:hypertension/features/notifications/presentation/notification_bell.dart';
 import 'package:hypertension/features/notifications/state/notification_providers.dart';
 import 'package:hypertension/features/orders/data/order_models.dart';
 import 'package:hypertension/features/orders/state/orders_providers.dart';
@@ -16,6 +17,7 @@ import 'package:hypertension/features/staff_shell/dashboards.dart';
 import 'package:hypertension/features/staff_shell/staff_settings_page.dart';
 import 'package:hypertension/features/staff_shell/staff_shell.dart';
 import 'package:hypertension/shared/providers/api_providers.dart';
+import 'package:hypertension/shared/widgets/fill_grid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../helpers/fakes.dart';
@@ -93,7 +95,12 @@ Widget portal(String location, UserRole role, Widget page) {
         builder: (_, s, child) => StaffShell(location: s.matchedLocation, child: child),
         routes: [
           GoRoute(path: location, builder: (_, _) => page),
-          for (final p in ['/doctor/settings', '/doctor/messages/p1', '/pharmacy'])
+          for (final p in [
+            '/doctor/settings',
+            '/admin/settings',
+            '/doctor/messages/p1',
+            '/pharmacy',
+          ])
             if (p != location) GoRoute(path: p, builder: (_, _) => Text('ROUTE $p')),
         ],
       ),
@@ -157,6 +164,66 @@ void main() {
     expect(find.text('ROUTE /doctor/settings'), findsOneWidget);
   });
 
+  testWidgets('D-80 a short (zoomed-in) window scrolls the nav rail to reach Settings', (t) async {
+    t.view.physicalSize = const Size(1000, 380);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(portal('/admin/dashboard', UserRole.admin, const Text('DASH')));
+    await t.pumpAndSettle();
+    expect(t.takeException(), isNull); // no overflow
+    final settings = find.byKey(const Key('staff-settings'));
+    await t.scrollUntilVisible(
+      settings,
+      100,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('staff-rail-scroll')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await t.tap(settings);
+    await t.pumpAndSettle();
+    expect(find.text('ROUTE /admin/settings'), findsOneWidget);
+  });
+
+  testWidgets('D-80 tiles stretch to fill a wide page', (t) async {
+    t.view.physicalSize = const Size(1800, 900);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 1200,
+            child: FillGrid(
+              minItemWidth: 200,
+              spacing: 12,
+              equalHeight: true,
+              children: [
+                for (var i = 0; i < 4; i++)
+                  StatTile(
+                    key: Key('tile-$i'),
+                    icon: Icons.people,
+                    color: Colors.blue,
+                    label: i == 0 ? 'A much longer label that needs two lines here' : 'Short',
+                    value: '$i',
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    // 4 tiles, 3 gaps of 12 px, share 1200 px: (1200 - 36) / 4 = 291 each, equal height.
+    expect(t.getSize(find.byKey(const Key('tile-0'))).width, 291);
+    expect(
+      t.getSize(find.byKey(const Key('tile-3'))).height,
+      t.getSize(find.byKey(const Key('tile-0'))).height,
+    );
+    expect(FillGrid.columnsFor(800, 380, 16, 7), 2);
+    expect(FillGrid.columnsFor(1700, 380, 16, 7), 4);
+    expect(FillGrid.columnsFor(300, 380, 16, 7), 1);
+  });
+
   testWidgets('the bell panel opens a notification and marks it read', (t) async {
     await wide(t);
     notes.items = [
@@ -171,6 +238,48 @@ void main() {
     await t.pumpAndSettle();
     expect(notes.calls, contains('read:n1'));
     expect(find.text('ROUTE /doctor/messages/p1'), findsOneWidget);
+  });
+
+  testWidgets('D-80 phone: a take-medicine notification opens the Meds tab with content', (
+    t,
+  ) async {
+    notes.items = [note('n1', 'Time for Amlodipine', type: 'dose')];
+    final router = GoRouter(
+      initialLocation: '/dashboard',
+      routes: [
+        ShellRoute(
+          builder: (_, s, child) =>
+              Scaffold(body: child, bottomNavigationBar: Text('TABS ${s.matchedLocation}')),
+          routes: [
+            GoRoute(
+              path: '/dashboard',
+              builder: (c, _) => TextButton(
+                onPressed: () => c.push('/notifications'),
+                child: const Text('OPEN BELL'),
+              ),
+            ),
+            GoRoute(path: '/medications', builder: (_, _) => const Text('MEDS PAGE')),
+          ],
+        ),
+        GoRoute(path: '/notifications', builder: (_, _) => const NotificationsPage()),
+      ],
+    );
+    await t.pumpWidget(
+      ProviderScope(
+        overrides: [
+          notificationsRepositoryProvider.overrideWithValue(notes),
+          currentUserProvider.overrideWith((ref) => Stream.value(staff(UserRole.patient))),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await t.pumpAndSettle();
+    await t.tap(find.text('OPEN BELL'));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('notification-n1')));
+    await t.pumpAndSettle();
+    expect(find.text('MEDS PAGE'), findsOneWidget);
+    expect(find.text('TABS /medications'), findsOneWidget);
   });
 
   testWidgets('pharmacist dashboard counts what needs attention', (t) async {
@@ -240,6 +349,10 @@ void main() {
     expect(notificationRoute('order', const {}, UserRole.pharmacist), '/pharmacy');
     expect(notificationRoute('clinical_alert', const {}, UserRole.doctor), '/doctor');
     expect(notificationRoute('unknown', const {}, UserRole.doctor), isNull);
+    // D-80: tab pages are switched to (go), other pages pushed.
+    expect(isTabRoute(notificationRoute('dose', const {}, UserRole.patient)!), isTrue);
+    expect(isTabRoute('/records'), isTrue);
+    expect(isTabRoute('/chat/d1'), isFalse);
   });
 
   testWidgets('doctor and admin dashboards render even when sources fail', (t) async {

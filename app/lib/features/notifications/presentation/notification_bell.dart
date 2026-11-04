@@ -100,7 +100,13 @@ class NotificationsPanel extends ConsumerWidget {
     if (closeOnOpen) {
       Navigator.of(context).pop(route);
     } else if (route != null) {
-      context.push(route);
+      // D-80: a bottom-tab page lives inside the tab shell, which is already on the
+      // stack; pushing a second copy of the shell rendered an empty page. Switch tab.
+      if (isTabRoute(route)) {
+        context.go(route);
+      } else {
+        context.push(route);
+      }
     }
   }
 

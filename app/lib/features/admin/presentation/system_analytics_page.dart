@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/fill_grid.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../state/admin_providers.dart';
@@ -86,9 +87,10 @@ class _SystemAnalyticsPageState extends ConsumerState<SystemAnalyticsPage> {
           data: (s) => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Wrap(
+              // D-80: stats and panels stretch to fill the width.
+              FillGrid(
+                minItemWidth: 220,
                 spacing: 12,
-                runSpacing: 12,
                 children: [
                   _Stat(
                     'stat-clinicians',
@@ -121,20 +123,19 @@ class _SystemAnalyticsPageState extends ConsumerState<SystemAnalyticsPage> {
                 ],
               ),
               const SizedBox(height: 16),
-              Wrap(
-                spacing: 16,
-                runSpacing: 16,
+              FillGrid(
+                minItemWidth: 380,
                 children: [
                   _Box(
                     key: const Key('panel-engagement'),
-                    width: 640,
+                    width: double.infinity,
                     title: 'Platform engagement activity',
                     subtitle: 'Recorded actions per day, by user type',
                     child: _Engagement(days: s.dailyActivity),
                   ),
                   _Box(
                     key: const Key('panel-specialty'),
-                    width: 380,
+                    width: double.infinity,
                     title: 'Usage by specialty',
                     subtitle: 'Doctors and their patients, by the doctor\'s specialty',
                     child: _Specialties(rows: s.bySpecialty, totalUsers: s.totalUsers),
@@ -163,7 +164,7 @@ class _Stat extends StatelessWidget {
   @override
   // D-79: every tile the same size.
   Widget build(BuildContext context) => SizedBox(
-    width: 240,
+    width: double.infinity,
     height: 132,
     child: Card(
       key: Key(keyName),

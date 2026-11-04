@@ -20,6 +20,11 @@ final bellPrefsProvider = FutureProvider.autoDispose<Map<String, bool>>(
 );
 
 /// Where a notification leads, from its push data; null = nowhere (just mark it read).
+/// D-80: the phone's bottom-tab pages (inside the tab shell): open with `go`, not `push`.
+const tabRoutes = {'/dashboard', '/vitals', '/medications', '/records', '/settings'};
+
+bool isTabRoute(String route) => tabRoutes.contains(Uri.parse(route).path);
+
 String? notificationRoute(String? type, Map<String, String> data, UserRole? role) {
   final staffBase = switch (role) {
     UserRole.doctor => '/doctor',

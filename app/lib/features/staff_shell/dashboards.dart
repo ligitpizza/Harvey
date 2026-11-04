@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../shared/widgets/fill_grid.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -68,17 +70,16 @@ class StatTile extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
-  // D-79: fixed size so every tile lines up.
-  Widget build(BuildContext context) => SizedBox(
-    width: 210,
-    height: 96,
+  // D-80: stretches with the grid (FillGrid) and grows to fit its text; tiles in a row
+  // share one height so they still line up.
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: const BoxConstraints(minHeight: 96),
     child: Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Container(
-          height: double.infinity,
           decoration: BoxDecoration(
             border: Border(left: BorderSide(color: color, width: 5)),
           ),
@@ -104,7 +105,7 @@ class StatTile extends StatelessWidget {
                         color: color,
                       ),
                     ),
-                    Flexible(child: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis)),
+                    Text(label, maxLines: 2, overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
@@ -132,27 +133,26 @@ class DashCard extends StatelessWidget {
   final String? path;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 440,
-    child: Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: Theme.of(context).colorScheme.primary),
-                const SizedBox(width: 8),
-                Expanded(child: Text(title, style: Theme.of(context).textTheme.titleMedium)),
-                if (path != null)
-                  TextButton(onPressed: () => context.go(path!), child: const Text('View all')),
-              ],
-            ),
-            const SizedBox(height: 4),
-            child,
-          ],
-        ),
+  // D-80: width comes from the grid (FillGrid), so cards fill the page.
+  Widget build(BuildContext context) => Card(
+    margin: EdgeInsets.zero,
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(child: Text(title, style: Theme.of(context).textTheme.titleMedium)),
+              if (path != null)
+                TextButton(onPressed: () => context.go(path!), child: const Text('View all')),
+            ],
+          ),
+          const SizedBox(height: 4),
+          child,
+        ],
       ),
     ),
   );
@@ -259,11 +259,11 @@ class _RecentNotifications extends ConsumerWidget {
 }
 
 Widget _layout(List<Widget> stats, List<Widget> cards) => Column(
-  crossAxisAlignment: CrossAxisAlignment.start,
+  crossAxisAlignment: CrossAxisAlignment.stretch,
   children: [
-    Wrap(spacing: 12, runSpacing: 12, children: stats),
+    FillGrid(minItemWidth: 200, spacing: 12, equalHeight: true, children: stats),
     const SizedBox(height: 16),
-    Wrap(spacing: 16, runSpacing: 16, children: cards),
+    FillGrid(minItemWidth: 380, children: cards),
   ],
 );
 

@@ -50,7 +50,16 @@ class FakeMessagingRepository implements MessagingRepository {
   Stream<Contact?> contact(String uid) => Stream.value(contacts[uid]);
 
   @override
-  Stream<List<ChatMessage>> thread(String me, String other) => Stream.value(history);
+  Stream<List<ChatMessage>> thread(String me, String other) {
+    if (failThreads > 0) {
+      failThreads--;
+      return Stream.error(Exception('permission-denied'));
+    }
+    return Stream.value(history);
+  }
+
+  /// D-80: how many thread listeners fail before one succeeds.
+  int failThreads = 0;
 
   final reviewed = <String>[];
   List<AgentNote> notes = const [];
@@ -309,6 +318,17 @@ void main() {
       await t.tap(find.byKey(const Key('chat-send')));
       await t.pumpAndSettle();
       expect(repo.sent, ['Good morning doctor']);
+    });
+
+    tallTest('D-80 a chat that failed to load offers Retry and then loads', (t) async {
+      repo.history = [msg('m1', 'Take your evening dose', min: 2)];
+      repo.failThreads = 1;
+      await t.pumpWidget(chatApp(repo, user(UserRole.patient, doctor: 'd1'), '/chat/d1'));
+      await t.pumpAndSettle();
+      expect(find.textContaining('Could not load the conversation'), findsOneWidget);
+      await t.tap(find.byKey(const Key('chat-retry')));
+      await t.pumpAndSettle();
+      expect(find.textContaining('Take your evening dose'), findsOneWidget);
     });
 
     tallTest('UC10.3 the patient sees the flagged banner with 999', (t) async {
