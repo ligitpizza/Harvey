@@ -35,6 +35,8 @@ Cloud tasks (print the exact command and require --yes; project hypertension-dd8
                           secret, if set) from backend/.env in Secret Manager
   set-grab-secrets        One-time (D-67): store the GrabExpress sandbox client secret (and
                           webhook token, if set) from backend/.env in Secret Manager
+  set-smtp-secret         One-time (D-81): store SMTP_PASSWORD (the Gmail App Password)
+                          from backend/.env in Secret Manager for Harvey's emails
   set-lalamove-secrets    One-time (D-68): store the Lalamove sandbox API secret from
                           backend/.env in Secret Manager
   build-apk               Release APKs for the patient and family flavors
@@ -81,6 +83,8 @@ STRIPE_WEBHOOK_SECRET = "stripe-webhook-secret"
 # GrabExpress sandbox OAuth secret and webhook token (D-67); created by set-grab-secrets.
 GRAB_SECRET = "grab-client-secret"
 GRAB_WEBHOOK_SECRET = "grab-webhook-secret"
+# Gmail App Password for Harvey's emails (D-81); created by set-smtp-secret.
+SMTP_SECRET = "smtp-password"
 # Lalamove sandbox API secret (D-68); created by set-lalamove-secrets.
 LALAMOVE_SECRET = "lalamove-api-secret"
 # demo- prefix: emulator-only project, can never reach the cloud (rules tests).
@@ -392,6 +396,11 @@ def task_set_grab_secrets() -> None:
         print("No GRAB_WEBHOOK_SECRET yet; delivery status is read from Grab instead.")
 
 
+def task_set_smtp_secret() -> None:
+    """Store SMTP_PASSWORD (Gmail App Password) for Cloud Run (D-81)."""
+    _store_secret(SMTP_SECRET, "SMTP_PASSWORD", "Gmail App Password")
+
+
 def task_set_lalamove_secrets() -> None:
     """Store LALAMOVE_API_SECRET for Cloud Run (D-68). Sandbox keys only."""
     secret = _local_env("LALAMOVE_API_SECRET")
@@ -403,13 +412,16 @@ def task_set_lalamove_secrets() -> None:
 def task_deploy_backend() -> None:
     brevo = _secret_exists(BREVO_SECRET)
     stripe = _secret_exists(STRIPE_SECRET)
+    smtp = _secret_exists(SMTP_SECRET)
     # gcloud's "^##^" prefix switches the separator, so values may contain commas (addresses).
     env_vars = "^##^" + "##".join(
         [
             "APP_ENV=prod",
             # D-64/D-66: real adapters once a key is in Secret Manager (each adapter still
             # falls back to its fake when its own key is missing).
-            f"INTEGRATIONS_MODE={'real' if brevo or stripe else 'fake'}",
+            f"INTEGRATIONS_MODE={'real' if brevo or stripe or smtp else 'fake'}",
+            # D-81: Gmail account that sends (defaults to EMAIL_FROM).
+            f"SMTP_USER={_local_env('SMTP_USER') or _local_env('EMAIL_FROM')}",
             f"EMAIL_FROM={_local_env('EMAIL_FROM')}",
             f"EMAIL_FROM_NAME={_local_env('EMAIL_FROM_NAME') or 'Harvey'}",
             f"SMS_SENDER={_local_env('SMS_SENDER')}",
@@ -479,6 +491,13 @@ def task_deploy_backend() -> None:
         print(
             "Note: no Brevo secret yet, so live email and SMS are only logged. "
             "Run: python tasks.py set-brevo-secret --yes"
+        )
+    if smtp:
+        secrets.append(f"SMTP_PASSWORD={SMTP_SECRET}:latest")
+    else:
+        print(
+            "Note: no Gmail App Password yet, so live email goes through Brevo (if set). "
+            "Run: python tasks.py set-smtp-secret --yes"
         )
     if stripe:
         secrets.append(f"STRIPE_SECRET_KEY={STRIPE_SECRET}:latest")
@@ -1046,6 +1065,7 @@ TASKS = {
     "set-brevo-secret": task_set_brevo_secret,
     "set-stripe-secrets": task_set_stripe_secrets,
     "set-grab-secrets": task_set_grab_secrets,
+    "set-smtp-secret": task_set_smtp_secret,
     "set-lalamove-secrets": task_set_lalamove_secrets,
     "seed-catalog-live": task_seed_catalog_live,
     "build-apk": task_build_apk,

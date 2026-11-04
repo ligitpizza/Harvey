@@ -141,8 +141,12 @@ def check(probe: Probe, reader: AuditReader, settings: Settings, now: datetime) 
     add(
         "email",
         "Email",
-        "operational" if settings.email_api_key else "not_configured",
-        note="Brevo" if settings.email_api_key else "No email key; links are shown on screen.",
+        "operational" if settings.smtp_password or settings.email_api_key else "not_configured",
+        note="Gmail SMTP"
+        if settings.smtp_password
+        else "Brevo"
+        if settings.email_api_key
+        else "No email key; links are shown on screen.",
     )
     add(
         "ai",

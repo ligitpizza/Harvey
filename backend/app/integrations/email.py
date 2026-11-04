@@ -1,11 +1,16 @@
-"""Email adapter (D-22). Real provider: Brevo transactional API. Fake: logs to console.
+"""Email adapter (D-22). Real providers: Gmail SMTP with an App Password (D-81, preferred
+when SMTP_PASSWORD is set) or the Brevo transactional API. Fake: logs to console.
 
 Selected by INTEGRATIONS_MODE (docs/05 "External integrations"); every provider
-sits behind the same interface so the rest of the code never imports Brevo.
+sits behind the same interface so the rest of the code never imports a provider.
 """
 
 import logging
+import smtplib
+import ssl
 from dataclasses import dataclass
+from email.message import EmailMessage as MimeMessage
+from email.utils import formataddr
 from typing import Protocol
 
 import httpx
@@ -94,7 +99,59 @@ class BrevoEmailClient:
         return True
 
 
+class SmtpEmailClient:
+    """D-81: Gmail's SMTP server (smtp.gmail.com:465, SSL) signed in with an App Password.
+    Brevo disabled sending on the project's free account (17 Oct 2026)."""
+
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        user: str,
+        password: str,
+        sender_email: str,
+        sender_name: str,
+        timeout: float = 15.0,
+    ) -> None:
+        if not user or not password:
+            raise EmailError("SMTP is not configured (SMTP_USER / SMTP_PASSWORD).")
+        self._host, self._port, self._user, self._password = host, port, user, password
+        self._from = formataddr((sender_name, sender_email or user))
+        self._timeout = timeout
+
+    def build(self, message: EmailMessage) -> MimeMessage:
+        mime = MimeMessage()
+        mime["From"] = self._from
+        mime["To"] = formataddr((message.to_name, message.to_email))
+        mime["Subject"] = message.subject
+        mime.set_content(message.text)
+        mime.add_alternative(message.html, subtype="html")
+        return mime
+
+    def send(self, message: EmailMessage) -> bool:
+        mime = self.build(message)
+        try:
+            with smtplib.SMTP_SSL(
+                self._host, self._port, timeout=self._timeout, context=ssl.create_default_context()
+            ) as server:
+                server.login(self._user, self._password)
+                server.send_message(mime)
+        except (smtplib.SMTPException, OSError) as exc:
+            raise EmailError(f"SMTP send failed: {type(exc).__name__}") from exc
+        log.info("Email sent by SMTP: subject=%s", message.subject)
+        return True
+
+
 def build_email_client(settings: Settings) -> EmailClient:
+    if settings.integrations_mode == "real" and settings.smtp_password:
+        return SmtpEmailClient(
+            settings.smtp_host,
+            settings.smtp_port,
+            settings.smtp_user or settings.email_from,
+            settings.smtp_password,
+            settings.email_from,
+            settings.email_from_name,
+        )
     if settings.integrations_mode == "real" and settings.email_api_key:
         return BrevoEmailClient(
             settings.email_api_key, settings.email_from, settings.email_from_name

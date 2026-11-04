@@ -1512,3 +1512,13 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   handled in `core/app.dart` with the bell's `notificationRoute`). Before, only the in-app bell
   linked anywhere. Flutter tests 620.
 
+### 2026-11-04 — Email through Gmail SMTP (D-81)
+
+- Found with Brevo's event log: Brevo had disabled sending on the account since 17 Oct, so no
+  Harvey email (reset codes, staff setup, reminders, emergencies) was delivered although the API
+  accepted them. Added `SmtpEmailClient` (Gmail, App Password; standard-library `smtplib`, no new
+  package), chosen before Brevo when `SMTP_PASSWORD` is set; System health shows "Gmail SMTP".
+  `tasks.py set-smtp-secret`; deploy passes `SMTP_USER` and the `smtp-password` secret.
+- Reset screen: "Send a new code" waits 30 seconds (countdown); "Use a different email" removed.
+- Tests: backend 728 (+3 skipped); Flutter 621.
+

@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     email_api_key: str = ""
     email_from: str = ""
     email_from_name: str = "Harvey"
+    # D-81: Gmail SMTP with an App Password (used instead of Brevo when set).
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 465
+    smtp_user: str = ""  # defaults to email_from
+    smtp_password: str = ""
     # D-64: Brevo SMS sender name (registered for Malaysia); empty = SMS only logged.
     sms_sender: str = ""
     # D-65: where the password-reset page sends people afterwards (static page on Hosting).
