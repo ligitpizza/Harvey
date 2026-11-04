@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../api/api_client.dart';
+import 'notification_taps.dart';
 
 /// Module 9 alert delivery on the device (FR-9.1, FR-9.5, D-33).
 ///
@@ -52,6 +54,7 @@ class FcmPushService implements PushService {
   final _local = FlutterLocalNotificationsPlugin();
   StreamSubscription<String>? _refresh;
   StreamSubscription<RemoteMessage>? _foreground;
+  StreamSubscription<RemoteMessage>? _opened;
   bool _started = false;
   String? _token;
 
@@ -62,13 +65,20 @@ class FcmPushService implements PushService {
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       ),
+      // D-80: tapping a notification opens the matching screen.
+      onDidReceiveNotificationResponse: NotificationTaps.onLocalTap,
     );
+    await NotificationTaps.checkLocalLaunch(_local);
     final android = _local
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
     await android?.createNotificationChannel(alertsChannel);
     await android?.createNotificationChannel(generalChannel);
     // FCM shows notifications itself only in the background; show foreground ones here.
     _foreground = FirebaseMessaging.onMessage.listen(_showForeground);
+    // D-80: a push tapped while Harvey was in the background, or that started it.
+    _opened = FirebaseMessaging.onMessageOpenedApp.listen((m) => NotificationTaps.add(m.data));
+    final initial = await _messaging.getInitialMessage();
+    if (initial != null) NotificationTaps.add(initial.data);
   }
 
   Future<void> _showForeground(RemoteMessage message) async {
@@ -79,6 +89,7 @@ class FcmPushService implements PushService {
       id: message.hashCode,
       title: n.title,
       body: n.body,
+      payload: jsonEncode(message.data),
       notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           channel.id,
@@ -127,5 +138,6 @@ class FcmPushService implements PushService {
   Future<void> dispose() async {
     await _refresh?.cancel();
     await _foreground?.cancel();
+    await _opened?.cancel();
   }
 }

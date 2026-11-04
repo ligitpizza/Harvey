@@ -5,6 +5,7 @@ import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../../shared/models/health_models.dart';
+import '../../../shared/services/push/notification_taps.dart';
 import '../domain/med_schedule.dart';
 
 /// UC5.3 dose reminders on the phone (D-43): one daily local notification per dose time,
@@ -92,7 +93,10 @@ class LocalDoseReminders implements DoseReminders {
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       ),
+      // D-80: tapping a reminder opens the Meds tab.
+      onDidReceiveNotificationResponse: NotificationTaps.onLocalTap,
     );
+    await NotificationTaps.checkLocalLaunch(_plugin);
     await _plugin
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(remindersChannel);

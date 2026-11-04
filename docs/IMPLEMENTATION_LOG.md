@@ -1507,4 +1507,8 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Deviations / additions: collections `leave_requests`, `password_otps`, `patient_locations`;
   fields `appointments.walkIn`, `appointments.needsReschedule`; `bookedBy` value `pharmacist`.
 - Tests: backend 725 (+3 skipped); Flutter 617; rules 217.
+- Follow-up (same day): tapping a **phone** notification (FCM push in the shade, or a local
+  dose reminder) now opens its screen too (`shared/services/push/notification_taps.dart`;
+  handled in `core/app.dart` with the bell's `notificationRoute`). Before, only the in-app bell
+  linked anywhere. Flutter tests 620.
 
