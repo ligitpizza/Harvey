@@ -38,6 +38,9 @@ class Collection(StrEnum):
     CONVERSATION_MESSAGES = "conversation_messages"  # D-76
     NOTIFICATIONS = "notifications"  # D-77
     STAFF_REQUESTS = "staff_requests"  # D-78
+    PASSWORD_OTPS = "password_otps"  # noqa: S105 (a collection name)  D-80
+    LEAVE_REQUESTS = "leave_requests"  # D-80
+    PATIENT_LOCATIONS = "patient_locations"  # D-80
 
 
 class UserRole(StrEnum):

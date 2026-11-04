@@ -11,8 +11,10 @@ import 'package:hypertension/features/dashboard/data/dashboard_repository.dart';
 import 'package:hypertension/features/dashboard/state/dashboard_providers.dart';
 import 'package:hypertension/features/family/data/family_repository.dart';
 import 'package:hypertension/features/family/data/location_source.dart';
+import 'package:hypertension/features/family/data/patient_location.dart';
 import 'package:hypertension/features/family/presentation/alert_page.dart';
 import 'package:hypertension/features/family/presentation/family_dashboard_page.dart';
+import 'package:hypertension/features/family/presentation/family_location_reporter.dart';
 import 'package:hypertension/features/family/presentation/family_requests_page.dart';
 import 'package:hypertension/features/family/presentation/link_page.dart';
 import 'package:hypertension/features/family/presentation/sos_page.dart';
@@ -170,6 +172,45 @@ EmergencyAlert alert({
   locationSource: source,
 );
 
+/// D-80: the family map's location store.
+class FakePatientLocations implements PatientLocationRepository {
+  final docs = <String, StreamController<PatientLocation?>>{};
+  final current = <String, PatientLocation?>{};
+  final calls = <String>[];
+
+  StreamController<PatientLocation?> _c(String id) =>
+      docs.putIfAbsent(id, () => StreamController<PatientLocation?>.broadcast());
+
+  void put(String id, PatientLocation? l) {
+    current[id] = l;
+    _c(id).add(l);
+  }
+
+  @override
+  Stream<PatientLocation?> watch(String patientId) async* {
+    yield current[patientId];
+    yield* _c(patientId).stream;
+  }
+
+  @override
+  Future<void> save(
+    String patientId, {
+    required double lat,
+    required double lng,
+    double? accuracy,
+  }) async {
+    calls.add('save:$patientId:$lat,$lng');
+    put(patientId, PatientLocation(sharing: true, lat: lat, lng: lng, updatedAt: now));
+  }
+
+  @override
+  Future<void> setSharing(String patientId, bool on) async {
+    calls.add('sharing:$patientId:$on');
+    put(patientId, on ? null : const PatientLocation(sharing: false));
+  }
+}
+
+late FakePatientLocations locations;
 late FakeFamilyRepository repo;
 late FakeLocation location;
 late FakeHealthData health;
@@ -199,6 +240,7 @@ Widget app(String initial, {String uid = 'f1'}) {
       nowProvider.overrideWithValue(() => now),
       authUidProvider.overrideWith((ref) => Stream.value(uid)),
       mapBuilderProvider.overrideWithValue((lat, lng, label) => Text('MAP $lat,$lng $label')),
+      patientLocationRepositoryProvider.overrideWithValue(locations),
       dialerProvider.overrideWithValue((n) async {
         dialled.add(n);
         return true;
@@ -216,6 +258,7 @@ Widget app(String initial, {String uid = 'f1'}) {
 
 void main() {
   setUp(() {
+    locations = FakePatientLocations();
     repo = FakeFamilyRepository();
     location = FakeLocation();
     health = FakeHealthData();
@@ -305,6 +348,39 @@ void main() {
       expect(find.textContaining('+4 from yesterday'), findsOneWidget);
       expect(find.text('72 BPM (camera estimate)'), findsOneWidget);
       expect(find.byKey(const Key('family-alert-banner')), findsNothing);
+    });
+
+    tallTest('D-80 the map shows where they are, how old it is, and directions', (t) async {
+      repo.linked = 'p1';
+      locations.current['p1'] = PatientLocation(
+        sharing: true,
+        lat: 3.1,
+        lng: 101.6,
+        updatedAt: now.subtract(const Duration(minutes: 12)),
+      );
+      await t.pumpWidget(app('/family/home'));
+      await t.pumpAndSettle();
+      expect(find.textContaining('MAP 3.1,101.6'), findsOneWidget);
+      expect(find.text('Updated 12 min ago'), findsOneWidget);
+      await t.tap(find.byKey(const Key('family-map-open')));
+      expect(opened.single.toString(), contains('destination=3.1,101.6'));
+    });
+
+    tallTest('D-80 an old location says they may have moved; off is explained', (t) async {
+      repo.linked = 'p1';
+      locations.current['p1'] = PatientLocation(
+        sharing: true,
+        lat: 3.1,
+        lng: 101.6,
+        updatedAt: now.subtract(const Duration(hours: 5)),
+      );
+      await t.pumpWidget(app('/family/home'));
+      await t.pumpAndSettle();
+      expect(find.textContaining('may have moved since'), findsOneWidget);
+      locations.put('p1', const PatientLocation(sharing: false));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('family-map-empty')), findsOneWidget);
+      expect(find.textContaining('turned off location sharing'), findsOneWidget);
     });
 
     tallTest('an open alert shows a banner that opens it', (t) async {
@@ -491,6 +567,39 @@ void main() {
       expect(patientAppGuard('/family-requests', UserRole.patient), isNull);
       expect(patientAppGuard('/family/alert/e1', UserRole.familyMember), isNull);
       expect(patientAppGuard('/login', null), isNull);
+    });
+  });
+
+  group('D-80 patient location reporter', () {
+    Widget reporter() => ProviderScope(
+      overrides: [
+        locationSourceProvider.overrideWithValue(location),
+        patientLocationRepositoryProvider.overrideWithValue(locations),
+        authUidProvider.overrideWith((ref) => Stream.value('p1')),
+      ],
+      child: const MaterialApp(home: FamilyLocationReporter(child: Text('HOME'))),
+    );
+
+    testWidgets('opening the app saves where the phone is', (t) async {
+      await t.pumpWidget(reporter());
+      await t.pumpAndSettle();
+      expect(locations.calls, ['save:p1:3.139,101.6869']);
+      expect(location.asked, [false]); // never prompts for permission
+      await t.pumpWidget(const SizedBox()); // dispose: stops the timer
+    });
+
+    testWidgets('nothing is saved when the patient turned sharing off', (t) async {
+      locations.current['p1'] = const PatientLocation(sharing: false);
+      await t.pumpWidget(reporter());
+      await t.pumpAndSettle();
+      expect(locations.calls, isEmpty);
+    });
+
+    testWidgets('nothing is saved without location permission', (t) async {
+      location.here = null;
+      await t.pumpWidget(reporter());
+      await t.pumpAndSettle();
+      expect(locations.calls, isEmpty);
     });
   });
 }

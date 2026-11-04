@@ -8,6 +8,8 @@ import '../../../shared/widgets/settings_widgets.dart';
 import '../../auth/domain/app_user.dart';
 import '../../auth/state/auth_providers.dart';
 import '../state/settings_providers.dart';
+import '../../family/data/location_source.dart';
+import '../../family/state/family_providers.dart';
 
 /// Fig 4.3.11.1 Settings (FR-12.1, FR-12.2; UC12.1-UC12.4; D-45).
 class SettingsPage extends ConsumerStatefulWidget {
@@ -163,6 +165,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       'Link code ${user!.linkCode} · approve requests, manage who follows you',
                   onTap: () => context.push('/family-requests'),
                 ),
+              // D-80: the family map's last known location.
+              if (user != null) _ShareLocationTile(uid: user.uid),
               _NavTile(
                 key: const Key('settings-privacy'),
                 icon: Icons.shield_outlined,
@@ -242,4 +246,76 @@ class _NavTile extends StatelessWidget {
     subtitle: subtitle,
     onTap: () => context.push(path),
   );
+}
+
+/// D-80: on by default once location is allowed; off removes the location from the
+/// family map. Turning it on asks for location permission if needed.
+class _ShareLocationTile extends ConsumerStatefulWidget {
+  const _ShareLocationTile({required this.uid});
+  final String uid;
+
+  @override
+  ConsumerState<_ShareLocationTile> createState() => _ShareLocationTileState();
+}
+
+class _ShareLocationTileState extends ConsumerState<_ShareLocationTile> {
+  bool _busy = false;
+
+  Future<void> _set(bool on) async {
+    setState(() => _busy = true);
+    final repo = ref.read(patientLocationRepositoryProvider);
+    final source = ref.read(locationSourceProvider);
+    try {
+      if (on) {
+        final access = await source.request();
+        if (access != LocationAccess.granted) {
+          if (!mounted) return;
+          final (text, action) = locationAdvice(access);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(text),
+              action: action == null
+                  ? null
+                  : SnackBarAction(label: action, onPressed: () => source.openSettings(access)),
+            ),
+          );
+          return;
+        }
+        await repo.setSharing(widget.uid, true);
+        final loc = await source.current();
+        if (loc != null) await repo.save(widget.uid, lat: loc['lat']!, lng: loc['lng']!);
+      } else {
+        await repo.setSharing(widget.uid, false);
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not change it. Check your connection.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = ref.watch(patientLocationProvider(widget.uid)).value;
+    final on = loc?.sharing ?? true;
+    return SwitchListTile(
+      key: const Key('settings-share-location'),
+      secondary: SettingsIcon(Icons.share_location, Colors.teal.shade600),
+      title: const Text(
+        'Share my location with family',
+        style: TextStyle(fontWeight: FontWeight.w600),
+      ),
+      subtitle: Text(
+        on
+            ? 'Linked family see where you last opened Harvey'
+            : 'Off: family see no location (SOS still sends it)',
+      ),
+      value: on,
+      onChanged: _busy ? null : _set,
+    );
+  }
 }

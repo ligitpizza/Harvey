@@ -9,6 +9,7 @@ import '../../../shared/providers/api_providers.dart';
 import '../../auth/state/auth_providers.dart';
 import '../data/family_repository.dart';
 import '../data/location_source.dart';
+import '../data/patient_location.dart';
 
 Duration? _noRetry(int _, Object _) => null;
 
@@ -19,6 +20,16 @@ final familyRepositoryProvider = Provider<FamilyRepository>(
 /// D-62: GPS on Android only (the staff portal and tests have none).
 final locationSourceProvider = Provider<LocationSource>(
   (ref) => kIsWeb ? const NoLocationSource() : const GeolocatorLocationSource(),
+);
+
+/// D-80: the patient's last known location (family map).
+final patientLocationRepositoryProvider = Provider<PatientLocationRepository>(
+  (ref) => FirestorePatientLocationRepository(FirebaseFirestore.instance),
+);
+
+final patientLocationProvider = StreamProvider.family<PatientLocation?, String>(
+  (ref, patientId) => ref.watch(patientLocationRepositoryProvider).watch(patientId),
+  retry: _noRetry,
 );
 
 /// The embedded map (google_maps_flutter); tests swap in a placeholder.

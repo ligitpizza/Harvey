@@ -209,6 +209,32 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // D-80: password reset codes (hashed) and staff leave go through FastAPI only.
+    match /password_otps/{key} {
+      allow read, write: if false;
+    }
+    match /leave_requests/{leaveId} {
+      allow read, write: if false;
+    }
+
+    // D-80: the patient's last known location for the family map. Only the patient
+    // writes it; the patient and linked family members read it. With sharing off the
+    // coordinates are removed.
+    match /patient_locations/{patientId} {
+      allow read: if isSelf(patientId) || isLinkedFamilyOf(patientId);
+      allow create, update: if isSelf(patientId) && hasRole('patient')
+        && request.resource.data.keys().hasOnly(['lat', 'lng', 'accuracy', 'updatedAt', 'sharing'])
+        && request.resource.data.sharing is bool
+        && request.resource.data.updatedAt == request.time
+        && (request.resource.data.sharing == false
+            || (request.resource.data.lat is number && request.resource.data.lng is number
+                && request.resource.data.lat >= -90 && request.resource.data.lat <= 90
+                && request.resource.data.lng >= -180 && request.resource.data.lng <= 180))
+        && (request.resource.data.sharing == true
+            || !request.resource.data.keys().hasAny(['lat', 'lng', 'accuracy']));
+      allow delete: if isSelf(patientId);
+    }
+
     // ---- agent_messages (FR-14.1, Table 4.2.3.16) ----
     // Written only by FastAPI (it calls Gemini). Read by the patient for the chat screen,
     // and by the assigned doctor / admin like other patient-owned data (docs/04).

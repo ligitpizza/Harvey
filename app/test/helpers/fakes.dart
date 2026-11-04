@@ -69,6 +69,25 @@ class FakeAuthRepository implements AuthRepository {
     if (resetError != null) throw resetError!;
   }
 
+  /// D-80 email code: what the next verify throws (null = success).
+  Object? codeError;
+
+  @override
+  Future<void> requestPasswordCode(String email) async {
+    calls.add('code:$email');
+    if (resetError != null) throw resetError!;
+  }
+
+  @override
+  Future<void> resetPasswordWithCode({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    calls.add('verify:$code:$newPassword');
+    if (codeError != null) throw codeError!;
+  }
+
   @override
   Future<void> completeOnboarding(Map<String, dynamic> body) async {
     calls.add('onboarding');

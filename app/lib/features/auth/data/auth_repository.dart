@@ -46,8 +46,20 @@ abstract interface class AuthRepository {
     String? icNumber,
   });
 
-  /// UC1.2 A1.
+  /// UC1.2 A1 (D-65): Firebase's reset link (staff Settings still uses this).
   Future<void> sendPasswordReset(String email);
+
+  /// UC1.2 A1 (D-80): email a 6-digit reset code. Same answer whether or not the
+  /// account exists; throws ApiException('RATE_LIMITED') when asked too often.
+  Future<void> requestPasswordCode(String email);
+
+  /// D-80: check the code and set the new password. Throws ApiException
+  /// (INVALID_CODE, TOO_MANY_TRIES, WEAK_PASSWORD) with a message to show.
+  Future<void> resetPasswordWithCode({
+    required String email,
+    required String code,
+    required String newPassword,
+  });
 
   /// UC1.4.
   Future<void> completeOnboarding(Map<String, dynamic> body);
@@ -214,6 +226,20 @@ class FirebaseAuthRepository implements AuthRepository {
       }
       rethrow; // the page answers neutrally (no account probing)
     }
+  }
+
+  @override
+  Future<void> requestPasswordCode(String email) async {
+    await _api.requestPasswordCode(email.trim());
+  }
+
+  @override
+  Future<void> resetPasswordWithCode({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    await _api.verifyPasswordCode(email.trim(), code.trim(), newPassword);
   }
 
   @override

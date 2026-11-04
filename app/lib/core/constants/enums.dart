@@ -34,6 +34,9 @@ abstract final class Collections {
   static const conversationMessages = 'conversation_messages'; // D-76
   static const notifications = 'notifications'; // D-77
   static const staffRequests = 'staff_requests'; // D-78
+  static const passwordOtps = 'password_otps'; // D-80
+  static const leaveRequests = 'leave_requests'; // D-80
+  static const patientLocations = 'patient_locations'; // D-80
 
   static const all = [
     users,
@@ -66,6 +69,9 @@ abstract final class Collections {
     conversationMessages,
     notifications,
     staffRequests,
+    passwordOtps,
+    leaveRequests,
+    patientLocations,
   ];
 }
 

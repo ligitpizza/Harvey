@@ -19,6 +19,8 @@ import '../../features/admin/presentation/audit_logs_page.dart';
 import '../../features/admin/presentation/admin_users_page.dart';
 import '../../features/admin/presentation/create_staff_page.dart';
 import '../../features/auth/presentation/forgot_password_page.dart';
+import '../../features/leave/leave_pages.dart';
+import '../../features/walk_in/walk_in_page.dart';
 import '../../features/auth/presentation/login_page.dart';
 import '../../features/auth/presentation/onboarding/onboarding_complete_page.dart';
 import '../../features/auth/presentation/onboarding/onboarding_page.dart';
@@ -207,6 +209,7 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
               // D-78: prescription management and the admin center.
               GoRoute(path: 'prescriptions', builder: (_, _) => const PrescriptionsOverviewPage()),
               GoRoute(path: 'admin-center', builder: (_, _) => const AdminCenterPage()),
+              GoRoute(path: 'leave', builder: (_, _) => const StaffLeavePage()), // D-80
               GoRoute(path: 'calendar', builder: (_, _) => const DoctorCalendarPage()),
               // Module 10 (Fig 4.3.15.1 / 4.3.15.2 in the portal).
               GoRoute(
@@ -257,6 +260,9 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(path: 'dashboard', builder: (_, _) => const PharmacyDashboardPage()),
               GoRoute(path: 'admin-center', builder: (_, _) => const AdminCenterPage()),
+              // D-80: walk-in bookings and leave.
+              GoRoute(path: 'walk-in', builder: (_, _) => const WalkInPage()),
+              GoRoute(path: 'leave', builder: (_, _) => const StaffLeavePage()),
               GoRoute(path: 'settings', builder: (_, _) => const StaffSettingsPage()),
               // D-69/D-70: patients, dispensing details, tracking, inventory, chat.
               GoRoute(
@@ -321,6 +327,7 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/admin/appointments', builder: (_, _) => const AdminAppointmentsPage()),
           GoRoute(path: '/admin/dashboard', builder: (_, _) => const AdminDashboardPage()),
           GoRoute(path: '/admin/requests', builder: (_, _) => const AdminRequestsPage()),
+          GoRoute(path: '/admin/leave', builder: (_, _) => const AdminLeavePage()), // D-80
           GoRoute(path: '/admin/settings', builder: (_, _) => const StaffSettingsPage()),
           // D-76: admin chats with anyone and opens chats between two people.
           GoRoute(

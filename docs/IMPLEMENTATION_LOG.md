@@ -1482,3 +1482,29 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Deviations / additions: `users.analyticsCharts`.
 - Tests: backend 704 (+3 skipped); Flutter 600; rules 209 (unchanged).
 
+### 2026-11-04 — Notification links, portal layout, leave, walk-in, password OTP, family map (D-80)
+
+- Fixes: bell links to a bottom-tab page (Meds, Vitals…) now switch tab instead of pushing a
+  second tab shell, which rendered an empty page; the doctor chat reconnects a failed thread
+  listener on open and offers Retry ("Could not load the conversation"). Portal nav rail scrolls
+  when zoomed in; dashboard tiles/cards, pharmacist counters and analytics panels stretch to fill
+  the width (`shared/widgets/fill_grid.dart`). Agent chat test used a fixed date that had aged
+  out of the readings window. Admin "delete doctor" now counts appointments, not taken slots.
+- Password OTP: `routers/password_otp.py` (`POST /auth/password-otp/request|verify`), identity
+  `find_by_email` / `set_password`; Forgot password page is now email → code + new password
+  (staff Settings still sends the reset link).
+- Leave: `routers/leave.py`; approved doctor leave blocks slots inside the appointment repository
+  (`leave_days`, `DoctorOnLeaveError`), flags clashing appointments `needsReschedule`, notifies
+  patients and admins; admin edit clears the flag. Pages: My leave (doctor, pharmacist), Staff
+  leave (admin: decide, appointments to reschedule). Patient appointment card explains the move.
+- Walk-in: `routers/walk_in.py` (find patients by name/email/IC, open an account via the shared
+  `open_patient_account`, today's doctors and remaining slots, book with `bookedBy=pharmacist`,
+  `walkIn=true`); pharmacist Walk-in page.
+- Family map: `patient_locations` written by the patient app on open/resume and every 15 min
+  while open (`FamilyLocationReporter`), Settings switch, map card with age and directions on the
+  family dashboard. Background updates while Harvey is closed are not built yet (needs the
+  `workmanager` package and "Allow all the time" location; waiting for Ping's OK).
+- Deviations / additions: collections `leave_requests`, `password_otps`, `patient_locations`;
+  fields `appointments.walkIn`, `appointments.needsReschedule`; `bookedBy` value `pharmacist`.
+- Tests: backend 725 (+3 skipped); Flutter 617; rules 217.
+

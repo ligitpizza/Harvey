@@ -20,7 +20,7 @@ for _var, _host in (
 os.environ["DEV_APPOINTMENT_TIMES"] = "false"
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 import pytest
@@ -41,7 +41,9 @@ from app.main import create_app
 from app.ml.risk_model import get_risk_model
 from app.routers.agent import get_agent_limiter
 from app.routers.auth import get_failed_login_limiter, get_reset_limiter
+from app.routers.leave import get_leave_repository
 from app.routers.messages import get_message_repository
+from app.routers.password_otp import get_otp_ip_limiter, get_password_otp_repository
 from app.routers.staff_requests import get_staff_request_repository
 from app.services.agent_context import get_agent_data_repository
 from app.services.analytics import get_analytics_source
@@ -105,6 +107,7 @@ class FakeIdentityProvider:
         self.revoked: list[str] = []
         self.deleted: list[str] = []
         self.disabled: set[str] = set()
+        self.passwords: dict[str, str] = {}
         self._next = 0
 
     def create_user(self, *, email: str, display_name: str) -> str:
@@ -125,6 +128,13 @@ class FakeIdentityProvider:
         if email not in self.emails:
             return None
         return f"https://example.test/reset?email={email}&continue={continue_url}", "Ali"
+
+    def find_by_email(self, email: str) -> tuple[str, str] | None:
+        uid = self.emails.get(email)
+        return (uid, "Ali") if uid else None
+
+    def set_password(self, uid: str, password: str) -> None:
+        self.passwords[uid] = password
 
     def revoke_sessions(self, uid: str) -> None:
         self.revoked.append(uid)
@@ -611,6 +621,8 @@ class InMemoryAppointmentRepository:
     def __init__(self, users: "InMemoryUserRepository") -> None:
         self._users = users
         self.appointments: dict[str, dict[str, Any]] = {}
+        # D-80: shared with InMemoryLeaveRepository (approved leave blocks slots).
+        self.leave: dict[str, dict[str, Any]] = {}
 
     def user(self, uid: str) -> dict[str, Any] | None:
         return self._users.users.get(uid)
@@ -621,8 +633,30 @@ class InMemoryAppointmentRepository:
         a = self.appointments.get(appointment_id)
         return AppointmentDoc(appointment_id, a) if a else None
 
+    def leave_days(self, doctor_id: str) -> set[date]:
+        from app.services.appointments import leave_dates
+
+        return leave_dates(
+            [
+                (str(r.get("startDate")), str(r.get("endDate")))
+                for r in self.leave.values()
+                if r.get("staffId") == doctor_id and r.get("status") == "approved"
+            ]
+        )
+
+    def active_for_doctor(self, doctor_id: str, start: datetime, end: datetime) -> list[Any]:
+        from app.services.appointments import ACTIVE, AppointmentDoc
+
+        return [
+            AppointmentDoc(k, dict(a))
+            for k, a in self.appointments.items()
+            if a.get("doctorId") == doctor_id
+            and a.get("status") in ACTIVE
+            and start <= a["dateTime"] < end
+        ]
+
     def taken(self, doctor_id: str, start: datetime, end: datetime) -> set[datetime]:
-        from app.services.appointments import ACTIVE, held_time
+        from app.services.appointments import ACTIVE, held_time, leave_slots
 
         out = set()
         for a in self.appointments.values():
@@ -631,10 +665,20 @@ class InMemoryAppointmentRepository:
             for t in (a["dateTime"], held_time(a)):
                 if t is not None and start <= t < end:
                     out.add(t)
-        return out
+        return out | leave_slots(self.leave_days(doctor_id), start, end)
 
     def _check_free(self, doctor_id: str, moment: datetime, exclude_id: str | None) -> None:
-        from app.services.appointments import ACTIVE, SlotTakenError, clashes, held_time
+        from app.services.appointments import (
+            ACTIVE,
+            DoctorOnLeaveError,
+            SlotTakenError,
+            clashes,
+            held_time,
+            on_leave,
+        )
+
+        if on_leave(self.leave_days(doctor_id), moment):
+            raise DoctorOnLeaveError
 
         for k, a in self.appointments.items():
             if (
@@ -959,6 +1003,48 @@ class InMemoryPharmacyChatRepository:
 
     def recent(self, limit: int) -> list[tuple[str, dict[str, Any]]]:
         return [(i, dict(m)) for i, m in reversed(self.messages)][:limit]
+
+
+class InMemoryLeaveRepository:
+    """D-80 staff leave; its items are the appointment fake's leave map."""
+
+    def __init__(self, items: dict[str, dict[str, Any]]) -> None:
+        self.items = items
+        self._next = 0
+
+    def add(self, data: dict[str, Any]) -> str:
+        self._next += 1
+        leave_id = f"leave-{self._next}"
+        self.items[leave_id] = dict(data)
+        return leave_id
+
+    def get(self, leave_id: str) -> dict[str, Any] | None:
+        return dict(self.items[leave_id]) if leave_id in self.items else None
+
+    def update(self, leave_id: str, data: dict[str, Any]) -> None:
+        self.items[leave_id].update(data)
+
+    def all(self) -> list[tuple[str, dict[str, Any]]]:
+        return [(k, dict(v)) for k, v in self.items.items()]
+
+    def by_staff(self, uid: str) -> list[tuple[str, dict[str, Any]]]:
+        return [(k, dict(v)) for k, v in self.items.items() if v.get("staffId") == uid]
+
+
+class InMemoryPasswordOtpRepository:
+    """D-80 email reset codes."""
+
+    def __init__(self) -> None:
+        self.items: dict[str, dict[str, Any]] = {}
+
+    def get(self, key: str) -> dict[str, Any] | None:
+        return dict(self.items[key]) if key in self.items else None
+
+    def put(self, key: str, data: dict[str, Any]) -> None:
+        self.items[key] = dict(data)
+
+    def delete(self, key: str) -> None:
+        self.items.pop(key, None)
 
 
 class InMemoryStaffRequestRepository:
@@ -1474,6 +1560,16 @@ def pharmacy_chat() -> InMemoryPharmacyChatRepository:
 
 
 @pytest.fixture
+def leave_repo(appointment_repo: InMemoryAppointmentRepository) -> InMemoryLeaveRepository:
+    return InMemoryLeaveRepository(appointment_repo.leave)
+
+
+@pytest.fixture
+def password_otps() -> InMemoryPasswordOtpRepository:
+    return InMemoryPasswordOtpRepository()
+
+
+@pytest.fixture
 def staff_requests() -> InMemoryStaffRequestRepository:
     return InMemoryStaffRequestRepository()
 
@@ -1536,6 +1632,8 @@ def make_client(
     conversations: InMemoryConversationRepository,
     inbox: InMemoryInboxRepository,
     staff_requests: InMemoryStaffRequestRepository,
+    password_otps: InMemoryPasswordOtpRepository,
+    leave_repo: InMemoryLeaveRepository,
 ) -> MakeClient:
     def _make(settings: Settings | None = None) -> TestClient:
         s = settings or dev_settings()
@@ -1580,6 +1678,9 @@ def make_client(
         app.dependency_overrides[get_conversation_repository] = lambda: conversations
         app.dependency_overrides[get_inbox_repository] = lambda: inbox
         app.dependency_overrides[get_staff_request_repository] = lambda: staff_requests
+        app.dependency_overrides[get_password_otp_repository] = lambda: password_otps
+        app.dependency_overrides[get_leave_repository] = lambda: leave_repo
+        app.dependency_overrides[get_otp_ip_limiter] = lambda: RateLimiter(100, 900)
         return TestClient(app)
 
     return _make

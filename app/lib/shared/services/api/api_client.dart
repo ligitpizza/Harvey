@@ -166,6 +166,14 @@ class ApiClient {
   Future<Map<String, dynamic>> requestPasswordReset(String email) =>
       _post('/auth/password-reset', {'email': email});
 
+  /// D-80: email a 6-digit reset code (signed out; neutral answer).
+  Future<Map<String, dynamic>> requestPasswordCode(String email) =>
+      _post('/auth/password-otp/request', {'email': email});
+
+  /// D-80: verify the code and set the new password.
+  Future<Map<String, dynamic>> verifyPasswordCode(String email, String code, String password) =>
+      _post('/auth/password-otp/verify', {'email': email, 'code': code, 'newPassword': password});
+
   // ---- Module 3 (FR-3.1, FR-3.2) ----
 
   /// UC3.1: log a BP reading with optional PPG heart rate (UC3.3) and note (UC3.2).
@@ -655,6 +663,39 @@ class ApiClient {
       _send('PATCH', '/staff-requests/$id', {'status': ?status, 'reply': ?reply});
 
   Future<Map<String, dynamic>> doctorPrescriptions() => _get('/provider/prescriptions');
+
+  // D-80 staff leave and walk-ins.
+  Future<Map<String, dynamic>> leaveRequests() => _get('/leave');
+
+  Future<Map<String, dynamic>> applyLeave(String startDate, String endDate, String reason) =>
+      _post('/leave', {'startDate': startDate, 'endDate': endDate, 'reason': reason});
+
+  Future<Map<String, dynamic>> cancelLeave(String id) => _post('/leave/$id/cancel', {});
+
+  Future<Map<String, dynamic>> decideLeave(String id, String decision, {String? note}) =>
+      _post('/leave/$id/decision', {'decision': decision, 'note': ?note});
+
+  Future<Map<String, dynamic>> leaveReschedule() => _get('/leave/reschedule');
+
+  Future<Map<String, dynamic>> findWalkInPatients(String q) =>
+      _getQuery('/walk-in/patients', {'q': q});
+
+  Future<Map<String, dynamic>> registerWalkIn(String name, String email, String icNumber) =>
+      _post('/walk-in/patients', {'name': name, 'email': email, 'icNumber': icNumber});
+
+  Future<Map<String, dynamic>> walkInDoctors() => _get('/walk-in/doctors');
+
+  Future<Map<String, dynamic>> bookWalkIn({
+    required String patientId,
+    required String doctorId,
+    required String dateTime,
+    required String type,
+  }) => _post('/walk-in/appointments', {
+    'patientId': patientId,
+    'doctorId': doctorId,
+    'dateTime': dateTime,
+    'type': type,
+  });
 
   Future<Map<String, dynamic>> vitalsDevTools() => _get('/vitals/dev-tools');
 

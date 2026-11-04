@@ -12,6 +12,7 @@ import '../../dashboard/domain/dashboard_logic.dart' show greetingFor;
 import '../../dashboard/state/dashboard_providers.dart';
 import '../../medications/domain/med_schedule.dart' show toMyt;
 import '../data/family_repository.dart';
+import '../data/patient_location.dart';
 import '../state/family_providers.dart';
 
 final _readingsProvider = StreamProvider.autoDispose.family<List<VitalReading>, String>(
@@ -186,6 +187,8 @@ class _Linked extends ConsumerWidget {
               onTap: () => context.go('/family/alert/${alert.id}'),
             ),
           ),
+        // D-80: where they are (last known location).
+        _FamilyMapCard(patientId: patientId, name: person?.name),
         _Tinted(
           key: const Key('family-status'),
           color: level == null ? theme.colorScheme.outline : riskColor(level),
@@ -385,4 +388,101 @@ class _Tinted extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// D-80: the linked patient's last known location on a map, with how old it is.
+class _FamilyMapCard extends ConsumerWidget {
+  const _FamilyMapCard({required this.patientId, this.name});
+
+  final String patientId;
+  final String? name;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final loc = ref.watch(patientLocationProvider(patientId));
+    final now = ref.watch(nowProvider)();
+    final who = name ?? 'They';
+    Widget body;
+    String? note;
+    final l = loc.value;
+    if (loc.isLoading && l == null) {
+      body = const SizedBox(height: 60, child: Center(child: CircularProgressIndicator()));
+    } else if (l == null || !l.sharing || !l.hasPoint) {
+      body = ListTile(
+        key: const Key('family-map-empty'),
+        leading: const Icon(Icons.location_off_outlined),
+        title: Text(
+          l != null && !l.sharing ? '$who turned off location sharing.' : 'No location yet.',
+        ),
+        subtitle: Text(
+          l != null && !l.sharing
+              ? 'They can switch it on in Harvey Settings.'
+              : 'It appears after $who opens Harvey with location allowed.',
+        ),
+      );
+    } else {
+      final stale = l.updatedAt != null && now.difference(l.updatedAt!) > const Duration(hours: 2);
+      note = l.updatedAt == null ? 'Updating…' : 'Updated ${agoText(l.updatedAt!, now)}';
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SizedBox(
+              key: const Key('family-map'),
+              height: 220,
+              child: ref.read(mapBuilderProvider)(l.lat!, l.lng!, name ?? 'Patient'),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              children: [
+                Icon(
+                  stale ? Icons.history : Icons.my_location,
+                  size: 18,
+                  color: stale ? Colors.orange.shade700 : Colors.green.shade600,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    stale ? '$note · may have moved since' : note,
+                    key: const Key('family-map-updated'),
+                  ),
+                ),
+                TextButton.icon(
+                  key: const Key('family-map-open'),
+                  onPressed: () => ref.read(openUrlProvider)(directionsUrl(l.lat!, l.lng!)),
+                  icon: const Icon(Icons.directions_outlined),
+                  label: const Text('Directions'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+    return Card(
+      key: const Key('family-location'),
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.place_outlined, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Text('Where $who is', style: theme.textTheme.titleMedium),
+              ],
+            ),
+            const SizedBox(height: 8),
+            body,
+          ],
+        ),
+      ),
+    );
+  }
 }

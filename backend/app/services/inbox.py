@@ -41,6 +41,7 @@ CATEGORIES: dict[str, str] = {
     "dose": "medication",
     "refill": "medication",
     "staff_request": "other",
+    "leave": "other",  # D-80
 }
 CATEGORY_NAMES = ["messages", "alerts", "appointments", "orders", "medication", "other"]
 

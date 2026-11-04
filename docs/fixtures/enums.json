@@ -30,7 +30,10 @@
     "conversations",
     "conversation_messages",
     "notifications",
-    "staff_requests"
+    "staff_requests",
+    "password_otps",
+    "leave_requests",
+    "patient_locations"
   ],
   "user_role": [
     "patient",

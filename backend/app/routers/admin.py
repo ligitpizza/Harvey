@@ -304,16 +304,16 @@ def patient_setup_email(name: str, email: str, link: str) -> EmailMessage:
     )
 
 
-@router.post("/patients", status_code=status.HTTP_201_CREATED)
-def create_patient_account(
+def open_patient_account(
     body: CreatePatientRequest,
-    admin: CurrentUser = Depends(admin_only),
-    identity: IdentityProvider = Depends(get_identity_provider),
-    repo: UserRepository = Depends(get_user_repository),
-    email_client: EmailClient = Depends(get_email_client),
-    audit: AuditLogger = Depends(get_audit_logger),
-) -> dict[str, Any]:
-    """D-60: same account shape as self-registration (D-51 IC check, D-06 link code)."""
+    identity: IdentityProvider,
+    repo: UserRepository,
+    email_client: EmailClient,
+    extra: dict[str, Any] | None = None,
+) -> tuple[str, bool, str]:
+    """D-60 / D-80: a clinic-opened patient account (admin or walk-in). Same shape as
+    self-registration (D-51 IC check, D-06 link code); the patient sets a password from
+    the emailed link and completes onboarding later. Returns (uid, emailSent, link)."""
     from app.routers.auth import _patient_ic, _unique_link_code
 
     ic = _patient_ic(body.icNumber, UserRole.PATIENT, repo, "")
@@ -337,6 +337,7 @@ def create_patient_account(
             "onboardingComplete": False,
             "assignedDoctorId": None,
             "linkCode": _unique_link_code(repo),
+            **(extra or {}),
         },
     )
     link = identity.password_setup_link(body.email)
@@ -345,6 +346,20 @@ def create_patient_account(
     except Exception:
         log.exception("Patient setup email failed for uid=%s", uid)
         email_sent = False
+    return uid, email_sent, link
+
+
+@router.post("/patients", status_code=status.HTTP_201_CREATED)
+def create_patient_account(
+    body: CreatePatientRequest,
+    admin: CurrentUser = Depends(admin_only),
+    identity: IdentityProvider = Depends(get_identity_provider),
+    repo: UserRepository = Depends(get_user_repository),
+    email_client: EmailClient = Depends(get_email_client),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    """D-60: same account shape as self-registration (D-51 IC check, D-06 link code)."""
+    uid, email_sent, link = open_patient_account(body, identity, repo, email_client)
     audit.log(
         user_id=admin.uid,
         action="CREATE_PATIENT_ACCOUNT",
@@ -387,7 +402,8 @@ def delete_user(
     if role == UserRole.DOCTOR.value:
         now = datetime.now(UTC)
         patients = caseloads(users).get(uid, 0)
-        upcoming = len(appointments.taken(uid, now, now + timedelta(days=365)))
+        # D-80: count appointments, not taken slots (approved leave also blocks slots).
+        upcoming = len(appointments.active_for_doctor(uid, now, now + timedelta(days=365)))
         if patients or upcoming:
             raise ApiError(
                 "DOCTOR_IN_USE",

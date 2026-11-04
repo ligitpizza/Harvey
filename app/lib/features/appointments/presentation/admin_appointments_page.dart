@@ -14,6 +14,7 @@ import 'appointment_details_dialog.dart';
 enum AppointmentFilter {
   all('All'),
   requested('Change requested'),
+  needsReschedule('Needs new time'), // D-80 doctor on leave
   notCompleted('Not completed'),
   booked('Booked'),
   rescheduled('Rescheduled'),
@@ -27,6 +28,7 @@ enum AppointmentFilter {
   bool matches(Appointment a, DateTime now) => switch (this) {
     all => true,
     requested => a.pendingChange != null && !a.isCancelled,
+    needsReschedule => a.needsReschedule && a.isActive,
     notCompleted => a.isOverdue(now),
     booked => a.status == AppointmentStatus.booked,
     rescheduled => a.status == AppointmentStatus.rescheduled,
@@ -179,6 +181,8 @@ class _Row extends ConsumerWidget {
         : p != null
         ? '${p.isCancel ? 'Cancellation requested' : 'Move to ${whenLabel(p.dateTime!, now)} requested'}'
               ': ${p.reasonText}'
+        : a.needsReschedule && a.isActive
+        ? 'Doctor on leave: needs a new time'
         : a.isOverdue(now)
         ? 'Not completed'
         : a.changeReason == null
@@ -188,6 +192,8 @@ class _Row extends ConsumerWidget {
       key: Key('admin-appt-${a.id}'),
       color: a.isOverdue(now)
           ? Colors.red.withValues(alpha: 0.08)
+          : a.needsReschedule && a.isActive
+          ? Colors.deepOrange.withValues(alpha: 0.12)
           : p != null
           ? Colors.amber.withValues(alpha: 0.15)
           : null,
@@ -199,10 +205,15 @@ class _Row extends ConsumerWidget {
         ),
         subtitle: Text(
           '${doctorName ?? 'Doctor'} · ${a.type.label}'
-          '${a.isAdminAssigned ? ' · Admin assigned' : ''}\n$detail',
+          '${a.isAdminAssigned ? ' · Admin assigned' : ''}'
+          '${a.walkIn ? ' · Walk-in' : ''}\n$detail',
         ),
         isThreeLine: true,
-        trailing: p != null ? const Chip(label: Text('Decide')) : null,
+        trailing: a.needsReschedule && a.isActive
+            ? const Chip(label: Text('Reschedule'))
+            : p != null
+            ? const Chip(label: Text('Decide'))
+            : null,
         onTap: () => showAppointmentDetails(
           context,
           a,

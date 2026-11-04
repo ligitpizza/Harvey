@@ -1,7 +1,7 @@
 """AI Health Agent (FR-14.1; UC2.6, UC2.6 A1/E1, UC2.7; Fig 4.1.1.16; D-34)."""
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -172,7 +172,8 @@ def test_uc2_6_chat_sends_context_and_history_and_saves_both_messages(
     agent_repo: InMemoryAgentDataRepository,
     vitals_repo: InMemoryVitalsRepository,
 ) -> None:
-    add_reading(vitals_repo, 141, 91)
+    # The endpoint reads with the real clock, so the reading must be recent.
+    add_reading(vitals_repo, 141, 91, timestamp=datetime.now(UTC) - timedelta(hours=1))
     agent_repo.add_message(P, "patient", "hello")
     agent_repo.add_message(P, "agent", "Hi Siti")
     res = client.post("/api/v1/agent/chat", json={"message": "What was my BP?"}, headers=PATIENT)

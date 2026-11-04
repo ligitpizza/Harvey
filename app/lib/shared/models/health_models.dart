@@ -221,6 +221,8 @@ class Appointment {
     this.changeReason,
     this.cancelledBy,
     this.bookedBy,
+    this.walkIn = false,
+    this.needsReschedule = false,
   });
 
   final String id;
@@ -252,6 +254,12 @@ class Appointment {
   /// D-60: shown as "Admin assigned" to patient, doctor and admin.
   bool get isAdminAssigned => bookedBy == 'admin';
 
+  /// D-80: booked at the pharmacy counter (bookedBy pharmacist).
+  final bool walkIn;
+
+  /// D-80: the doctor's approved leave clashes; the admin must move it.
+  final bool needsReschedule;
+
   /// D-60: booked by the patient themselves (not emergency, not admin).
   bool get isOwnBooking =>
       bookedBy == 'patient' || (bookedBy == null && type != AppointmentType.emergency);
@@ -278,6 +286,8 @@ class Appointment {
     changeReason: d['changeReason'] as String?,
     cancelledBy: d['cancelledBy'] as String?,
     bookedBy: d['bookedBy'] as String?,
+    walkIn: d['walkIn'] == true,
+    needsReschedule: d['needsReschedule'] == true,
   );
 }
 

@@ -442,6 +442,29 @@ class AppointmentCard extends ConsumerWidget {
             ),
             if (a.isAdminAssigned)
               const Padding(padding: EdgeInsets.only(top: 4), child: AdminAssignedBadge()),
+            // D-80: the doctor's approved leave clashes with this visit.
+            if (a.needsReschedule)
+              Container(
+                key: Key('needs-reschedule-${a.id}'),
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.deepOrange.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.event_busy_outlined, color: Colors.deepOrange),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Your doctor is on leave that day. The clinic will move this '
+                        'appointment and tell you the new time.',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 4),
             Text(doctor?.name ?? 'Your doctor', style: Theme.of(context).textTheme.titleLarge),
             Text('${a.type.label} · $clinicName'),

@@ -405,6 +405,8 @@ class _AgendaList extends ConsumerWidget {
                 subtitle: Text(
                   '${doctorNames == null ? '' : '${doctorNames![a.doctorId] ?? 'Doctor'} · '}'
                   '${a.isAdminAssigned ? 'Admin assigned · ' : ''}'
+                  '${a.walkIn ? 'Walk-in · ' : ''}'
+                  '${a.needsReschedule && a.isActive ? 'On your leave: being moved · ' : ''}'
                   '${a.pendingChange != null && !a.isCancelled ? (a.pendingChange!.isCancel ? 'Cancellation requested · ' : 'Reschedule requested · ') : ''}'
                   '${a.type.label}${switch (a.status) {
                     AppointmentStatus.completed => ' · completed',

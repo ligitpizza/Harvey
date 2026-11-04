@@ -25,16 +25,19 @@ List<StaffDestination> staffDestinations(UserRole role) => switch (role) {
     StaffDestination('/doctor/prescriptions', 'Prescriptions', Icons.medication_outlined), // D-78
     StaffDestination('/doctor/calendar', 'Calendar', Icons.calendar_month_outlined),
     StaffDestination('/doctor/messages', 'Messages', Icons.chat_bubble_outline),
+    StaffDestination('/doctor/leave', 'Leave', Icons.beach_access_outlined), // D-80
     StaffDestination('/doctor/admin-center', 'Admin center', Icons.support_agent), // D-78
   ],
   UserRole.pharmacist => const [
     StaffDestination('/pharmacy/dashboard', 'Dashboard', Icons.dashboard_outlined), // D-77
     StaffDestination('/pharmacy', 'Orders', Icons.local_pharmacy_outlined),
+    StaffDestination('/pharmacy/walk-in', 'Walk-in', Icons.how_to_reg_outlined), // D-80
     // D-70: tracking, inventory and patients apart from the order queue.
     StaffDestination('/pharmacy/tracking', 'Tracking', Icons.local_shipping_outlined),
     StaffDestination('/pharmacy/inventory', 'Inventory', Icons.inventory_2_outlined),
     StaffDestination('/pharmacy/patients', 'Patients', Icons.people_outline),
     StaffDestination('/pharmacy/messages', 'Messages', Icons.chat_bubble_outline), // D-69
+    StaffDestination('/pharmacy/leave', 'Leave', Icons.beach_access_outlined), // D-80
     StaffDestination('/pharmacy/admin-center', 'Admin center', Icons.support_agent), // D-78
   ],
   UserRole.admin => const [
@@ -45,6 +48,7 @@ List<StaffDestination> staffDestinations(UserRole role) => switch (role) {
     StaffDestination('/admin/assignments', 'Assignments', Icons.assignment_ind_outlined),
     StaffDestination('/admin/messages', 'Messages', Icons.chat_bubble_outline), // D-76
     StaffDestination('/admin/requests', 'Staff requests', Icons.support_agent), // D-78
+    StaffDestination('/admin/leave', 'Leave', Icons.beach_access_outlined), // D-80
     StaffDestination('/admin/audit-logs', 'Audit logs', Icons.policy_outlined),
     StaffDestination('/admin/orders', 'Orders', Icons.receipt_long_outlined), // D-70
     StaffDestination('/admin/deliveries', 'Deliveries', Icons.local_shipping_outlined),

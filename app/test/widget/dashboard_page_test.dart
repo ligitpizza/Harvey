@@ -350,8 +350,10 @@ void main() {
 
   tallTest('patient shell highlights the current tab', (t) async {
     await t.pumpWidget(
-      const MaterialApp(
-        home: PatientShell(location: '/records', child: Text('BODY')),
+      const ProviderScope(
+        child: MaterialApp(
+          home: PatientShell(location: '/records', child: Text('BODY')),
+        ),
       ),
     );
     final bar = t.widget<NavigationBar>(find.byType(NavigationBar));
@@ -377,7 +379,7 @@ void main() {
           ),
         ],
       );
-      return MaterialApp.router(routerConfig: router);
+      return ProviderScope(child: MaterialApp.router(routerConfig: router));
     }
 
     tallTest('back on a non-home tab returns to Home instead of leaving', (t) async {

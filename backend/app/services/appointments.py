@@ -89,7 +89,7 @@ def is_bookable(moment: datetime, now: datetime, any_time: bool = False) -> bool
 def booked_by(data: dict[str, Any]) -> str:
     """D-60: who made the booking; older documents predate the field."""
     by = data.get("bookedBy")
-    if by in ("patient", "admin", "system"):
+    if by in ("patient", "admin", "system", "pharmacist"):  # pharmacist: D-80 walk-in
         return str(by)
     return "system" if data.get("type") == AppointmentType.EMERGENCY.value else "patient"
 
@@ -166,6 +166,33 @@ class SlotTakenError(Exception):
     pass
 
 
+class DoctorOnLeaveError(SlotTakenError):
+    """D-80: the doctor has approved leave that day."""
+
+
+def leave_dates(ranges: list[tuple[str, str]]) -> set[date]:
+    """D-80: every Malaysian date covered by approved leave ('YYYY-MM-DD' pairs)."""
+    out: set[date] = set()
+    for start, end in ranges:
+        try:
+            d, last = date.fromisoformat(start), date.fromisoformat(end)
+        except (TypeError, ValueError):
+            continue
+        while d <= last:
+            out.add(d)
+            d += timedelta(days=1)
+    return out
+
+
+def leave_slots(days: set[date], start: datetime, end: datetime) -> set[datetime]:
+    """D-80: a day on leave counts as fully booked."""
+    return {s for day in days for s in day_slots(day) if start <= s < end}
+
+
+def on_leave(days: set[date], moment: datetime) -> bool:
+    return moment.astimezone(MYT).date() in days
+
+
 class AppointmentRepository(Protocol):
     def user(self, uid: str) -> dict[str, Any] | None: ...
 
@@ -198,6 +225,16 @@ class AppointmentRepository(Protocol):
     def active_for_patient(self, patient_id: str) -> list[AppointmentDoc]:
         """D-56: the patient's active appointments, past or future, until the doctor
         records the outcome."""
+        ...
+
+    def active_for_doctor(
+        self, doctor_id: str, start: datetime, end: datetime
+    ) -> list[AppointmentDoc]:
+        """D-80: a doctor's active appointments starting in [start, end)."""
+        ...
+
+    def leave_days(self, doctor_id: str) -> set[date]:
+        """D-80: Malaysian dates the doctor is on approved leave."""
         ...
 
 
@@ -246,11 +283,31 @@ class FirestoreAppointmentRepository:
             and (t := held_time(dict(d.to_dict()))) is not None
             and start <= t < end
         }
-        return booked | held
+        return booked | held | leave_slots(self.leave_days(doctor_id), start, end)
+
+    def leave_days(self, doctor_id: str) -> set[date]:
+        # Two equality filters: single-field indexes, no composite needed.
+        q = (
+            self._db.collection(Collection.LEAVE_REQUESTS.value)
+            .where(filter=gfs.FieldFilter("staffId", "==", doctor_id))
+            .where(filter=gfs.FieldFilter("status", "==", "approved"))
+        )
+        return leave_dates([(str(d.get("startDate")), str(d.get("endDate"))) for d in q.stream()])
+
+    def active_for_doctor(
+        self, doctor_id: str, start: datetime, end: datetime
+    ) -> list[AppointmentDoc]:
+        return [
+            AppointmentDoc(d.id, dict(d.to_dict()))
+            for d in self._doctor_query(doctor_id, start, end).stream()
+            if d.get("status") in ACTIVE
+        ]
 
     def _check_free(
         self, tx: Any, doctor_id: str, moment: datetime, exclude_id: str | None
     ) -> None:
+        if on_leave(self.leave_days(doctor_id), moment):
+            raise DoctorOnLeaveError
         start = moment - SLOT + timedelta(microseconds=1)
         for d in self._doctor_query(doctor_id, start, moment + SLOT).stream(transaction=tx):
             if d.id != exclude_id and d.get("status") in ACTIVE:

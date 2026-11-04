@@ -37,6 +37,7 @@ from app.services.appointments import (
     SUMMARY_DAYS,
     AppointmentDoc,
     AppointmentRepository,
+    DoctorOnLeaveError,
     SlotTakenError,
     booked_by,
     day_slots,
@@ -620,7 +621,13 @@ def _active_role(
     return u
 
 
-def _doctor_busy() -> ApiError:
+def _doctor_busy(exc: Exception | None = None) -> ApiError:
+    if isinstance(exc, DoctorOnLeaveError):
+        return ApiError(
+            "DOCTOR_ON_LEAVE",
+            "The doctor is on approved leave that day. Choose another day or doctor.",
+            status.HTTP_409_CONFLICT,
+        )
     return ApiError(
         "DOCTOR_BUSY",
         "The doctor already has an appointment within 30 minutes of that time.",
@@ -658,7 +665,7 @@ def admin_book(
     try:
         appt_id = repo.book(data)
     except SlotTakenError as exc:
-        raise _doctor_busy() from exc
+        raise _doctor_busy(exc) from exc
     when = when_text(moment)
     doctor_name = str(doctor.get("name") or "your doctor")
     _push(
@@ -729,13 +736,15 @@ def admin_edit(
         "type": body.type or a.get("type"),
         "pendingChange": None,
     }
+    if moved:
+        update["needsReschedule"] = False  # D-80: the leave clash is resolved
     if moment != a["dateTime"]:
         update["status"] = AppointmentStatus.RESCHEDULED.value
     if moved:
         try:
             repo.book(update, exclude_id=appointment_id)
         except SlotTakenError as exc:
-            raise _doctor_busy() from exc
+            raise _doctor_busy(exc) from exc
     else:
         repo.update(appointment_id, {"type": update["type"], "pendingChange": None})
     when = when_text(moment)

@@ -134,7 +134,9 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | doctorId | Reference (users) | Attending doctor | Optional; null until UC7.3 assignment |
 | dateTime | Timestamp | Scheduled date/time | Required |
 | status | String | booked / rescheduled / cancelled / completed / no_show (D-56) | Required |
-| bookedBy | String | patient / admin / system (D-60) | Optional; absent = patient |
+| bookedBy | String | patient / admin / system (D-60) / pharmacist (D-80 walk-in) | Optional; absent = patient |
+| walkIn | Boolean | Booked at the pharmacy counter (D-80) | Optional; absent = false |
+| needsReschedule | Boolean | The doctor's approved leave clashes; the admin must move it (D-80) | Optional; set on leave approval, cleared when the admin moves it |
 
 ### `clinical_notes`  (Table 4.2.3.10)
 
@@ -377,6 +379,48 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 
 > Read and written only through FastAPI.
 
+### `leave_requests`  (D-80, not in Ch4)
+
+| Field | Type | Description | Constraints / Notes |
+|---|---|---|---|
+| _id | String | Primary key | Auto-generated |
+| staffId | Reference (users) | Doctor or pharmacist applying | Required |
+| staffName, staffRole | String | Shown to the admin (staffRole doctor / pharmacist) | Required |
+| startDate, endDate | String | Malaysian dates `YYYY-MM-DD`, inclusive | Required; start ≥ today; ≤ 30 days; no overlap with own pending/approved leave |
+| reason | String | Why | Required; 3-500 |
+| status | String | pending / approved / rejected / cancelled | Default pending |
+| decidedBy, decisionNote | String | Admin's name and optional note | Optional |
+| createdAt, updatedAt | Timestamp | | Required |
+
+> Read and written only through FastAPI. A doctor's approved leave makes those days fully booked.
+
+### `password_otps`  (D-80, not in Ch4)
+
+| Field | Type | Description | Constraints / Notes |
+|---|---|---|---|
+| _id | String | SHA-256 of the lower-case email | No address stored |
+| uid | Reference (users) | Account the code resets | Required |
+| salt, codeHash | String | Salted SHA-256 of the 6-digit code | codeHash null once used, expired or locked |
+| expiresAt | Timestamp | 10 minutes after sending | Required |
+| attempts | Number | Wrong tries | Locked at 5 |
+| sentAt | Array of Timestamp | Codes sent in the last 15 minutes | Max 3 |
+| createdAt, usedAt | Timestamp | | |
+
+> Server-only (no client access under Security Rules).
+
+### `patient_locations`  (D-80, not in Ch4)
+
+| Field | Type | Description | Constraints / Notes |
+|---|---|---|---|
+| _id | String | Patient uid | One document per patient |
+| sharing | Boolean | Family map on/off | Required; off removes lat/lng/accuracy |
+| lat, lng | Number | Last known position | Required when sharing; valid ranges |
+| accuracy | Number | Metres | Optional |
+| updatedAt | Timestamp | Server time of the update | Required (= request.time) |
+
+> Written only by the patient's own phone; read by the patient and linked family members.
+> Deleted with the account (UC12.4 cascade).
+
 ### `medication_stock`  (D-66, not in Ch4)
 
 | Field | Type | Description | Constraints / Notes |
@@ -437,4 +481,4 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 
 ## Account deletion cascade (UC12.4)
 
-Delete patient-owned: `vital_readings`, `risk_scores`, `medications` (+ `dose_logs`), `health_records` (+ Storage files), `triage_outcomes`, `medication_orders`, `agent_messages`, `health_profiles`. **Retain** doctor-authored `clinical_notes`, `prescriptions`, `care_plans`, and `audit_logs`. Set `users.isActive = false` first, then delete in a backend job. Warn and cancel active recurring prescriptions first (UC12.4 E1). Offer data export first (UC12.3).
+Delete patient-owned: `vital_readings`, `risk_scores`, `medications` (+ `dose_logs`), `health_records` (+ Storage files), `triage_outcomes`, `medication_orders`, `agent_messages`, `health_profiles`, `patient_locations` (D-80). **Retain** doctor-authored `clinical_notes`, `prescriptions`, `care_plans`, and `audit_logs`. Set `users.isActive = false` first, then delete in a backend job. Warn and cancel active recurring prescriptions first (UC12.4 E1). Offer data export first (UC12.3).

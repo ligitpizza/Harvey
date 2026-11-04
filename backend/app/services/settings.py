@@ -161,6 +161,8 @@ class FirestoreSettingsRepository:
         user_ref = self._col(Collection.USERS).document(uid)
         refs += [d.reference for d in user_ref.collection("fcmTokens").stream()]
         refs.append(self._col(Collection.HEALTH_PROFILES).document(uid))
+        # D-80: the family map's last known location (deleting a missing doc is fine).
+        refs.append(self._col(Collection.PATIENT_LOCATIONS).document(uid))
         # UC12.4 E1: retained prescriptions stop renewing.
         for p in self.recurring_prescriptions(uid):
             self._col(Collection.PRESCRIPTIONS).document(p["id"]).update({"isRecurring": False})

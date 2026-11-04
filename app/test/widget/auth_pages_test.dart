@@ -201,15 +201,54 @@ void main() {
   });
 
   group('UC1.2 A1 ForgotPasswordPage', () {
-    tallTest('sends reset and shows a neutral confirmation', (t) async {
+    tallTest('D-80 emails a code, then sets the new password with it', (t) async {
       final repo = FakeAuthRepository();
       await t.pumpWidget(harness(const ForgotPasswordPage(), repo: repo));
       await fill(t, 'reset-email', 'p@x.my');
       await t.tap(find.byKey(const Key('reset-submit')));
       await t.pumpAndSettle();
-      expect(repo.calls, ['reset']);
+      expect(repo.calls, ['code:p@x.my']);
       expect(find.byKey(const Key('reset-sent')), findsOneWidget);
-      expect(find.textContaining('The link works for 1 hour'), findsOneWidget);
+      expect(find.textContaining('works for 10 minutes'), findsOneWidget);
+      await fill(t, 'reset-code', '123456');
+      await fill(t, 'reset-password', 'NewPass123');
+      await fill(t, 'reset-confirm', 'NewPass123');
+      await t.tap(find.byKey(const Key('reset-verify')));
+      await t.pumpAndSettle();
+      expect(repo.calls.last, 'verify:123456:NewPass123');
+      expect(find.byKey(const Key('reset-done')), findsOneWidget);
+    });
+
+    tallTest('D-80 a wrong code shows how many tries are left', (t) async {
+      final repo = FakeAuthRepository()
+        ..codeError = ApiException('INVALID_CODE', 'That code is wrong. 4 tries left.');
+      await t.pumpWidget(harness(const ForgotPasswordPage(), repo: repo));
+      await fill(t, 'reset-email', 'p@x.my');
+      await t.tap(find.byKey(const Key('reset-submit')));
+      await t.pumpAndSettle();
+      await fill(t, 'reset-code', '000000');
+      await fill(t, 'reset-password', 'NewPass123');
+      await fill(t, 'reset-confirm', 'NewPass123');
+      await t.tap(find.byKey(const Key('reset-verify')));
+      await t.pumpAndSettle();
+      expect(find.text('That code is wrong. 4 tries left.'), findsOneWidget);
+      expect(find.byKey(const Key('reset-done')), findsNothing);
+    });
+
+    tallTest('D-80 mismatched passwords and a short code are caught on the phone', (t) async {
+      final repo = FakeAuthRepository();
+      await t.pumpWidget(harness(const ForgotPasswordPage(), repo: repo));
+      await fill(t, 'reset-email', 'p@x.my');
+      await t.tap(find.byKey(const Key('reset-submit')));
+      await t.pumpAndSettle();
+      await fill(t, 'reset-code', '123');
+      await fill(t, 'reset-password', 'NewPass123');
+      await fill(t, 'reset-confirm', 'Other123');
+      await t.tap(find.byKey(const Key('reset-verify')));
+      await t.pumpAndSettle();
+      expect(find.text('Enter the 6-digit code.'), findsOneWidget);
+      expect(find.text('Passwords do not match.'), findsOneWidget);
+      expect(repo.calls.where((c) => c.startsWith('verify')), isEmpty);
     });
 
     tallTest('D-65 an unknown email still gets the neutral confirmation', (t) async {
@@ -354,6 +393,7 @@ void main() {
         '/admin/assignments', // D-54
         '/admin/messages', // D-76
         '/admin/requests', // D-78
+        '/admin/leave', // D-80
         '/admin/audit-logs', // UC11.3
         '/admin/orders', // D-70 order tracking
         '/admin/deliveries', // UC11.4 (Module 13)
@@ -365,10 +405,12 @@ void main() {
       expect(staffDestinations(UserRole.pharmacist).map((d) => d.path), [
         '/pharmacy/dashboard', // D-77
         '/pharmacy',
+        '/pharmacy/walk-in', // D-80
         '/pharmacy/tracking', // D-70
         '/pharmacy/inventory', // D-70
         '/pharmacy/patients', // D-70
         '/pharmacy/messages', // D-69
+        '/pharmacy/leave', // D-80
         '/pharmacy/admin-center', // D-78
       ]);
       expect(staffDestinations(UserRole.patient), isEmpty);
