@@ -381,6 +381,27 @@ void main() {
       expect(repo.calls, ['requestDoctor']);
     });
 
+    tallTest('D-82 a declined request shows the clinic\'s reason and can be sent again', (t) async {
+      repo
+        ..noDoctor = true
+        ..requests = [
+          AssignmentRequest(
+            id: 'r1',
+            patientId: 'p1',
+            requestedBy: 'p1',
+            kind: AssignmentRequestKind.newPatient,
+            status: AssignmentRequestStatus.declined,
+            createdAt: now,
+            declineReason: 'Please register at the counter first.',
+          ),
+        ];
+      await t.pumpWidget(app(repo));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('doctor-request-declined')), findsOneWidget);
+      expect(find.textContaining('Please register at the counter first.'), findsOneWidget);
+      expect(find.text('Request again'), findsOneWidget);
+    });
+
     tallTest('a pending request shows instead of the button', (t) async {
       repo
         ..noDoctor = true
@@ -614,9 +635,17 @@ void main() {
       repo.pending = [req];
       await t.pumpWidget(app(repo, initial: '/admin', uid: 'admin'));
       await t.pumpAndSettle();
+      // D-82: the card also shows who the patient is.
+      expect(find.byKey(const Key('patient-summary-p1')), findsOneWidget);
+      await t.ensureVisible(find.byKey(const Key('decline-r1')));
       await t.tap(find.byKey(const Key('decline-r1')));
       await t.pumpAndSettle();
+      // D-82: a reason is required (at least 5 characters).
+      await t.enterText(find.byKey(const Key('decline-reason')), 'no');
+      await t.pump();
+      expect(t.widget<FilledButton>(find.byKey(const Key('decline-confirm'))).onPressed, isNull);
       await t.enterText(find.byKey(const Key('decline-reason')), 'Please visit the clinic.');
+      await t.pump();
       await t.tap(find.byKey(const Key('decline-confirm')));
       await t.pumpAndSettle();
       expect(repo.calls, ['decline:r1:Please visit the clinic.']);

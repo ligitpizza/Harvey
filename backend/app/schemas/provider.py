@@ -2,7 +2,9 @@
 
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.schemas.dose import normalise_dose
 
 
 class NoteRequest(BaseModel):
@@ -24,6 +26,8 @@ class PrescriptionItemRequest(BaseModel):
     frequency: Literal["once_daily", "twice_daily", "three_times_daily", "at_night", "as_needed"]
     quantity: int = Field(ge=1, le=1000)
 
+    _dose = field_validator("dose")(normalise_dose)  # D-82
+
 
 class PrescriptionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -37,6 +41,11 @@ class PrescriptionRequest(BaseModel):
     isRecurring: bool = False  # UC13.1: starts the monthly order cycle (D-66)
     # UC8.4 E1: the doctor saw the interaction warning and chose to continue.
     acknowledgeInteractions: bool = False
+
+    @field_validator("dosage")
+    @classmethod
+    def _dose(cls, v: str | None) -> str | None:  # D-82
+        return normalise_dose(v) if v is not None else None
 
     @model_validator(mode="after")
     def _one_form(self) -> Self:
@@ -54,3 +63,5 @@ class ReportedPrescriptionRequest(BaseModel):
     frequency: str = Field(min_length=1, max_length=100)
     duration: str | None = Field(default=None, max_length=50)
     clinic: str | None = Field(default=None, max_length=100)
+
+    _dose = field_validator("dosage")(normalise_dose)  # D-82

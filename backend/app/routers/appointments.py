@@ -13,8 +13,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, status
 
 from app.core.audit import AuditLogger, get_audit_logger
-from app.core.auth import CurrentUser, require_roles
-from app.core.config import get_settings
+from app.core.auth import CurrentUser, get_current_user, require_roles
+from app.core.config import Settings, get_settings
 from app.core.enums import AppointmentStatus, Collection, UserRole
 from app.core.errors import ApiError
 from app.integrations.push import PushMessage
@@ -75,6 +75,25 @@ def _iso(moments: list[datetime]) -> list[str]:
 def _any_time() -> bool:
     """D-57 testing aid: DEV_APPOINTMENT_TIMES lets patients book any time."""
     return get_settings().dev_appointment_times
+
+
+CLINIC_NAME = "Harvey Hypertension Clinic"
+
+
+@router.get("/clinic")
+def clinic(
+    _: CurrentUser = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    """D-82: where appointments take place (map on the booking-confirmed page). The clinic
+    shares the pharmacy's address and map point (PHARMACY_ADDRESS / _LAT / _LNG)."""
+    return {
+        "name": CLINIC_NAME,
+        "address": settings.pharmacy_address or None,
+        "lat": settings.pharmacy_lat,
+        "lng": settings.pharmacy_lng,
+        "phone": settings.pharmacy_phone or None,
+    }
 
 
 @router.get("/slots")

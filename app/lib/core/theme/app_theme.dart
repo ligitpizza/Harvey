@@ -21,6 +21,18 @@ abstract final class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(minimumSize: const Size(64, 48)),
       ),
+      // D-82: form errors wrap instead of being cut off ("Height must be betwee…") and
+      // are a little larger and bolder so they stand out.
+      inputDecorationTheme: InputDecorationTheme(
+        errorMaxLines: 3,
+        helperMaxLines: 3,
+        errorStyle: TextStyle(
+          color: scheme.error,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          height: 1.3,
+        ),
+      ),
     );
   }
 }

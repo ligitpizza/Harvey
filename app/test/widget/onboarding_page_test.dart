@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hypertension/core/theme/app_theme.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hypertension/core/constants/enums.dart';
 import 'package:hypertension/features/auth/domain/onboarding_data.dart';
@@ -37,6 +38,7 @@ OnboardingData completeDraft() => OnboardingData()
   ..heightCm = 170
   ..weightKg = 80
   ..phone = '0123456789'
+  ..homeAddress = '12 Jalan Bukit, 11200 Tanjung Bungah, Penang'
   ..smokingStatus = SmokingStatus.never
   ..alcohol = AlcoholUse.none
   ..exerciseDaysPerWeek = 2
@@ -66,7 +68,22 @@ void main() {
     expect(find.text('Date of birth is required.'), findsOneWidget);
     expect(find.text('Gender is required.'), findsOneWidget);
     expect(find.text('Height is required.'), findsOneWidget);
+    expect(find.text('Enter your home address.'), findsOneWidget);
     expect(find.text('Step 1 of 3 · Personal information'), findsOneWidget);
+  });
+
+  testWidgets('D-82 only Malaysian mobile numbers are accepted; errors are not cut off', (t) async {
+    await setTall(t);
+    await t.pumpWidget(app(FakeAuthRepository(), FakeDraftStore()));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const Key('onboarding-phone')), '03-1234 5678');
+    await t.enterText(find.byKey(const Key('onboarding-address')), 'Penang');
+    await t.tap(find.byKey(const Key('onboarding-next')));
+    await t.pumpAndSettle();
+    expect(find.text('Enter a Malaysian mobile number, e.g. 012-345 6789.'), findsOneWidget);
+    expect(find.text('Enter the full address (street, postcode, city).'), findsOneWidget);
+    // Harvey's theme lets error text wrap instead of cutting it off.
+    expect(AppTheme.light().inputDecorationTheme.errorMaxLines, 3);
   });
 
   testWidgets('UC1.4 A1 restores a saved draft at the saved step', (t) async {
@@ -110,6 +127,11 @@ void main() {
 
     expect(repo.calls, contains('onboarding'));
     expect((repo.lastOnboarding!['medicalHistory'] as Map)['conditions'], ['diabetes']);
+    // D-82: the home address is sent with the personal information.
+    expect(
+      (repo.lastOnboarding!['personalInfo'] as Map)['homeAddress'],
+      '12 Jalan Bukit, 11200 Tanjung Bungah, Penang',
+    );
     expect(drafts.cleared, isTrue);
     expect(find.text('COMPLETE'), findsOneWidget);
   });

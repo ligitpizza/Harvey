@@ -319,3 +319,22 @@ def test_emergency_auto_booking_is_audited(
     [appt_id] = appointment_repo.appointments
     entry = next(e for e in audit.entries if e["action"] == "AUTO_BOOK_EMERGENCY")
     assert entry["targetId"] == appt_id
+
+
+def test_d82_clinic_location_for_the_booking_map(make_client) -> None:  # type: ignore[no-untyped-def]
+    from tests.conftest import dev_settings
+
+    client = make_client(
+        dev_settings(
+            pharmacy_address="77, Lorong Lembah Permai Tiga, 11200 Tanjung Bungah",
+            pharmacy_lat=5.4587728,
+            pharmacy_lng=100.2885841,
+        )
+    )
+    res = client.get("/api/v1/appointments/clinic", headers=PATIENT)
+    assert res.status_code == 200
+    body = res.json()
+    assert body["name"] == "Harvey Hypertension Clinic"
+    assert body["address"].startswith("77, Lorong Lembah Permai Tiga")
+    assert (body["lat"], body["lng"]) == (5.4587728, 100.2885841)
+    assert client.get("/api/v1/appointments/clinic").status_code == 401

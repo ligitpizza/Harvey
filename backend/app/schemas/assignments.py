@@ -19,4 +19,5 @@ class ApproveRequest(BaseModel):
 class DeclineRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    reason: str | None = Field(default=None, max_length=500)
+    # D-82: required, shown to the requester (patient or doctor).
+    reason: str = Field(min_length=5, max_length=500)

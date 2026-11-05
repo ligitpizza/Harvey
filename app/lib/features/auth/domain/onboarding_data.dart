@@ -11,6 +11,7 @@ class OnboardingData {
   double? heightCm;
   double? weightKg;
   String phone = '';
+  String homeAddress = ''; // D-82
   String emergencyName = '';
   String emergencyPhone = '';
   String emergencyRelationship = '';
@@ -41,6 +42,7 @@ class OnboardingData {
       'heightCm': heightCm,
       'weightKg': weightKg,
       'phone': phone.trim(),
+      if (homeAddress.trim().isNotEmpty) 'homeAddress': homeAddress.trim(),
       if (hasEmergencyContact)
         'emergencyContact': {
           'name': emergencyName.trim(),
@@ -117,6 +119,7 @@ class OnboardingData {
     'heightCm': heightCm,
     'weightKg': weightKg,
     'phone': phone,
+    'homeAddress': homeAddress,
     'emergencyName': emergencyName,
     'emergencyPhone': emergencyPhone,
     'emergencyRelationship': emergencyRelationship,
@@ -139,6 +142,7 @@ class OnboardingData {
       ..heightCm = (j['heightCm'] as num?)?.toDouble()
       ..weightKg = (j['weightKg'] as num?)?.toDouble()
       ..phone = j['phone'] as String? ?? ''
+      ..homeAddress = j['homeAddress'] as String? ?? ''
       ..emergencyName = j['emergencyName'] as String? ?? ''
       ..emergencyPhone = j['emergencyPhone'] as String? ?? ''
       ..emergencyRelationship = j['emergencyRelationship'] as String? ?? ''

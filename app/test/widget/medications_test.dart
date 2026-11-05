@@ -382,7 +382,9 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('Add medication'), findsOneWidget);
       expect(find.widgetWithText(TextFormField, 'Losartan'), findsOneWidget);
-      expect(find.widgetWithText(TextFormField, '50mg'), findsOneWidget);
+      // D-82: the dose is split into amount + unit.
+      expect(find.widgetWithText(TextFormField, '50'), findsOneWidget);
+      expect(find.text('mg'), findsOneWidget);
       expect(find.byKey(const Key('time-08:00')), findsOneWidget);
       expect(find.byKey(const Key('time-20:00')), findsOneWidget);
       await t.tap(find.byKey(const Key('save-medication')));

@@ -2,7 +2,9 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.schemas.dose import normalise_dose
 
 
 class MedicationRequest(BaseModel):
@@ -16,6 +18,8 @@ class MedicationRequest(BaseModel):
     refillThresholdDays: float | None = Field(default=None, ge=1, le=60)  # D-05, default 7
     # UC5.1 E1 / UC5.6 E1: the patient saw the warnings and chose to save anyway.
     acknowledgeWarnings: bool = False
+
+    _dose = field_validator("dosage")(normalise_dose)  # D-82
 
 
 class DoseRequest(BaseModel):

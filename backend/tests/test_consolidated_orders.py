@@ -158,7 +158,11 @@ def test_self_added_medicines_stay_editable(
 
 
 def test_unknown_catalogue_item_and_item_interactions(client: TestClient) -> None:
-    bad = {"items": [{"catalogId": "nope", "dose": "1", "frequency": "once_daily", "quantity": 1}]}
+    bad = {
+        "items": [
+            {"catalogId": "nope", "dose": "1 tablet", "frequency": "once_daily", "quantity": 1}
+        ]
+    }
     assert client.post(RX_URL, json=bad, headers=DOCTOR).status_code == 404
     risky = {
         "items": [
@@ -408,7 +412,12 @@ def test_d70_catalogue_medicine_can_be_corrected_and_deactivated(
     assert c["name"] == "Amlodipine besylate" and c["active"] is False
     bad = {
         "items": [
-            {"catalogId": "amlodipine-5", "dose": "1", "frequency": "once_daily", "quantity": 1}
+            {
+                "catalogId": "amlodipine-5",
+                "dose": "1 tablet",
+                "frequency": "once_daily",
+                "quantity": 1,
+            }
         ]
     }
     assert client.post(RX_URL, json=bad, headers=DOCTOR).status_code == 404  # inactive

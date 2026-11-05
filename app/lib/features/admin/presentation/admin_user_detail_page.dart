@@ -414,26 +414,45 @@ class _Appointments extends StatelessWidget {
   /// "with" (patient page: the doctor) or "patient" (doctor page).
   final String otherLabel;
 
+  Widget _row(Map<String, dynamic> a) => ListTile(
+    dense: true,
+    contentPadding: EdgeInsets.zero,
+    title: Text(_when(a['dateTime'])),
+    subtitle: Text(
+      [
+        otherLabel == 'with' ? 'with ${a['other']}' : '${a['other']}',
+        AppointmentType.fromValue('${a['type'] ?? 'checkup'}').label,
+        '${a['status']}'.replaceAll('_', '-'),
+        if (a['bookedBy'] == 'admin') 'Admin assigned',
+        if (a['bookedBy'] == 'pharmacist') 'Walk-in',
+        if (a['changeReason'] != null) '${a['changeReason']}',
+      ].join(' · '),
+    ),
+  );
+
   @override
-  Widget build(BuildContext context) => rows.isEmpty
-      ? const Text('No appointments.')
-      : Column(
-          children: [
-            for (final a in rows)
-              ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                title: Text(_when(a['dateTime'])),
-                subtitle: Text(
-                  [
-                    otherLabel == 'with' ? 'with ${a['other']}' : '${a['other']}',
-                    AppointmentType.fromValue('${a['type'] ?? 'checkup'}').label,
-                    '${a['status']}'.replaceAll('_', '-'),
-                    if (a['bookedBy'] == 'admin') 'Admin assigned',
-                    if (a['changeReason'] != null) '${a['changeReason']}',
-                  ].join(' · '),
-                ),
-              ),
-          ],
-        );
+  Widget build(BuildContext context) {
+    if (rows.isEmpty) return const Text('No appointments.');
+    // D-82: upcoming first, then the past appointment history.
+    final now = DateTime.now();
+    bool past(Map<String, dynamic> a) =>
+        DateTime.tryParse('${a['dateTime']}')?.isBefore(now) ?? true;
+    final upcoming = rows.where((a) => !past(a)).toList().reversed.toList();
+    final history = rows.where(past).toList();
+    final label = Theme.of(context).textTheme.labelLarge;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Upcoming (${upcoming.length})', key: const Key('appts-upcoming'), style: label),
+        if (upcoming.isEmpty)
+          const Padding(padding: EdgeInsets.symmetric(vertical: 4), child: Text('None booked.')),
+        for (final a in upcoming) _row(a),
+        const SizedBox(height: 8),
+        Text('Past history (${history.length})', key: const Key('appts-history'), style: label),
+        if (history.isEmpty)
+          const Padding(padding: EdgeInsets.symmetric(vertical: 4), child: Text('No past visits.')),
+        for (final a in history) _row(a),
+      ],
+    );
+  }
 }

@@ -52,6 +52,21 @@ final preVisitSummaryProvider = FutureProvider.autoDispose.family<Map<String, dy
   retry: _noRetry,
 );
 
+/// D-82: a patient's past appointments, newest first (doctor's patient page).
+final patientAppointmentHistoryProvider = StreamProvider.autoDispose
+    .family<List<Appointment>, String>(
+      (ref, patientId) => ref
+          .watch(appointmentsRepositoryProvider)
+          .patientHistory(patientId, ref.watch(nowProvider)()),
+      retry: _noRetry,
+    );
+
+/// D-82: where the clinic is (name, address, lat/lng); null fields when not configured.
+final clinicLocationProvider = FutureProvider<Map<String, dynamic>>(
+  (ref) => ref.watch(apiClientProvider).clinicLocation(),
+  retry: _noRetry,
+);
+
 /// D-54: the signed-in patient's doctor requests.
 final myAssignmentRequestsProvider = StreamProvider.autoDispose<List<AssignmentRequest>>((ref) {
   final uid = ref.watch(authUidProvider).value;

@@ -123,7 +123,7 @@ def test_uc12_1_contact_merges_into_personal_info(
     }
     assert client.put("/api/v1/settings/contact", json=body, headers=PATIENT).status_code == 200
     personal = json.loads(repo.health_profiles[P]["personalInfo"])
-    assert personal["phone"] == "012-999 8888" and personal["heightCm"] == 165
+    assert personal["phone"] == "+60129998888" and personal["heightCm"] == 165
     assert personal["emergencyContact"]["name"] == "Ali"
     bad = client.put("/api/v1/settings/contact", json={"phone": "abc"}, headers=PATIENT)
     assert bad.status_code == 422

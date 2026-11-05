@@ -604,6 +604,9 @@ class _NoDoctorCardState extends ConsumerState<_NoDoctorCard> {
   Widget build(BuildContext context) {
     final requests = ref.watch(myAssignmentRequestsProvider).value ?? const [];
     final pending = requests.any((r) => r.status == AssignmentRequestStatus.pending);
+    // D-82: the latest request, if the clinic declined it, with their reason.
+    final latest = ([...requests]..sort((a, b) => b.createdAt.compareTo(a.createdAt))).firstOrNull;
+    final declined = !pending && latest?.status == AssignmentRequestStatus.declined ? latest : null;
     return Card(
       key: const Key('no-doctor'),
       child: Padding(
@@ -619,6 +622,21 @@ class _NoDoctorCardState extends ConsumerState<_NoDoctorCard> {
                   : 'Ask the clinic to assign you a doctor. You can book once they have.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
+            if (declined != null)
+              Container(
+                key: const Key('doctor-request-declined'),
+                width: double.infinity,
+                margin: const EdgeInsets.only(top: 10),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  'The clinic declined your last request'
+                  '${(declined.declineReason ?? '').isEmpty ? '.' : ': ${declined.declineReason}'}',
+                ),
+              ),
             const SizedBox(height: 12),
             if (pending)
               const Chip(key: Key('doctor-request-pending'), label: Text('Waiting for the clinic'))
@@ -626,7 +644,7 @@ class _NoDoctorCardState extends ConsumerState<_NoDoctorCard> {
               FilledButton(
                 key: const Key('request-doctor'),
                 onPressed: _sending ? null : _request,
-                child: const Text('Request a doctor'),
+                child: Text(declined == null ? 'Request a doctor' : 'Request again'),
               ),
           ],
         ),

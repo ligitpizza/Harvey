@@ -1536,3 +1536,18 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   Staff leave lists "Waiting for a decision" and a "History" of decided leave with filters.
 - Tests: Flutter 627.
 
+### 2026-11-05 — Sign-up checks, dose entry, clinic map, doctor-request details (D-82)
+
+- Backend: `_check_phone` accepts Malaysian mobiles only and saves `+60…`; onboarding takes
+  `personalInfo.homeAddress` and copies it to `users.address`; `schemas/dose.py` (amount + unit)
+  on medications, reported and doctor prescriptions; `GET /appointments/clinic`; declining a
+  doctor request needs a reason (`declineReason`, sent in the push).
+- App: Malaysian phone validator and hints; home address on onboarding step 1; theme lets form
+  errors wrap and makes them bolder; shared `DoseField` (numbers-only amount + unit list) on the
+  three forms; clinic map card with Directions on the booking-confirmed page; admin request cards
+  show a patient summary and span the column, decline dialog requires a reason; patient sees the
+  decline reason and "Request again"; doctor patient page Appointments tab; admin user page
+  Upcoming / Past history.
+- Deviations / additions: `doctor_assignment_requests.declineReason`, `personalInfo.homeAddress`.
+- Tests: backend 761 (+3 skipped); Flutter 634.
+

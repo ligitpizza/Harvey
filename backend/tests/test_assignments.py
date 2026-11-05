@@ -157,7 +157,19 @@ def test_admin_declines_and_the_requester_is_told(
         headers=ADMIN,
     )
     assert res.status_code == 200 and assignment_repo.requests[rid]["status"] == "declined"
-    assert recipients(push) == [P] and push.sent[0][1].body == "Please visit the clinic first."
+    assert recipients(push) == [P]
+    assert push.sent[0][1].body == "Reason: Please visit the clinic first."
+    assert assignment_repo.requests[rid]["declineReason"] == "Please visit the clinic first."
+
+
+def test_d82_a_decline_needs_a_reason(client: TestClient, repo: InMemoryUserRepository) -> None:
+    repo.users[P]["assignedDoctorId"] = None
+    rid = client.post("/api/v1/assignment-requests/new-doctor", headers=PATIENT).json()["id"]
+    for body in ({}, {"reason": ""}, {"reason": "no"}):
+        res = client.post(
+            f"/api/v1/admin/assignment-requests/{rid}/decline", json=body, headers=ADMIN
+        )
+        assert res.status_code == 422
 
 
 @pytest.mark.parametrize("token", ["patient-token", "doctor-token"])

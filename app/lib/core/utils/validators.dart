@@ -4,7 +4,8 @@ abstract final class Validators {
   static const minimumAge = 13;
 
   static final _email = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-  static final _phone = RegExp(r'^\+?[0-9][0-9\s-]{6,18}[0-9]$');
+  // D-82: Malaysian mobile: 01X then 7 digits (011: 8), after +60 / 60 / 0.
+  static final _myMobile = RegExp(r'^1(1\d{8}|[02-9]\d{7})$');
   static final _letter = RegExp(r'[A-Za-z]');
   static final _digit = RegExp(r'[0-9]');
 
@@ -37,10 +38,35 @@ abstract final class Validators {
     return null;
   }
 
+  static const phoneRule = 'Enter a Malaysian mobile number, e.g. 012-345 6789.';
+
+  /// D-82: a Malaysian mobile number (+60). Spaces and dashes are fine.
   static String? phone(String? value) {
     final v = value?.trim() ?? '';
     if (v.isEmpty) return 'Enter a phone number.';
-    if (!_phone.hasMatch(v)) return 'Enter a valid phone number.';
+    return normaliseMyPhone(v) == null ? phoneRule : null;
+  }
+
+  /// '012-345 6789' / '+60 12 345 6789' -> '+60123456789'; null when it isn't one.
+  static String? normaliseMyPhone(String value) {
+    var d = value.replaceAll(RegExp(r'[\s-]'), '');
+    if (d.startsWith('+60')) {
+      d = d.substring(3);
+    } else if (d.startsWith('60')) {
+      d = d.substring(2);
+    } else if (d.startsWith('0')) {
+      d = d.substring(1);
+    } else {
+      return null;
+    }
+    return _myMobile.hasMatch(d) ? '+60$d' : null;
+  }
+
+  /// D-82: home address at sign-up.
+  static String? address(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return 'Enter your home address.';
+    if (v.length < 10) return 'Enter the full address (street, postcode, city).';
     return null;
   }
 

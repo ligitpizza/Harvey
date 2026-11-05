@@ -664,6 +664,9 @@ class ApiClient {
 
   Future<Map<String, dynamic>> doctorPrescriptions() => _get('/provider/prescriptions');
 
+  /// D-82: the clinic's name, address and map point (booking-confirmed map).
+  Future<Map<String, dynamic>> clinicLocation() => _get('/appointments/clinic');
+
   // D-80 staff leave and walk-ins.
   Future<Map<String, dynamic>> leaveRequests() => _get('/leave');
 

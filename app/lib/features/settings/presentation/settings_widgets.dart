@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
+
+import '../../../core/utils/validators.dart';
 import 'package:flutter/services.dart';
 
 /// Small form pieces for the Module 12 edit screens (same look as onboarding).
 
-final phonePattern = RegExp(r'^\+?[0-9][0-9\s-]{6,18}[0-9]$'); // matches the API (_PHONE_RE)
-
 String? validatePhone(String? v, {bool required = true}) {
   final text = (v ?? '').trim();
   if (text.isEmpty) return required ? 'Enter a phone number.' : null;
-  return phonePattern.hasMatch(text) ? null : 'Enter a valid phone number.';
+  return Validators.phone(text); // D-82: Malaysian mobile numbers
 }
 
 class SectionLabel extends StatelessWidget {

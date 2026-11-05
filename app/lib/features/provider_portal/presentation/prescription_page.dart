@@ -12,6 +12,7 @@ import '../state/portal_providers.dart';
 import 'portal_prescription_tile.dart';
 import 'portal_widgets.dart';
 import 'delivery_preference_card.dart';
+import '../../../shared/widgets/dose_input.dart';
 
 /// Fig 4.3.12.7 Prescription Management (FR-8.3; UC8.4 and E1 interaction warning).
 /// D-69: one prescription lists several catalogue medicines with dose, frequency and
@@ -441,13 +442,18 @@ class _RxLineCard extends StatelessWidget {
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.end,
               children: [
+                // D-82: amount (numbers only) + unit.
                 SizedBox(
-                  width: 130,
-                  child: TextField(
-                    key: const Key('rx-dose'),
-                    controller: line.dose,
-                    decoration: const InputDecoration(labelText: 'Dose'),
-                    onChanged: (_) => onChanged(),
+                  width: 250,
+                  child: DoseField(
+                    fieldKey: 'rx-dose',
+                    initial: line.dose.text,
+                    defaultUnit: 'tablet',
+                    dense: true,
+                    onChanged: (v) {
+                      line.dose.text = v ?? '';
+                      onChanged();
+                    },
                   ),
                 ),
                 SizedBox(

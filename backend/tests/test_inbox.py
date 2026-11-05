@@ -110,7 +110,7 @@ def test_d77_staff_edit_their_profile(client: TestClient, repo: InMemoryUserRepo
     )
     assert res.status_code == 200, res.text
     me = client.get("/api/v1/settings/staff-profile", headers=DOCTOR).json()
-    assert me["name"] == "Dr Tan Wei" and me["phone"] == "012-345 6789"
+    assert me["name"] == "Dr Tan Wei" and me["phone"] == "+60123456789"
     assert me["specialty"] == "Nephrology"
     # Admins have no specialty; patients use their own settings pages.
     client.put(

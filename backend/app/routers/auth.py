@@ -188,6 +188,8 @@ def complete_onboarding(
         "gender": body.gender.value,
         "onboardingComplete": True,
     }
+    if body.personalInfo.homeAddress:  # D-82
+        user_updates["address"] = body.personalInfo.homeAddress
     repo.complete_onboarding(user.uid, profile, user_updates)
     audit.log(
         user_id=user.uid,

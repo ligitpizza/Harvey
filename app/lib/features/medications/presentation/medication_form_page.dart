@@ -8,6 +8,7 @@ import '../../../shared/services/api/api_client.dart';
 import '../data/medications_repository.dart';
 import '../domain/med_schedule.dart';
 import '../state/medication_providers.dart';
+import '../../../shared/widgets/dose_input.dart';
 
 /// UC5.1 add / edit a medication, with UC5.1 E1 duplicate and UC5.6 interaction warnings.
 class MedicationFormPage extends ConsumerStatefulWidget {
@@ -176,16 +177,21 @@ class _MedicationFormPageState extends ConsumerState<MedicationFormPage> {
               validator: (v) => (v ?? '').trim().length < 2 ? 'Enter the medicine name.' : null,
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              key: const Key('med-dosage'),
-              controller: _dosage,
-              readOnly: _locked,
-              decoration: const InputDecoration(
-                labelText: 'Dosage',
-                hintText: 'e.g. 5mg, 1 tablet',
+            // D-82: amount (numbers only) + unit. The doctor's dose is shown as set.
+            if (_locked)
+              TextFormField(
+                key: const Key('med-dosage'),
+                controller: _dosage,
+                readOnly: true,
+                decoration: const InputDecoration(labelText: 'Dosage'),
+              )
+            else
+              DoseField(
+                fieldKey: 'med-dosage',
+                label: 'Dosage',
+                initial: _dosage.text,
+                onChanged: (v) => _dosage.text = v ?? '',
               ),
-              validator: (v) => (v ?? '').trim().isEmpty ? 'Enter the dosage.' : null,
-            ),
             const SizedBox(height: 16),
             Text('When do you take it?', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),

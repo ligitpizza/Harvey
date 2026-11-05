@@ -7,6 +7,7 @@ import '../../medications/data/medications_repository.dart';
 import '../../medications/state/medication_providers.dart';
 import '../../provider_portal/domain/portal_models.dart';
 import '../domain/prescription_text.dart';
+import '../../../shared/widgets/dose_input.dart';
 
 /// D-50: the patient records (or edits) a prescription from another clinic.
 class ReportedPrescriptionPage extends ConsumerStatefulWidget {
@@ -99,8 +100,6 @@ class _ReportedPrescriptionPageState extends ConsumerState<ReportedPrescriptionP
     }
   }
 
-  String? _required(String? v, String message) => (v ?? '').trim().isEmpty ? message : null;
-
   @override
   Widget build(BuildContext context) {
     final editing = widget.existing != null;
@@ -135,11 +134,12 @@ class _ReportedPrescriptionPageState extends ConsumerState<ReportedPrescriptionP
               textCapitalization: TextCapitalization.words,
               validator: (v) => (v ?? '').trim().length < 2 ? 'Enter the medicine name.' : null,
             ),
-            TextFormField(
-              key: const Key('reported-dosage'),
-              controller: _dosage,
-              decoration: const InputDecoration(labelText: 'Dosage', hintText: 'e.g. 500mg'),
-              validator: (v) => _required(v, 'Enter the dosage.'),
+            // D-82: amount (numbers only) + unit.
+            DoseField(
+              fieldKey: 'reported-dosage',
+              label: 'Dosage',
+              initial: _dosage.text,
+              onChanged: (v) => _dosage.text = v ?? '',
             ),
             DropdownButtonFormField<String>(
               key: const Key('reported-frequency'),

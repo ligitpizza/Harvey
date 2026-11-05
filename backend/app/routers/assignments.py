@@ -228,21 +228,22 @@ def decline(
         {
             "status": AssignmentRequestStatus.DECLINED.value,
             "resolvedBy": admin.uid,
-            "reason": body.reason or req.get("reason"),
+            # D-82: the admin's reason, kept apart from the requester's own reason.
+            "declineReason": body.reason,
         },
     )
     notifier.notify(
         str(req["requestedBy"]),
         PushMessage(
             "Doctor request declined",
-            body.reason or "The clinic could not make this change. Please contact them.",
+            f"Reason: {body.reason}",
             {"type": "assignment"},
         ),
     )
     audit.log(
         user_id=admin.uid,
         action="DECLINE_ASSIGNMENT",
-        details="Doctor assignment request declined.",
+        details=f"Doctor assignment request declined: {body.reason}",
         target_type=Collection.DOCTOR_ASSIGNMENT_REQUESTS.value,
         target_id=request_id,
     )

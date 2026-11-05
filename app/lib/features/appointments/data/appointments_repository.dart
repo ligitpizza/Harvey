@@ -77,6 +77,7 @@ class AssignmentRequest {
     required this.createdAt,
     this.proposedDoctorId,
     this.reason,
+    this.declineReason,
   });
 
   final String id;
@@ -88,6 +89,9 @@ class AssignmentRequest {
   final String? proposedDoctorId;
   final String? reason;
 
+  /// D-82: why the admin declined it (shown to the requester).
+  final String? declineReason;
+
   factory AssignmentRequest.fromFirestore(String id, Map<String, dynamic> d) => AssignmentRequest(
     id: id,
     patientId: d['patientId'] as String? ?? '',
@@ -97,6 +101,7 @@ class AssignmentRequest {
     createdAt: (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     proposedDoctorId: d['proposedDoctorId'] as String?,
     reason: d['reason'] as String?,
+    declineReason: d['declineReason'] as String?,
   );
 }
 

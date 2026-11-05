@@ -23,8 +23,9 @@ from app.core.enums import (
     UserRole,
 )
 
-# Loose international/Malaysian phone check: optional +, 7-15 digits, spaces/dashes allowed.
-_PHONE_RE = re.compile(r"^\+?[0-9][0-9\s-]{6,18}[0-9]$")
+# D-82: Malaysian mobile numbers only: 01X followed by 7 or 8 digits (011 takes 8), typed
+# with or without +60 / 60, spaces or dashes; saved as +60XXXXXXXXX.
+_MY_MOBILE_RE = re.compile(r"^1(1\d{8}|[02-9]\d{7})$")
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 MAX_AGE_YEARS = 120
 MIN_AGE_YEARS = 13  # D-28
@@ -55,9 +56,19 @@ def check_dob(v: date) -> date:
 
 
 def _check_phone(value: str) -> str:
-    if not _PHONE_RE.match(value):
-        raise ValueError("Enter a valid phone number.")
-    return value
+    """D-82: a Malaysian mobile number, normalised to +60XXXXXXXXX."""
+    digits = re.sub(r"[\s-]", "", value or "")
+    if digits.startswith("+60"):
+        digits = digits[3:]
+    elif digits.startswith("60"):
+        digits = digits[2:]
+    elif digits.startswith("0"):
+        digits = digits[1:]
+    else:
+        raise ValueError("Enter a Malaysian mobile number, e.g. 012-345 6789.")
+    if not digits.isdigit() or not _MY_MOBILE_RE.match(digits):
+        raise ValueError("Enter a Malaysian mobile number, e.g. 012-345 6789.")
+    return f"+60{digits}"
 
 
 # ---------- registration (UC1.1) ----------
@@ -92,6 +103,9 @@ class PersonalInfo(_Strict):
     weightKg: float = Field(ge=25, le=300)
     phone: str
     emergencyContact: EmergencyContact | None = None
+    # D-82: home address typed at sign-up; also saved as users.address (delivery starts
+    # pre-filled). Optional here so older app versions can still finish onboarding.
+    homeAddress: str | None = Field(default=None, min_length=10, max_length=300)
 
     _phone = field_validator("phone")(_check_phone)
 

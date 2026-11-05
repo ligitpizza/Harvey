@@ -49,7 +49,7 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | patientId | Reference (users) | Owning patient | Required, unique 1:1 with patient |
 | medicalHistory | String | Structured/free-text medical history | Required |
 | lifestyleFactors | String | Lifestyle factors captured at onboarding | Required |
-| personalInfo | String | Additional personal information | Required |
+| personalInfo | String | Additional personal information (D-25 JSON: heightCm, weightKg, phone as +60…, emergencyContact, homeAddress (D-82)) | Required |
 
 ### `vital_readings`  (Table 4.2.3.3)
 

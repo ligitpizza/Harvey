@@ -272,7 +272,7 @@ void main() {
       await t.enterText(find.byKey(const Key('settings-phone')), 'abc');
       await t.tap(find.byKey(const Key('settings-save')));
       await t.pumpAndSettle();
-      expect(find.text('Enter a valid phone number.'), findsOneWidget);
+      expect(find.text('Enter a Malaysian mobile number, e.g. 012-345 6789.'), findsOneWidget);
       expect(repo.contactSaved, isNull);
     });
 

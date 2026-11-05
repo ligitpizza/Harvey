@@ -6,6 +6,8 @@ import '../../../shared/models/health_models.dart';
 import '../../dashboard/state/dashboard_providers.dart';
 import '../domain/appointment_text.dart';
 import '../state/appointment_providers.dart';
+import '../../family/state/family_providers.dart'
+    show directionsUrl, mapBuilderProvider, openUrlProvider;
 import 'appointments_page.dart';
 
 /// Fig 4.3.6.2 Booking confirmed (FR-7.1, FR-7.4). "Complete intake form" is out of scope
@@ -48,13 +50,7 @@ class BookingConfirmedPage extends ConsumerWidget {
                 const SizedBox(height: 16),
                 if (a != null) ...[
                   AppointmentCard(appointment: a, now: now),
-                  Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.location_on_outlined),
-                      title: const Text('Location'),
-                      subtitle: Text(clinicName),
-                    ),
-                  ),
+                  const ClinicLocationCard(),
                 ] else
                   const Text('This appointment is no longer active.', textAlign: TextAlign.center),
               ],
@@ -66,6 +62,54 @@ class BookingConfirmedPage extends ConsumerWidget {
           onPressed: () => context.go('/appointments'),
           child: const Text('Done'),
         ),
+      ),
+    );
+  }
+}
+
+/// D-82: the clinic on a map with its address and a Directions button.
+class ClinicLocationCard extends ConsumerWidget {
+  const ClinicLocationCard({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final info = ref.watch(clinicLocationProvider).value;
+    final name = info?['name'] as String? ?? clinicName;
+    final address = info?['address'] as String?;
+    final lat = (info?['lat'] as num?)?.toDouble();
+    final lng = (info?['lng'] as num?)?.toDouble();
+    return Card(
+      key: const Key('clinic-location'),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ListTile(
+            leading: Icon(Icons.location_on, color: theme.colorScheme.primary),
+            title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text(address ?? 'Location', key: const Key('clinic-address')),
+          ),
+          if (lat != null && lng != null) ...[
+            SizedBox(
+              key: const Key('clinic-map'),
+              height: 200,
+              child: ref.read(mapBuilderProvider)(lat, lng, name),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  key: const Key('clinic-directions'),
+                  onPressed: () => ref.read(openUrlProvider)(directionsUrl(lat, lng)),
+                  icon: const Icon(Icons.directions_outlined),
+                  label: const Text('Directions'),
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
