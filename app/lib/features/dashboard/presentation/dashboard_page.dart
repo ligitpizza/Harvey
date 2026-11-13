@@ -69,10 +69,8 @@ class DashboardPage extends ConsumerWidget {
             const _RiskCard(),
             const SizedBox(height: 16),
             const _CarePlanCard(),
-            const SizedBox(height: 24),
-            Text('Quick Actions', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            const _QuickActions(),
+            // D-83: quick actions moved to the "+" in the bottom bar.
+            const SizedBox(height: 16),
           ],
         ),
       ),
@@ -932,66 +930,6 @@ class _RiskCard extends ConsumerWidget {
       ),
     );
   }
-}
-
-// ---------- Quick actions (FR-2.2, UC2.5) ----------
-
-class _QuickActions extends StatelessWidget {
-  const _QuickActions();
-
-  /// Shortcuts, four per row; more rows appear as actions are added.
-  static const actions = [
-    ('Log Vitals', Icons.favorite_border, '/vitals/log', Key('qa-vitals'), Colors.red),
-    ('Symptoms', Icons.sick_outlined, '/symptom', Key('qa-symptoms'), Colors.orange),
-    ('Messages', Icons.chat_bubble_outline, '/chat', Key('qa-messages'), Colors.blue),
-    ('AI Agent', Icons.smart_toy_outlined, '/ai-agent', Key('qa-agent'), Colors.teal),
-    ('Appointments', Icons.event_outlined, '/appointments', Key('qa-appointments'), Colors.purple),
-    ('Orders', Icons.local_pharmacy_outlined, '/orders', Key('qa-orders'), Colors.green), // D-69
-  ];
-
-  @override
-  Widget build(BuildContext context) => GridView.count(
-    key: const Key('quick-actions'),
-    crossAxisCount: 4,
-    shrinkWrap: true,
-    physics: const NeverScrollableScrollPhysics(),
-    mainAxisSpacing: 4,
-    crossAxisSpacing: 4,
-    childAspectRatio: 0.82,
-    children: [
-      for (final (label, icon, path, key, color) in actions)
-        Card(
-          key: key,
-          margin: EdgeInsets.zero,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () => context.push(path),
-            child: Padding(
-              padding: const EdgeInsets.all(6),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // D-77: each shortcut keeps its own colour.
-                  CircleAvatar(
-                    backgroundColor: color.withValues(alpha: 0.15),
-                    foregroundColor: color.shade700,
-                    child: Icon(icon),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    label,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-    ],
-  );
 }
 
 /// D-37 / Fig 4.3.8.2: one-tap emergency call on the dashboard while an emergency is

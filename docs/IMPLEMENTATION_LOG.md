@@ -1565,3 +1565,9 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   from Gmail (D-81); Firebase's own reset email is no longer used.
 - Tests: Flutter 636; patient debug APK builds.
 
+### 2026-11-13 — Patient bottom bar with "+" quick actions (D-83)
+
+- `PatientShell`: Home, Vitals, +, Meds, Settings; "+" opens `quick_actions_sheet.dart` (Log Vitals,
+  Symptoms, Messages, AI Agent, Appointments, Orders, Records). Quick Actions removed from Home.
+- Tests: quick actions reached through "+", Records via "+", bar order; Flutter 638.
+

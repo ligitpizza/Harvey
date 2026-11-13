@@ -312,33 +312,68 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsWidgets);
   });
 
+  // D-83: the quick actions open from the "+" in the bottom bar (Records is there too).
+  Widget plusApp() {
+    final router = GoRouter(
+      initialLocation: '/dashboard',
+      routes: [
+        ShellRoute(
+          builder: (_, s, child) => PatientShell(location: s.matchedLocation, child: child),
+          routes: [
+            GoRoute(path: '/dashboard', builder: (_, _) => const Text('HOME')),
+            GoRoute(path: '/records', builder: (_, _) => const Text('RECORDS TAB')),
+          ],
+        ),
+        for (final p in [
+          '/vitals/log',
+          '/symptom',
+          '/chat',
+          '/ai-agent',
+          '/appointments',
+          '/orders',
+        ])
+          GoRoute(path: p, builder: (_, _) => Text('ROUTE $p')),
+      ],
+    );
+    return ProviderScope(child: MaterialApp.router(routerConfig: router));
+  }
+
   for (final (key, route) in [
-    ('qa-vitals', '/vitals/log'),
-    ('qa-symptoms', '/symptom'),
-    ('qa-messages', '/chat'),
-    ('qa-agent', '/ai-agent'),
-    ('qa-appointments', '/appointments'),
+    ('qa-vitals', 'ROUTE /vitals/log'),
+    ('qa-symptoms', 'ROUTE /symptom'),
+    ('qa-messages', 'ROUTE /chat'),
+    ('qa-agent', 'ROUTE /ai-agent'),
+    ('qa-appointments', 'ROUTE /appointments'),
+    ('qa-orders', 'ROUTE /orders'),
+    ('qa-records', 'RECORDS TAB'),
   ]) {
-    tallTest('FR-2.2 UC2.5 quick action $key opens $route', (t) async {
-      await t.pumpWidget(app(FakeDashboardRepository()));
+    tallTest('FR-2.2 UC2.5 D-83 "+" then $key opens $route', (t) async {
+      await t.pumpWidget(plusApp());
       await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('nav-plus')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('quick-actions')), findsOneWidget);
       await t.tap(find.byKey(Key(key)));
       await t.pumpAndSettle();
-      expect(find.text('ROUTE $route'), findsOneWidget);
+      expect(find.text(route), findsOneWidget);
     });
   }
 
-  testWidgets('quick actions sit four to a row on a phone', (t) async {
+  tallTest('D-83 Home no longer has a Quick Actions section', (t) async {
+    await t.pumpWidget(app(FakeDashboardRepository()));
+    await t.pumpAndSettle();
+    expect(find.text('Quick Actions'), findsNothing);
+    expect(find.byKey(const Key('quick-actions')), findsNothing);
+  });
+
+  testWidgets('D-83 the quick actions sit four to a row on a phone', (t) async {
     t.view.physicalSize = const Size(360, 800);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
-    await t.pumpWidget(app(FakeDashboardRepository()));
+    await t.pumpWidget(plusApp());
     await t.pumpAndSettle();
-    await t.scrollUntilVisible(
-      find.byKey(const Key('qa-appointments')),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await t.tap(find.byKey(const Key('nav-plus')));
+    await t.pumpAndSettle();
     final first = t.getTopLeft(find.byKey(const Key('qa-vitals')));
     final fourth = t.getTopLeft(find.byKey(const Key('qa-agent')));
     final fifth = t.getTopLeft(find.byKey(const Key('qa-appointments')));
@@ -348,7 +383,7 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
-  tallTest('patient shell highlights the current tab', (t) async {
+  tallTest('D-83 bar is Home, Vitals, +, Meds, Settings; Records lights up "+"', (t) async {
     await t.pumpWidget(
       const ProviderScope(
         child: MaterialApp(
@@ -357,8 +392,12 @@ void main() {
       ),
     );
     final bar = t.widget<NavigationBar>(find.byType(NavigationBar));
-    expect(bar.selectedIndex, 3);
-    expect(find.text('Records'), findsOneWidget);
+    expect(bar.selectedIndex, PatientShell.plusIndex);
+    for (final label in ['Home', 'Vitals', 'Meds', 'Settings']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    expect(find.text('Records'), findsNothing);
+    expect(find.byKey(const Key('nav-plus')), findsOneWidget);
   });
 
   group('Android back navigation', () {
