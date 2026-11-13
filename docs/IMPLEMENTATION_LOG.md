@@ -1601,3 +1601,10 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   not offered when uploading.
 - Tests: backend 768 (+3 skipped); Flutter 650.
 
+### 2026-11-13 — Patient page headers and Trends shortcuts (D-87)
+
+- `shared/widgets/patient_hero.dart` on Log vitals, Symptom checker (both steps), Appointments,
+  Orders and Trends; order cards with a stage-coloured edge.
+- Trends: '+' sheet item, app-bar button on Vitals and Log vitals, 'View trends' chip on Home.
+- Tests: Flutter 652.
+

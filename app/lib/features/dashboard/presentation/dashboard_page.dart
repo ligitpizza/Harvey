@@ -796,14 +796,26 @@ class _LatestBpCard extends ConsumerWidget {
                 ),
               ),
               if (latest.heartRate != null) Text('Heart rate ${latest.heartRate} bpm (estimate)'),
-              if (change != null) ...[
-                const SizedBox(height: 8),
-                Chip(
-                  key: const Key('latest-bp-change'),
-                  avatar: Icon(change <= 0 ? Icons.trending_down : Icons.trending_up, size: 18),
-                  label: Text('${change > 0 ? '+' : ''}$change from yesterday'),
-                ),
-              ],
+              const SizedBox(height: 8),
+              // D-87: trends one tap away from Home.
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (change != null)
+                    Chip(
+                      key: const Key('latest-bp-change'),
+                      avatar: Icon(change <= 0 ? Icons.trending_down : Icons.trending_up, size: 18),
+                      label: Text('${change > 0 ? '+' : ''}$change from yesterday'),
+                    ),
+                  ActionChip(
+                    key: const Key('home-view-trends'),
+                    avatar: const Icon(Icons.insights_outlined, size: 18),
+                    label: const Text('View trends'),
+                    onPressed: () => context.push('/trends'),
+                  ),
+                ],
+              ),
               if (category == BpCategory.crisis)
                 Container(
                   key: const Key('latest-bp-crisis'),

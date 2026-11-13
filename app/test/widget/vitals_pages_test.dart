@@ -97,6 +97,7 @@ Widget logApp(FakeVitalsRepository repo, FakePpgCapture ppg) {
         path: '/vitals/saved',
         builder: (_, s) => Text('SAVED ${(s.extra! as LoggedReading).systolic}'),
       ),
+      GoRoute(path: '/trends', builder: (_, _) => const Text('TRENDS PAGE')),
     ],
   );
   return ProviderScope(
@@ -115,6 +116,16 @@ Future<void> enterBp(WidgetTester t, String sys, String dia) async {
 
 void main() {
   group('UC3.1 Log Vitals (Fig 4.3.3.2)', () {
+    tallTest('D-87 a colourful header and a Trends button while logging', (t) async {
+      await t.pumpWidget(logApp(FakeVitalsRepository(), FakePpgCapture()));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('patient-hero')), findsOneWidget);
+      expect(find.text('Track your vitals'), findsOneWidget);
+      await t.tap(find.byKey(const Key('appbar-trends')));
+      await t.pumpAndSettle();
+      expect(find.text('TRENDS PAGE'), findsOneWidget);
+    });
+
     tallTest('FR-3.1 saves a reading with a note and opens the saved screen', (t) async {
       final repo = FakeVitalsRepository();
       await t.pumpWidget(logApp(repo, FakePpgCapture()));

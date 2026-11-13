@@ -9,6 +9,7 @@ import '../../../shared/services/api/api_client.dart';
 import '../../vitals/presentation/heart_rate_card.dart';
 import '../../vitals/state/vitals_providers.dart';
 import '../state/symptom_providers.dart';
+import '../../../shared/widgets/patient_hero.dart';
 
 /// Fig 4.3.8.1 Symptom Selection (FR-14.3; UC14.1, UC14.2; D-38).
 ///
@@ -129,12 +130,15 @@ class _SymptomCheckerPageState extends ConsumerState<SymptomCheckerPage> {
   Widget _vitalsStep(BuildContext context) => ListView(
     padding: const EdgeInsets.all(16),
     children: [
-      Text('Step 1 of 2', style: Theme.of(context).textTheme.labelMedium),
-      const SizedBox(height: 4),
-      const Text(
-        'Before checking your symptoms, we need your heart rate and blood pressure right now.',
+      PatientHero(
+        icon: Icons.health_and_safety,
+        title: 'Symptom checker',
+        subtitle:
+            'Before checking your symptoms, we need your heart rate and blood pressure right '
+            'now. General guidance only, not a substitute for a doctor.',
+        colors: [Colors.deepOrange.shade400, Colors.amber.shade600],
+        chips: const ['Step 1 of 2', 'Your vitals now'],
       ),
-      const SizedBox(height: 12),
       Text('Heart rate (required)', style: Theme.of(context).textTheme.titleMedium),
       const Text(
         'Measure it with the camera. If the camera cannot get a reading, type the pulse shown '
@@ -211,10 +215,13 @@ class _SymptomCheckerPageState extends ConsumerState<SymptomCheckerPage> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Text('Step 2 of 2', style: Theme.of(context).textTheme.labelMedium),
-              Text('What are you feeling today?', style: Theme.of(context).textTheme.headlineSmall),
-              const Text('Select all symptoms you are currently experiencing.'),
-              const SizedBox(height: 12),
+              PatientHero(
+                icon: Icons.sick_outlined,
+                title: 'What are you feeling today?',
+                subtitle: 'Select all symptoms you are currently experiencing.',
+                colors: [Colors.deepOrange.shade400, Colors.amber.shade600],
+                chips: const ['Step 2 of 2', 'Symptoms'],
+              ),
               catalog.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (_, _) => const Text(

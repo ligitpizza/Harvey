@@ -32,7 +32,18 @@ class VitalsPage extends ConsumerWidget {
     final dev = ref.watch(vitalsDevToolsProvider).value ?? false;
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Vitals Tracking')),
+      appBar: AppBar(
+        title: const Text('Vitals Tracking'),
+        // D-87: trends are always one tap away.
+        actions: [
+          IconButton(
+            key: const Key('appbar-trends'),
+            tooltip: 'View trends',
+            icon: const Icon(Icons.insights_outlined),
+            onPressed: () => context.push('/trends'),
+          ),
+        ],
+      ),
       body: readings.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (_, _) => Center(

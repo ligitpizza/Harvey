@@ -7,6 +7,7 @@ import '../../../core/utils/bp_classifier.dart';
 import '../../../shared/services/api/api_client.dart';
 import '../state/vitals_providers.dart';
 import 'heart_rate_card.dart';
+import '../../../shared/widgets/patient_hero.dart';
 
 /// Fig 4.3.3.2 Log Vitals (FR-3.1, FR-3.2; UC3.1-UC3.3; Fig 4.1.1.3).
 class LogVitalsPage extends ConsumerStatefulWidget {
@@ -72,14 +73,29 @@ class _LogVitalsPageState extends ConsumerState<LogVitalsPage> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('Vitals Tracking')),
+      appBar: AppBar(
+        title: const Text('Vitals Tracking'),
+        // D-87: trends are one tap away while logging too.
+        actions: [
+          IconButton(
+            key: const Key('appbar-trends'),
+            tooltip: 'View trends',
+            icon: const Icon(Icons.insights_outlined),
+            onPressed: () => context.push('/trends'),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const Text('Track Your Vitals'),
-            const Text('Log your latest numbers or measure your heart rate right now.'),
-            const SizedBox(height: 16),
+            PatientHero(
+              icon: Icons.favorite,
+              title: 'Track your vitals',
+              subtitle: 'Log your latest numbers or measure your heart rate right now.',
+              colors: [Colors.red.shade400, Colors.pink.shade300],
+              chips: const ['Blood pressure', 'Heart rate (estimate)'],
+            ),
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(

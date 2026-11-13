@@ -12,6 +12,7 @@ import '../domain/trend_logic.dart';
 import '../state/trends_providers.dart';
 import 'bp_trend_chart.dart';
 import 'risk_trend_card.dart';
+import '../../../shared/widgets/patient_hero.dart';
 
 /// Fig 4.3.4.1 Health Trends / Fig 4.3.4.2 empty state (FR-4.1-4.3, UC4.1-UC4.4,
 /// Fig 4.1.1.4). Shows the signed-in patient; the doctor portal passes [patientId].
@@ -59,6 +60,15 @@ class _TrendsPageState extends ConsumerState<TrendsPage> {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // D-87: the same colourful header as the other patient pages (own trends only).
+            if (widget.patientId == null)
+              PatientHero(
+                icon: Icons.insights,
+                title: 'Your health trends',
+                subtitle: 'Blood pressure and heart rate over time, with your risk trend.',
+                colors: [Colors.cyan.shade600, Colors.blue.shade400],
+                chips: ['${all.length} logged'],
+              ),
             _LatestReadingCard(latest: all.first, now: now),
             const SizedBox(height: 16),
             _TrendCard(

@@ -6,6 +6,7 @@ import '../../../shared/services/api/api_client.dart';
 import '../data/order_models.dart';
 import '../state/orders_providers.dart';
 import 'order_widgets.dart';
+import '../../../shared/widgets/patient_hero.dart';
 
 /// The patient's monthly recurring orders (UC13.2), newest first.
 class OrdersPage extends ConsumerWidget {
@@ -109,9 +110,15 @@ class _OrderList extends StatelessWidget {
   @override
   Widget build(BuildContext context) => orders.isEmpty
       ? ListView(
-          padding: const EdgeInsets.all(32),
+          padding: const EdgeInsets.all(16),
           children: [
-            const SizedBox(height: 80),
+            PatientHero(
+              icon: Icons.local_pharmacy,
+              title: 'My medicine orders',
+              subtitle: 'Confirm, pay and track your monthly medicines.',
+              colors: [Colors.green.shade500, Colors.teal.shade300],
+            ),
+            const SizedBox(height: 40),
             const Icon(Icons.local_pharmacy_outlined, size: 48),
             const SizedBox(height: 12),
             Text(empty, key: const Key('orders-empty'), textAlign: TextAlign.center),
@@ -119,7 +126,17 @@ class _OrderList extends StatelessWidget {
         )
       : ListView(
           padding: const EdgeInsets.all(16),
-          children: [for (final o in orders) _OrderCard(order: o)],
+          children: [
+            // D-87: a clear header above the orders.
+            PatientHero(
+              icon: Icons.local_pharmacy,
+              title: 'My medicine orders',
+              subtitle: 'Confirm, pay and track your monthly medicines.',
+              colors: [Colors.green.shade500, Colors.teal.shade300],
+              chips: ['${orders.length} order${orders.length == 1 ? '' : 's'}'],
+            ),
+            for (final o in orders) _OrderCard(order: o),
+          ],
         );
 }
 
@@ -131,12 +148,22 @@ class _OrderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final total = order.total;
+    final accent = switch (order.status) {
+      Fulfilment.cancelled || Fulfilment.failed || Fulfilment.outOfStock => Colors.red.shade400,
+      Fulfilment.delivered || Fulfilment.collected => Colors.green.shade600,
+      Fulfilment.preparing => Colors.orange.shade600,
+      _ => theme.colorScheme.primary,
+    };
     return Card(
       key: Key('order-${order.id}'),
+      clipBehavior: Clip.antiAlias,
+      elevation: 2,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
         onTap: () => context.push(orderRoute(order)),
-        child: Padding(
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(color: accent, width: 5)),
+          ),
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

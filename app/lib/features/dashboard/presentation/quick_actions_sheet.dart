@@ -18,6 +18,7 @@ class QuickAction {
 
 const quickActions = [
   QuickAction('Log Vitals', Icons.favorite_border, '/vitals/log', Key('qa-vitals'), Colors.red),
+  QuickAction('Trends', Icons.insights_outlined, '/trends', Key('qa-trends'), Colors.cyan), // D-87
   QuickAction('Symptoms', Icons.sick_outlined, '/symptom', Key('qa-symptoms'), Colors.orange),
   QuickAction('Messages', Icons.chat_bubble_outline, '/chat', Key('qa-messages'), Colors.blue),
   QuickAction('AI Agent', Icons.smart_toy_outlined, '/ai-agent', Key('qa-agent'), Colors.teal),

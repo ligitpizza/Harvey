@@ -62,6 +62,7 @@ Widget app(FakeDashboardRepository repo) {
       GoRoute(path: '/dashboard', builder: (_, _) => const DashboardPage()),
       for (final p in [
         '/vitals/log',
+        '/trends',
         '/symptom',
         '/chat',
         '/ai-agent',
@@ -289,6 +290,11 @@ void main() {
     expect(find.text('-4 from yesterday'), findsOneWidget);
     expect(find.text('Heart rate 72 bpm (estimate)'), findsOneWidget);
     expect(find.text('Moderate Risk'), findsOneWidget);
+    // D-87: Trends one tap away from the latest reading.
+    await t.ensureVisible(find.byKey(const Key('home-view-trends')));
+    await t.tap(find.byKey(const Key('home-view-trends')));
+    await t.pumpAndSettle();
+    expect(find.text('ROUTE /trends'), findsOneWidget);
   });
 
   tallTest('UC2.1 E1 a failing section shows its own error; others still render', (t) async {
@@ -326,6 +332,7 @@ void main() {
         ),
         for (final p in [
           '/vitals/log',
+          '/trends',
           '/symptom',
           '/chat',
           '/ai-agent',
@@ -340,6 +347,7 @@ void main() {
 
   for (final (key, route) in [
     ('qa-vitals', 'ROUTE /vitals/log'),
+    ('qa-trends', 'ROUTE /trends'), // D-87
     ('qa-symptoms', 'ROUTE /symptom'),
     ('qa-messages', 'ROUTE /chat'),
     ('qa-agent', 'ROUTE /ai-agent'),
@@ -375,8 +383,9 @@ void main() {
     await t.tap(find.byKey(const Key('nav-plus')));
     await t.pumpAndSettle();
     final first = t.getTopLeft(find.byKey(const Key('qa-vitals')));
-    final fourth = t.getTopLeft(find.byKey(const Key('qa-agent')));
-    final fifth = t.getTopLeft(find.byKey(const Key('qa-appointments')));
+    // D-87: Log Vitals, Trends, Symptoms, Messages | AI Agent, Appointments, Orders, Records.
+    final fourth = t.getTopLeft(find.byKey(const Key('qa-messages')));
+    final fifth = t.getTopLeft(find.byKey(const Key('qa-agent')));
     expect(fourth.dy, first.dy); // same row
     expect(fifth.dy, greaterThan(first.dy)); // wraps to the next row
     expect(fifth.dx, first.dx);

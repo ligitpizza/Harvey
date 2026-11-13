@@ -12,6 +12,7 @@ import '../domain/appointment_text.dart';
 import '../state/appointment_providers.dart';
 import 'admin_booking_dialog.dart' show AdminAssignedBadge;
 import 'change_reason_dialog.dart';
+import '../../../shared/widgets/patient_hero.dart';
 
 /// Fig 4.3.6.1 Appointments (FR-7.1, FR-7.4; UC7.1, UC7.2, UC7.5; D-53, D-54).
 /// With [rescheduling], the same screen picks a new time for that appointment.
@@ -173,6 +174,16 @@ class _AppointmentsPageState extends ConsumerState<AppointmentsPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
         children: [
+          // D-87: a clear header for the page.
+          PatientHero(
+            icon: _rescheduling ? Icons.edit_calendar : Icons.event_available,
+            title: _rescheduling ? 'Pick a new time' : 'Appointments',
+            subtitle: _rescheduling
+                ? 'Choose a free slot; your doctor approves the change.'
+                : 'Book a visit with your doctor, or reschedule and cancel one.',
+            colors: [Colors.deepPurple.shade400, Colors.indigo.shade300],
+            chips: const ['Mon–Fri · 9 AM–9 PM'],
+          ),
           if (_rescheduling)
             Card(
               child: ListTile(
