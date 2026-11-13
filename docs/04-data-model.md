@@ -120,7 +120,7 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | fileName | String | Original file name (D-58) | Required |
 | contentType | String | application/pdf / image/jpeg / image/png (D-58) | Required |
 | sizeBytes | Number | File size (D-58) | Required; ≤ 10 MB |
-| category | String | lab_result / prescription / imaging / discharge_summary / referral_letter / other (D-58) | Required (UC6.1) |
+| category | String | lab_result / prescription / imaging / discharge_summary / referral_letter / other (D-58) | Required (UC6.1); `emergency` = automatic emergency event summary (D-86) |
 | uploadedAt | Timestamp | Upload time | Required |
 | sharedWithDoctor | Boolean | Whether shared with the assigned doctor | Default: false |
 | sharedAt | Timestamp | When sharing was granted | Optional; present once shared (UC6.2) |

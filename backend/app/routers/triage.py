@@ -30,6 +30,7 @@ from app.schemas.family import Location
 from app.services.agent_context import AgentDataRepository, get_agent_data_repository
 from app.services.bp import HEART_RATE_MAX, HEART_RATE_MIN
 from app.services.bp import classify as classify_bp
+from app.services.emergency_record import EmergencyEvent, try_store
 from app.services.escalation import (
     AVOID_EXERTION_NOTE,
     CALM_NOTE,
@@ -38,6 +39,12 @@ from app.services.escalation import (
     EscalationPlan,
     Escalator,
     get_escalator,
+)
+from app.services.records import (
+    FileStore,
+    RecordRepository,
+    get_file_store,
+    get_record_repository,
 )
 from app.services.triage import (
     StaleReadingError,
@@ -81,6 +88,8 @@ def submit(
     escalator: Escalator = Depends(get_escalator),
     audit: AuditLogger = Depends(get_audit_logger),
     agent: AgentDataRepository = Depends(get_agent_data_repository),
+    records: RecordRepository = Depends(get_record_repository),
+    files: FileStore = Depends(get_file_store),
 ) -> dict[str, Any]:
     ids = list(dict.fromkeys(body.symptoms))
     catalog = repo.symptoms(ids)
@@ -160,6 +169,38 @@ def submit(
         )
         if emergency:
             plan.family_emergency = "triage"
+            # D-86: the emergency goes into the patient's Health Records as a PDF summary.
+            doctor_id = profile.get("assignedDoctorId")
+            doctor = users.get_user(str(doctor_id)) if doctor_id else None
+            try_store(
+                records,
+                files,
+                EmergencyEvent(
+                    patient_id=user.uid,
+                    patient_name=name,
+                    trigger="Symptom checker result: seek emergency care",
+                    at=now,
+                    systolic=inputs.systolic,
+                    diastolic=inputs.diastolic,
+                    heart_rate=inputs.heart_rate,
+                    symptoms=[catalog[i].name for i in ids],
+                    severity=body.severity.value,
+                    risk_lines=[f"Overall risk: {risk}"],
+                    notified=[
+                        *(
+                            [
+                                f"Assigned doctor: {(doctor or {}).get('name') or 'doctor'} "
+                                "(urgent triage alert)"
+                            ]
+                            if doctor_id
+                            else []
+                        ),
+                        "Linked family members: emergency alert with location (if linked)",
+                        "The patient: 999 advice in the app",
+                    ],
+                    actions=["AI Health Agent told the patient to stay calm while help comes"],
+                ),
+            )
         plan.agent_note = CALM_NOTE if emergency else AVOID_EXERTION_NOTE
     elif inputs.systolic is not None and inputs.diastolic is not None:
         # D-37 Mild band (130-139 / 80-89): doctor gets the daily BP report by email.

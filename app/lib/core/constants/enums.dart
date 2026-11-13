@@ -461,6 +461,7 @@ enum RecordCategory {
   imaging('imaging', 'Imaging / scan'),
   dischargeSummary('discharge_summary', 'Discharge summary'),
   referralLetter('referral_letter', 'Referral letter'),
+  emergency('emergency', 'Emergency summary'), // D-86: made by Harvey, not uploaded
   other('other', 'Other');
 
   const RecordCategory(this.value, this.label);

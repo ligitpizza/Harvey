@@ -27,6 +27,7 @@ CATEGORY_LABELS = {
     "imaging": "Imaging / scan",
     "discharge_summary": "Discharge summary",
     "referral_letter": "Referral letter",
+    "emergency": "Emergency summary",  # D-86: made by Harvey, not uploadable
     "other": "Other",
 }
 

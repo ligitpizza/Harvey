@@ -88,13 +88,14 @@ class _CategoryDialogState extends State<_CategoryDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             for (final c in RecordCategory.values)
-              RadioListTile<RecordCategory>(
-                key: Key('category-${c.value}'),
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                value: c,
-                title: Text(c.label),
-              ),
+              if (c != RecordCategory.emergency)
+                RadioListTile<RecordCategory>(
+                  key: Key('category-${c.value}'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  value: c,
+                  title: Text(c.label),
+                ),
           ],
         ),
       ),
@@ -119,6 +120,7 @@ IconData recordIcon(HealthRecord r) => r.isPdf ? Icons.picture_as_pdf : Icons.im
   RecordCategory.imaging => (Icons.monitor_heart_outlined, Colors.indigo.shade400),
   RecordCategory.dischargeSummary => (Icons.local_hospital_outlined, Colors.red.shade400),
   RecordCategory.referralLetter => (Icons.mail_outline, Colors.orange.shade700),
+  RecordCategory.emergency => (Icons.emergency_outlined, Colors.red.shade700),
   RecordCategory.other => (Icons.description_outlined, Colors.blueGrey),
 };
 

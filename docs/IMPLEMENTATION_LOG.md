@@ -1593,3 +1593,11 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   open the appointment details.
 - Tests: backend 764 (+3 skipped); Flutter 648.
 
+### 2026-11-13 — Emergency event summary in Health Records (D-86)
+
+- `services/emergency_record.py` builds the PDF (fpdf) and saves it as a health record
+  (category `emergency`, shared with the doctor) from the Emergency-band branch of
+  `POST /vitals` and the emergency outcome of `POST /triage`. App: new category label and icon;
+  not offered when uploading.
+- Tests: backend 768 (+3 skipped); Flutter 650.
+

@@ -219,6 +219,7 @@
     "imaging",
     "discharge_summary",
     "referral_letter",
+    "emergency",
     "other"
   ]
 }

@@ -105,6 +105,7 @@ class RecordCategory(StrEnum):
     IMAGING = "imaging"
     DISCHARGE_SUMMARY = "discharge_summary"
     REFERRAL_LETTER = "referral_letter"
+    EMERGENCY = "emergency"  # D-86: automatic emergency event summary
     OTHER = "other"
 
 

@@ -21,9 +21,10 @@ from app.ml.risk_inputs import MIN_READINGS, existing_conditions
 from app.ml.risk_model import RiskModel, RiskPrediction, get_risk_model
 from app.schemas.vitals import LogReadingRequest, LogReadingResponse
 from app.services.agent_context import AgentDataRepository, get_agent_data_repository
-from app.services.appointment_extras import auto_book_emergency
+from app.services.appointment_extras import auto_book_emergency, when_text
 from app.services.appointments import AppointmentRepository, get_appointment_repository
 from app.services.bp import alert_level, classify, plausibility_error
+from app.services.emergency_record import EmergencyEvent, risk_lines, try_store
 from app.services.escalation import (
     AlertRepository,
     Escalator,
@@ -34,6 +35,12 @@ from app.services.escalation import (
 )
 from app.services.notifications import Notifier, get_notifier
 from app.services.recommendations import recommendations
+from app.services.records import (
+    FileStore,
+    RecordRepository,
+    get_file_store,
+    get_record_repository,
+)
 from app.services.risk import (
     NotEnoughReadingsError,
     RiskDataRepository,
@@ -62,6 +69,8 @@ def log_reading(
     agent: AgentDataRepository = Depends(get_agent_data_repository),
     appointments: AppointmentRepository = Depends(get_appointment_repository),
     notifier: Notifier = Depends(get_notifier),
+    records: RecordRepository = Depends(get_record_repository),
+    files: FileStore = Depends(get_file_store),
 ) -> LogReadingResponse:
     reason = plausibility_error(body.systolic, body.diastolic, body.heartRate)
     if reason is not None:
@@ -165,6 +174,7 @@ def log_reading(
         # The reading and risk score are already saved; an alerting failure must not
         # make the patient think the reading was lost (and log it twice).
         log.exception("Escalation failed for reading %s", reading_id)
+    booked: str | None = None
     if plan.alert_level is AlertLevel.EMERGENCY:
         # docs/06 Emergency band / D-53: book the next free slot with the patient's doctor.
         try:
@@ -185,6 +195,39 @@ def log_reading(
                 )
         except Exception:
             log.exception("Emergency auto-booking failed for reading %s", reading_id)
+        # D-86: the event goes into the patient's Health Records as a PDF summary.
+        doctor_id = profile.get("assignedDoctorId")
+        doctor = appointments.user(str(doctor_id)) if doctor_id else None
+        doctor_name = str((doctor or {}).get("name") or "the assigned doctor")
+        family = alerts.family_member_ids(user.uid)
+        appt = appointments.get(booked) if booked else None
+        try_store(
+            records,
+            files,
+            EmergencyEvent(
+                patient_id=user.uid,
+                patient_name=str(profile.get("name") or "Patient"),
+                trigger="Blood pressure reading in the hypertensive crisis range",
+                at=datetime.now(UTC),
+                systolic=body.systolic,
+                diastolic=body.diastolic,
+                heart_rate=body.heartRate,
+                risk_lines=risk_lines(prediction.scores) if prediction else [],
+                notified=[
+                    *([f"Assigned doctor: {doctor_name} (critical alert)"] if doctor_id else []),
+                    *(
+                        [f"{len(family)} linked family member(s): emergency alert with location"]
+                        if family
+                        else []
+                    ),
+                    "The patient: 999 advice in the app",
+                ],
+                appointment=(
+                    f"{when_text(appt.data['dateTime'])} with {doctor_name}" if appt else None
+                ),
+                actions=["AI Health Agent told the patient to stay calm and call 999 if unwell"],
+            ),
+        )
     if plan.agent_note:
         # D-37: the AI Health Agent's fixed advice (avoid exertion / stay calm) in the chat.
         try:
