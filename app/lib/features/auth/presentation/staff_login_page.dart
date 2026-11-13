@@ -23,6 +23,7 @@ class _StaffLoginPageState extends ConsumerState<StaffLoginPage> {
   final _form = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
+  final _emailFocus = FocusNode();
   UserRole _role = UserRole.doctor;
   bool _obscure = true;
   bool _submitting = false;
@@ -32,7 +33,19 @@ class _StaffLoginPageState extends ConsumerState<StaffLoginPage> {
   void dispose() {
     _email.dispose();
     _password.dispose();
+    _emailFocus.dispose();
     super.dispose();
+  }
+
+  /// D-84: after a failed sign-in (or a role switch) start again with empty fields and the
+  /// cursor in Email, so the user can retype straight away.
+  void _clearFields() {
+    _email.clear();
+    _password.clear();
+    _form.currentState?.reset();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _emailFocus.requestFocus();
+    });
   }
 
   Future<void> _submit() async {
@@ -50,7 +63,14 @@ class _StaffLoginPageState extends ConsumerState<StaffLoginPage> {
             app: ClientApp.staff,
           );
     } on AuthFailure catch (f) {
-      if (mounted) setState(() => _error = f.message);
+      if (mounted) {
+        setState(() => _error = f.message);
+        // Wrong email or password, or the wrong role: clear both and let them retype.
+        if (f.reason == LoginFailureReason.invalidCredentials ||
+            f.reason == LoginFailureReason.roleMismatch) {
+          _clearFields();
+        }
+      }
     } catch (_) {
       if (mounted) setState(() => _error = AuthMessages.generic);
     } finally {
@@ -96,7 +116,13 @@ class _StaffLoginPageState extends ConsumerState<StaffLoginPage> {
                         child: RoleToggle(
                           roles: const [UserRole.doctor, UserRole.admin, UserRole.pharmacist],
                           selected: _role,
-                          onChanged: (r) => setState(() => _role = r),
+                          onChanged: (r) {
+                            setState(() {
+                              _role = r;
+                              _error = null;
+                            });
+                            _clearFields();
+                          },
                           showIcons: false,
                         ),
                       ),
@@ -104,6 +130,7 @@ class _StaffLoginPageState extends ConsumerState<StaffLoginPage> {
                       TextFormField(
                         key: const Key('staff-email'),
                         controller: _email,
+                        focusNode: _emailFocus,
                         keyboardType: TextInputType.emailAddress,
                         autofillHints: const [AutofillHints.email],
                         decoration: const InputDecoration(

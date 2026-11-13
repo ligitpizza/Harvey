@@ -324,6 +324,51 @@ void main() {
       expect(repo.lastSelectedRole, UserRole.admin);
       expect(find.text(AuthMessages.roleMismatch), findsOneWidget);
     });
+
+    tallTest('D-84 a wrong email or password clears both fields to retype', (t) async {
+      final repo = FakeAuthRepository()
+        ..signInError = const AuthFailure(
+          LoginFailureReason.invalidCredentials,
+          'Incorrect email or password.',
+        );
+      await t.pumpWidget(harness(const StaffLoginPage(), repo: repo, app: ClientApp.staff));
+      await fill(t, 'staff-email', 'd@h.my');
+      await fill(t, 'staff-password', 'wrong');
+      await t.tap(find.byKey(const Key('staff-login-submit')));
+      await t.pumpAndSettle();
+      expect(find.text('Incorrect email or password.'), findsOneWidget);
+      TextField field(String key) => t.widget<TextField>(
+        find.descendant(of: find.byKey(Key(key)), matching: find.byType(TextField)),
+      );
+      expect(field('staff-email').controller!.text, isEmpty);
+      expect(field('staff-password').controller!.text, isEmpty);
+      expect(field('staff-email').focusNode!.hasFocus, isTrue);
+      // And they can type again straight away.
+      await fill(t, 'staff-email', 'doctor@h.my');
+      expect(field('staff-email').controller!.text, 'doctor@h.my');
+    });
+
+    tallTest('D-84 switching role clears the fields and the error', (t) async {
+      final repo = FakeAuthRepository()
+        ..signInError = const AuthFailure(
+          LoginFailureReason.invalidCredentials,
+          'Incorrect email or password.',
+        );
+      await t.pumpWidget(harness(const StaffLoginPage(), repo: repo, app: ClientApp.staff));
+      await fill(t, 'staff-email', 'd@h.my');
+      await fill(t, 'staff-password', 'pw');
+      await t.tap(find.text('Pharmacist'));
+      await t.pumpAndSettle();
+      expect(find.text('d@h.my'), findsNothing);
+      await fill(t, 'staff-email', 'x@h.my');
+      await fill(t, 'staff-password', 'pw');
+      await t.tap(find.byKey(const Key('staff-login-submit')));
+      await t.pumpAndSettle();
+      expect(find.text('Incorrect email or password.'), findsOneWidget);
+      await t.tap(find.text('Admin'));
+      await t.pumpAndSettle();
+      expect(find.text('Incorrect email or password.'), findsNothing);
+    });
   });
 
   group('status pages', () {

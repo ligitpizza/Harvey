@@ -20,9 +20,7 @@ void main() {
             title: 'Inventory',
             subtitle: 'Medicines and stock.',
             icon: Icons.inventory_2_outlined,
-            actions: [
-              FilledButton(onPressed: () => tapped = true, child: const Text('Import')),
-            ],
+            actions: [FilledButton(onPressed: () => tapped = true, child: const Text('Import'))],
           ),
         ),
       ),
