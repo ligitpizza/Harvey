@@ -111,6 +111,7 @@ Widget portal(String location, UserRole role, Widget page) {
       notificationsRepositoryProvider.overrideWithValue(notes),
       apiClientProvider.overrideWithValue(api),
       authRepositoryProvider.overrideWithValue(auth),
+      clientAppProvider.overrideWithValue(ClientApp.staff),
       ordersRepositoryProvider.overrideWithValue(orders),
       currentUserProvider.overrideWith((ref) => Stream.value(staff(role))),
       authUidProvider.overrideWith((ref) => Stream.value('u1')),
@@ -329,13 +330,23 @@ void main() {
     await t.ensureVisible(find.byKey(const Key('staff-password-reset')));
     await t.tap(find.byKey(const Key('staff-password-reset')));
     await t.pumpAndSettle();
-    expect(auth.calls, contains('reset'));
-    expect(find.textContaining('We sent a link to tan@harvey.my'), findsOneWidget);
-
+    // D-80: the code flow, with the email filled in and the code sent straight away.
+    expect(auth.calls, contains('code:tan@harvey.my'));
+    expect(find.byKey(const Key('reset-sent')), findsOneWidget);
+    expect(find.byKey(const Key('reset-email')), findsNothing);
+    await t.enterText(find.byKey(const Key('reset-code')), '123456');
+    await t.enterText(find.byKey(const Key('reset-password')), 'NewPass123');
+    await t.enterText(find.byKey(const Key('reset-confirm')), 'NewPass123');
+    await t.tap(find.byKey(const Key('reset-verify')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('reset-sign-in-again')));
+    await t.pumpAndSettle();
+    expect(auth.calls, contains('signOut'));
     await t.ensureVisible(find.byKey(const Key('bell-pref-orders')));
     await t.tap(find.byKey(const Key('bell-pref-orders')));
     await t.pumpAndSettle();
     expect(notes.saved['orders'], isFalse);
+    await t.pump(const Duration(seconds: 31)); // let the resend countdown finish
   });
 
   test('notifications lead to the right page for each role', () {

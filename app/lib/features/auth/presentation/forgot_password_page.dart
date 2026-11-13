@@ -12,8 +12,16 @@ import '../state/auth_providers.dart';
 /// UC1.2 A1 forgot password with an email code (D-80):
 /// 1. enter the email; a 6-digit code is emailed (valid 10 minutes);
 /// 2. enter the code and a new password; then sign in with it.
+///
+/// From portal Settings (D-80) the signed-in staff member's [email] is given: the code
+/// is sent straight away, and afterwards they sign in again with the new password.
 class ForgotPasswordPage extends ConsumerStatefulWidget {
-  const ForgotPasswordPage({super.key});
+  const ForgotPasswordPage({super.key, this.email});
+
+  /// Settings: the account's email (fixed; skips the email step).
+  final String? email;
+
+  bool get fromSettings => email != null;
 
   @override
   ConsumerState<ForgotPasswordPage> createState() => _ForgotPasswordPageState();
@@ -47,6 +55,16 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
       setState(() => _wait--);
       if (_wait <= 0) t.cancel();
     });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final email = widget.email;
+    if (email != null) {
+      _email.text = email;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _sendCode(resend: true));
+    }
   }
 
   @override
@@ -120,7 +138,22 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
     }
   }
 
-  void _back() => context.canPop() ? context.pop() : context.go('/login');
+  void _back() {
+    if (widget.fromSettings) {
+      Navigator.of(context).maybePop();
+    } else {
+      context.canPop() ? context.pop() : context.go('/login');
+    }
+  }
+
+  /// Settings: the old sessions were signed out by the server, so sign in again here.
+  Future<void> _signInAgain() async {
+    // Read everything first: the page closes before the sign-out finishes.
+    final app = ref.read(clientAppProvider);
+    final auth = ref.read(authRepositoryProvider);
+    Navigator.of(context).maybePop();
+    await auth.signOut(app);
+  }
 
   Widget _errorText() => _error == null
       ? const SizedBox.shrink()
@@ -238,7 +271,14 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
         textAlign: TextAlign.center,
       ),
       const SizedBox(height: 24),
-      FilledButton(onPressed: _back, child: const Text('Back to sign in')),
+      if (widget.fromSettings)
+        FilledButton(
+          key: const Key('reset-sign-in-again'),
+          onPressed: _signInAgain,
+          child: const Text('Sign in with the new password'),
+        )
+      else
+        FilledButton(onPressed: _back, child: const Text('Back to sign in')),
     ],
   );
 

@@ -10,6 +10,7 @@ import 'package:hypertension/features/auth/state/auth_providers.dart';
 import 'package:hypertension/features/dashboard/data/dashboard_repository.dart';
 import 'package:hypertension/features/dashboard/state/dashboard_providers.dart';
 import 'package:hypertension/features/family/data/family_repository.dart';
+import 'package:hypertension/features/family/data/background_location.dart';
 import 'package:hypertension/features/family/data/location_source.dart';
 import 'package:hypertension/features/family/data/patient_location.dart';
 import 'package:hypertension/features/family/presentation/alert_page.dart';
@@ -210,6 +211,33 @@ class FakePatientLocations implements PatientLocationRepository {
   }
 }
 
+/// D-80: records what the background job was asked to do.
+class FakeBackground implements BackgroundLocation {
+  bool always = false;
+  bool grant = true;
+  final calls = <String>[];
+
+  @override
+  Future<bool> allowedAllTheTime() async => always;
+
+  @override
+  Future<bool> askAllTheTime() async {
+    calls.add('ask');
+    always = grant;
+    return grant;
+  }
+
+  @override
+  Future<void> openSettings() async => calls.add('settings');
+
+  @override
+  Future<void> start() async => calls.add('start');
+
+  @override
+  Future<void> stop() async => calls.add('stop');
+}
+
+late FakeBackground background;
 late FakePatientLocations locations;
 late FakeFamilyRepository repo;
 late FakeLocation location;
@@ -258,6 +286,7 @@ Widget app(String initial, {String uid = 'f1'}) {
 
 void main() {
   setUp(() {
+    background = FakeBackground();
     locations = FakePatientLocations();
     repo = FakeFamilyRepository();
     location = FakeLocation();
@@ -575,6 +604,7 @@ void main() {
       overrides: [
         locationSourceProvider.overrideWithValue(location),
         patientLocationRepositoryProvider.overrideWithValue(locations),
+        backgroundLocationProvider.overrideWithValue(background),
         authUidProvider.overrideWith((ref) => Stream.value('p1')),
       ],
       child: const MaterialApp(home: FamilyLocationReporter(child: Text('HOME'))),
@@ -585,6 +615,7 @@ void main() {
       await t.pumpAndSettle();
       expect(locations.calls, ['save:p1:3.139,101.6869']);
       expect(location.asked, [false]); // never prompts for permission
+      expect(background.calls, ['start']); // keeps going while closed (if allowed)
       await t.pumpWidget(const SizedBox()); // dispose: stops the timer
     });
 
@@ -593,6 +624,7 @@ void main() {
       await t.pumpWidget(reporter());
       await t.pumpAndSettle();
       expect(locations.calls, isEmpty);
+      expect(background.calls, ['stop']); // and no background updates
     });
 
     testWidgets('nothing is saved without location permission', (t) async {

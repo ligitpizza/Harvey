@@ -3,6 +3,10 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hypertension/features/family/data/background_location.dart';
+import 'package:hypertension/features/family/data/location_source.dart';
+import 'package:hypertension/features/family/data/patient_location.dart';
+import 'package:hypertension/features/family/state/family_providers.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hypertension/core/constants/enums.dart';
 import 'package:hypertension/features/auth/domain/app_user.dart';
@@ -120,6 +124,53 @@ OnboardingData stored() => OnboardingData.fromStored(
   gender: Gender.female,
 );
 
+/// D-80: background location and the stored family-map location.
+class _Bg implements BackgroundLocation {
+  bool always = false;
+  bool grant = true;
+  final calls = <String>[];
+
+  @override
+  Future<bool> allowedAllTheTime() async => always;
+
+  @override
+  Future<bool> askAllTheTime() async {
+    calls.add('ask');
+    always = grant;
+    return grant;
+  }
+
+  @override
+  Future<void> openSettings() async => calls.add('settings');
+
+  @override
+  Future<void> start() async => calls.add('start');
+
+  @override
+  Future<void> stop() async => calls.add('stop');
+}
+
+class _Locations implements PatientLocationRepository {
+  final calls = <String>[];
+
+  @override
+  Stream<PatientLocation?> watch(String patientId) => Stream.value(null);
+
+  @override
+  Future<void> save(
+    String patientId, {
+    required double lat,
+    required double lng,
+    double? accuracy,
+  }) async => calls.add('save');
+
+  @override
+  Future<void> setSharing(String patientId, bool on) async => calls.add('sharing:$on');
+}
+
+var bg = _Bg();
+var locs = _Locations();
+
 Widget app(
   FakeSettingsRepository repo,
   FakeAuthRepository auth, {
@@ -144,6 +195,9 @@ Widget app(
       authRepositoryProvider.overrideWithValue(auth),
       clientAppProvider.overrideWithValue(ClientApp.patient),
       currentUserProvider.overrideWith((ref) => Stream.value(me)),
+      backgroundLocationProvider.overrideWithValue(bg),
+      patientLocationRepositoryProvider.overrideWithValue(locs),
+      locationSourceProvider.overrideWithValue(const NoLocationSource()),
     ],
     child: MaterialApp.router(routerConfig: router),
   );
@@ -154,6 +208,8 @@ void main() {
   late FakeAuthRepository auth;
 
   setUp(() {
+    bg = _Bg();
+    locs = _Locations();
     repo = FakeSettingsRepository()..stored = stored();
     auth = FakeAuthRepository();
   });
@@ -419,6 +475,34 @@ void main() {
       await c.read(medicationsProvider.future);
       expect(c.read(reminderMedicationsProvider), hasLength(expected));
     }
+  });
+
+  testWidgets('D-80 turning on updates while Harvey is closed asks for "all the time"', (t) async {
+    t.view.physicalSize = const Size(900, 2600);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(app(repo, auth));
+    await t.pumpAndSettle();
+    expect(find.text('Off: only while Harvey is open'), findsOneWidget);
+    await t.tap(find.byKey(const Key('enable-background-location')));
+    await t.pumpAndSettle();
+    expect(find.textContaining('Allow all the time'), findsOneWidget);
+    await t.tap(find.byKey(const Key('allow-background')));
+    await t.pumpAndSettle();
+    expect(bg.calls, ['ask', 'start']);
+    expect(find.textContaining('On: about every 15 minutes'), findsOneWidget);
+  });
+
+  testWidgets('D-80 sharing off stops the background updates', (t) async {
+    t.view.physicalSize = const Size(900, 2600);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(app(repo, auth));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('settings-share-location')));
+    await t.pumpAndSettle();
+    expect(locs.calls, ['sharing:false']);
+    expect(bg.calls, ['stop']);
   });
 }
 

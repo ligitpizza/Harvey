@@ -58,15 +58,21 @@ class _FamilyLocationReporterState extends ConsumerState<FamilyLocationReporter>
       if (uid == null) return;
       final repo = ref.read(patientLocationRepositoryProvider);
       final saved = await repo.watch(uid).first;
-      if (saved != null && !saved.sharing) return; // the patient switched it off
+      if (saved != null && !saved.sharing) {
+        // The patient switched it off: no background updates either.
+        await ref.read(backgroundLocationProvider).stop();
+        return;
+      }
       final source = ref.read(locationSourceProvider);
       if (!await source.granted()) return;
       final loc = await source.current();
       if (loc == null || !mounted) return;
       await repo.save(uid, lat: loc['lat']!, lng: loc['lng']!);
       _last = now;
-      // Only once sharing works: keep it fresh while the app stays open.
+      // Only once sharing works: keep it fresh while the app stays open, and while it
+      // is closed when "Allow all the time" is granted (start() checks that).
       _timer ??= Timer.periodic(widget.every, (_) => _report(force: true));
+      await ref.read(backgroundLocationProvider).start();
     } catch (_) {
       // Offline or signed out: try again on the next resume.
     }

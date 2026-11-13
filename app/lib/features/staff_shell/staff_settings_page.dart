@@ -5,9 +5,9 @@ import '../../core/constants/enums.dart';
 import '../../core/theme/theme_mode.dart';
 import '../../shared/providers/api_providers.dart';
 import '../../shared/services/api/api_client.dart';
-import '../auth/state/auth_providers.dart';
 import '../notifications/data/notifications_repository.dart';
 import '../notifications/state/notification_providers.dart';
+import '../auth/presentation/forgot_password_page.dart';
 
 /// D-77: the signed-in staff member's own details.
 final staffProfileProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
@@ -200,21 +200,13 @@ class _PasswordReset extends ConsumerStatefulWidget {
 }
 
 class _PasswordResetState extends ConsumerState<_PasswordReset> {
-  bool _sent = false;
-
-  Future<void> _send() async {
+  /// D-80: the same email-code flow as "Forgot password", from Gmail (D-81).
+  Future<void> _change() async {
     final email = widget.email;
     if (email == null) return;
-    try {
-      await ref.read(authRepositoryProvider).sendPasswordReset(email);
-      setState(() => _sent = true);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not send the email. Please try again.')),
-        );
-      }
-    }
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => ForgotPasswordPage(email: email)));
   }
 
   @override
@@ -222,17 +214,16 @@ class _PasswordResetState extends ConsumerState<_PasswordReset> {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Text(
-        _sent
-            ? 'We sent a link to ${widget.email}. Open it to choose a new password.'
-            : 'We will email you a secure link to choose a new password.',
+        'We will email a 6-digit code to ${widget.email ?? 'your email'}. Enter it with your '
+        'new password; you then sign in again.',
         key: const Key('staff-password-note'),
       ),
       const SizedBox(height: 8),
       OutlinedButton.icon(
         key: const Key('staff-password-reset'),
-        onPressed: widget.email == null || _sent ? null : _send,
-        icon: const Icon(Icons.mail_outline),
-        label: const Text('Send password reset email'),
+        onPressed: widget.email == null ? null : _change,
+        icon: const Icon(Icons.password),
+        label: const Text('Change password'),
       ),
     ],
   );

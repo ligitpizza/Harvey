@@ -1551,3 +1551,17 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Deviations / additions: `doctor_assignment_requests.declineReason`, `personalInfo.homeAddress`.
 - Tests: backend 761 (+3 skipped); Flutter 634.
 
+### 2026-11-13 — Family map while Harvey is closed; Settings password change by code (D-80)
+
+- Background location (agreed with Ping): `workmanager` package (approved) runs
+  `family/data/background_location.dart` about every 15 minutes on Android (Firebase started in the
+  background isolate, same emulator settings as the app); it needs "Allow all the time"
+  (`ACCESS_BACKGROUND_LOCATION`), a signed-in patient and sharing on, and cancels itself when
+  signed out. Settings shows "Keep updating while Harvey is closed" with an explanation and
+  "Turn on"; sharing off and sign-out stop it; the open-app reporter starts it after a save.
+  Android decides exact timing; some brands' battery savers delay it.
+- Portal Settings "Change password" now opens the email-code flow with the account's email (the
+  code is sent at once); afterwards the staff member signs in again. All password emails now come
+  from Gmail (D-81); Firebase's own reset email is no longer used.
+- Tests: Flutter 636; patient debug APK builds.
+

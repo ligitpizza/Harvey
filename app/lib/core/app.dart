@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../features/auth/data/auth_repository.dart';
 import '../features/auth/state/auth_providers.dart';
 import '../features/medications/state/medication_providers.dart';
+import '../features/family/state/family_providers.dart' show backgroundLocationProvider;
 import '../features/messaging/state/messaging_providers.dart';
 import '../features/notifications/state/notification_providers.dart';
 import '../shared/services/push/notification_taps.dart';
@@ -51,6 +52,10 @@ class CareFlowApp extends ConsumerWidget {
     // D-33: register this device for alerts once a user of this app is signed in.
     ref.listen(currentUserProvider, (previous, next) {
       final user = next.value;
+      // D-80: signed out on this phone -> no more background location for that patient.
+      if (user == null && previous?.value != null) {
+        ref.read(backgroundLocationProvider).stop().catchError((Object _) {});
+      }
       if (user == null || user.uid == previous?.value?.uid) return;
       if (wrongAppMessage(user.role, ref.read(clientAppProvider)) != null) return;
       ref.read(pushServiceProvider).register();

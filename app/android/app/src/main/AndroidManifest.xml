@@ -13,6 +13,8 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <!-- FR-14.2 / D-62: GPS for emergency alerts (foreground only; no background tracking). -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <!-- D-80: family map updates while Harvey is closed ("Allow all the time"). -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <uses-feature android:name="android.hardware.camera.flash" android:required="false"/>

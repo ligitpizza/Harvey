@@ -286,6 +286,7 @@ class _ShareLocationTileState extends ConsumerState<_ShareLocationTile> {
         if (loc != null) await repo.save(widget.uid, lat: loc['lat']!, lng: loc['lng']!);
       } else {
         await repo.setSharing(widget.uid, false);
+        await ref.read(backgroundLocationProvider).stop(); // D-80
       }
     } catch (_) {
       if (mounted) {
@@ -298,10 +299,97 @@ class _ShareLocationTileState extends ConsumerState<_ShareLocationTile> {
     }
   }
 
+  bool? _always; // "Allow all the time" granted (null = not checked yet)
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAlways();
+  }
+
+  Future<void> _checkAlways() async {
+    try {
+      final ok = await ref.read(backgroundLocationProvider).allowedAllTheTime();
+      if (mounted) setState(() => _always = ok);
+    } catch (_) {}
+  }
+
+  /// D-80: explain, then ask Android for "Allow all the time" and start the job.
+  Future<void> _enableBackground() async {
+    final bg = ref.read(backgroundLocationProvider);
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Update while Harvey is closed?'),
+        content: const Text(
+          'Your family map then updates about every 15 minutes even when Harvey is closed.\n\n'
+          'Android will ask you to choose "Allow all the time" for Harvey\'s location. '
+          'On some phones (e.g. Xiaomi, Oppo, Vivo) also turn off battery optimisation for '
+          'Harvey, or updates may stop. You can switch this off any time.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Not now')),
+          FilledButton(
+            key: const Key('allow-background'),
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    if (go != true) return;
+    setState(() => _busy = true);
+    try {
+      final granted = await bg.askAllTheTime();
+      if (granted) {
+        await bg.start();
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Choose "Allow all the time" under Location for Harvey.'),
+            action: SnackBarAction(label: 'Open settings', onPressed: bg.openSettings),
+          ),
+        );
+      }
+    } catch (_) {
+      // Permission screens can fail on unusual phones; the status below stays accurate.
+    } finally {
+      await _checkAlways();
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final loc = ref.watch(patientLocationProvider(widget.uid)).value;
     final on = loc?.sharing ?? true;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _shareSwitch(on),
+        if (on)
+          ListTile(
+            key: const Key('settings-background-location'),
+            contentPadding: const EdgeInsets.only(left: 72, right: 16),
+            title: const Text('Keep updating while Harvey is closed'),
+            subtitle: Text(
+              _always == true
+                  ? 'On: about every 15 minutes ("Allow all the time")'
+                  : 'Off: only while Harvey is open',
+            ),
+            trailing: _always == true
+                ? Icon(Icons.check_circle, color: Colors.green.shade600)
+                : TextButton(
+                    key: const Key('enable-background-location'),
+                    onPressed: _busy ? null : _enableBackground,
+                    child: const Text('Turn on'),
+                  ),
+          ),
+      ],
+    );
+  }
+
+  Widget _shareSwitch(bool on) {
     return SwitchListTile(
       key: const Key('settings-share-location'),
       secondary: SettingsIcon(Icons.share_location, Colors.teal.shade600),

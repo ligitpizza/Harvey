@@ -5,10 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/constants/enums.dart';
 import '../../../shared/providers/api_providers.dart';
 import '../../auth/state/auth_providers.dart';
 import '../data/family_repository.dart';
 import '../data/location_source.dart';
+import '../data/background_location.dart';
 import '../data/patient_location.dart';
 
 Duration? _noRetry(int _, Object _) => null;
@@ -26,6 +28,14 @@ final locationSourceProvider = Provider<LocationSource>(
 final patientLocationRepositoryProvider = Provider<PatientLocationRepository>(
   (ref) => FirestorePatientLocationRepository(FirebaseFirestore.instance),
 );
+
+/// D-80: the 15-minute background job (Android patient app only).
+final backgroundLocationProvider = Provider<BackgroundLocation>((ref) {
+  if (kIsWeb || ref.watch(clientAppProvider) != ClientApp.patient) {
+    return const NoBackgroundLocation();
+  }
+  return WorkmanagerBackgroundLocation();
+});
 
 final patientLocationProvider = StreamProvider.family<PatientLocation?, String>(
   (ref, patientId) => ref.watch(patientLocationRepositoryProvider).watch(patientId),
