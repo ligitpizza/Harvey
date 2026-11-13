@@ -667,6 +667,23 @@ class ApiClient {
   /// D-82: the clinic's name, address and map point (booking-confirmed map).
   Future<Map<String, dynamic>> clinicLocation() => _get('/appointments/clinic');
 
+  // D-85 cashflow, order payments and receipts.
+  Future<Map<String, dynamic>> cashflow(int days) => _getQuery('/cashflow', {'days': days});
+
+  Future<Map<String, dynamic>> orderPayments(String orderId) => _get('/orders/$orderId/payments');
+
+  Future<List<int>> receiptPdf(String orderId) async {
+    try {
+      final res = await _dio.get<List<int>>(
+        '/orders/$orderId/receipt.pdf',
+        options: Options(responseType: ResponseType.bytes),
+      );
+      return res.data ?? const [];
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
   // D-80 staff leave and walk-ins.
   Future<Map<String, dynamic>> leaveRequests() => _get('/leave');
 

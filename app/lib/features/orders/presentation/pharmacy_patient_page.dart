@@ -122,8 +122,20 @@ class PharmacyPatientPage extends ConsumerWidget {
                   if (p.orders.isEmpty) const Text('None.'),
                   for (final o in p.orders)
                     ListTile(
+                      key: Key('patient-order-${o.id}'),
                       dense: true,
                       contentPadding: EdgeInsets.zero,
+                      // D-85: open the order with its payments and receipt.
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.go(
+                        Uri(
+                          path: '/pharmacy/order/${o.id}',
+                          queryParameters: {
+                            'back': GoRouterState.of(context).uri.path,
+                            'backLabel': 'Patient',
+                          },
+                        ).toString(),
+                      ),
                       title: Text('${o.ref} · ${cycleLabel(o.cycleDate)}'),
                       subtitle: Text(
                         [

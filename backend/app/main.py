@@ -15,6 +15,7 @@ from app.routers import (
     appointments,
     assignments,
     auth,
+    cashflow,
     conversations,
     devices,
     doctor_prescriptions,
@@ -95,6 +96,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(password_otp.router, prefix=API_PREFIX)
     app.include_router(leave.router, prefix=API_PREFIX)
     app.include_router(walk_in.router, prefix=API_PREFIX)
+    app.include_router(cashflow.router, prefix=API_PREFIX)
     app.include_router(agent.router, prefix=API_PREFIX)
     app.include_router(orders.router, prefix=API_PREFIX)
     app.include_router(pharmacy_chat.router, prefix=API_PREFIX)

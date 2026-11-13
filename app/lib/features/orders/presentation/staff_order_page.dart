@@ -8,6 +8,7 @@ import '../data/order_models.dart';
 import '../state/orders_providers.dart';
 import 'order_widgets.dart';
 import 'pharmacy_shared.dart';
+import 'cashflow_page.dart';
 
 /// D-73: one order in the staff portal (admin Orders / Deliveries rows): medicines and
 /// prices, payment, collection or delivery details, courier and the status history.
@@ -122,10 +123,8 @@ class StaffOrderPage extends ConsumerWidget {
                     key: const Key('staff-order-total'),
                   ),
                 ]),
-                section('Payment', [
-                  row('Status', o.paymentStatus),
-                  row('Paid at', _when(o.paidAt)),
-                ]),
+                // D-85: payment attempts, the receipt and its PDF.
+                OrderPaymentCard(orderId: orderId),
                 section(o.isDelivery ? 'Home delivery' : 'Collection', [
                   row('Method', switch (o.method) {
                     homeDelivery => 'Home delivery',

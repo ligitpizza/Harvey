@@ -269,6 +269,10 @@ class OrderRepository(Protocol):
 
     def add_transaction(self, tx_id: str, data: dict[str, Any]) -> None: ...
 
+    def transactions(self, order_id: str | None = None) -> list[tuple[str, dict[str, Any]]]:
+        """D-85: payment_transactions (all, or one order's)."""
+        ...
+
     def events(self, order_id: str) -> list[dict[str, Any]]: ...
 
     def add_event(self, data: dict[str, Any]) -> None: ...
@@ -406,6 +410,12 @@ class FirestoreOrderRepository:
 
     def add_transaction(self, tx_id: str, data: dict[str, Any]) -> None:
         self._col(Collection.PAYMENT_TRANSACTIONS).document(tx_id).set(data)
+
+    def transactions(self, order_id: str | None = None) -> list[tuple[str, dict[str, Any]]]:
+        col = self._col(Collection.PAYMENT_TRANSACTIONS)
+        if order_id is not None:
+            col = col.where(filter=firestore.FieldFilter("orderId", "==", order_id))
+        return _pairs(col)
 
     def events(self, order_id: str) -> list[dict[str, Any]]:
         q = self._col(Collection.DELIVERY_TRACKING_EVENTS).where(

@@ -1582,3 +1582,14 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Fixed in passing: the sidebar crashed when the signed-in name had not loaded yet.
 - Tests: Flutter 645.
 
+### 2026-11-13 — Cashflow, payment receipts and order details for staff (D-85)
+
+- Backend `routers/cashflow.py`: `GET /cashflow`, `GET /orders/{id}/payments`,
+  `GET /orders/{id}/receipt.pdf`; `OrderRepository.transactions()`.
+- App: `orders/presentation/cashflow_page.dart` (Cashflow page with KPI tiles, daily bar chart,
+  payments list; `OrderPaymentCard` with the receipt and PDF download; dashboard
+  `CashflowDashCard`); routes `/pharmacy/cashflow`, `/admin/cashflow`, `/pharmacy/order/:id`;
+  tracking rows and the pharmacy patient's orders open the order; doctor's Appointments tab rows
+  open the appointment details.
+- Tests: backend 764 (+3 skipped); Flutter 648.
+

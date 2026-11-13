@@ -484,6 +484,7 @@ void main() {
         '/admin/orders', // D-70 order tracking
         '/admin/deliveries', // UC11.4 (Module 13)
         '/admin/inventory', // D-70 drug inventory
+        '/admin/cashflow', // D-85
         '/admin/analytics/hospital', // FR-11.4
         '/admin/analytics/system', // FR-11.3
         '/admin/audit-logs', // UC11.3
@@ -495,6 +496,7 @@ void main() {
         '/pharmacy/walk-in', // D-80
         '/pharmacy/tracking', // D-70
         '/pharmacy/inventory', // D-70
+        '/pharmacy/cashflow', // D-85
         '/pharmacy/patients', // D-70
         '/pharmacy/messages', // D-69
         '/pharmacy/leave', // D-80

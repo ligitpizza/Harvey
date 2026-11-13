@@ -819,7 +819,7 @@ class InMemoryOrderRepository:
         self._users = users
         self._provider = provider
         self.orders: dict[str, dict[str, Any]] = {}
-        self.transactions: dict[str, dict[str, Any]] = {}
+        self.tx: dict[str, dict[str, Any]] = {}
         self.tracking: list[dict[str, Any]] = []
         self.stock_items: dict[str, dict[str, Any]] = {}
         self.phones: dict[str, str] = {}
@@ -909,7 +909,14 @@ class InMemoryOrderRepository:
         return found[0] if found else None
 
     def add_transaction(self, tx_id: str, data: dict[str, Any]) -> None:
-        self.transactions[tx_id] = dict(data)
+        self.tx[tx_id] = dict(data)
+
+    def transactions(self, order_id: str | None = None) -> list[tuple[str, dict[str, Any]]]:
+        return [
+            (k, dict(v))
+            for k, v in self.tx.items()
+            if order_id is None or v.get("orderId") == order_id
+        ]
 
     def events(self, order_id: str) -> list[dict[str, Any]]:
         return [dict(e) for e in self.tracking if e["orderId"] == order_id]

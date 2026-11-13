@@ -311,7 +311,7 @@ def test_uc13_3_payment_writes_transaction_receipt_and_notifies_pharmacist(
     oid = paid_order(client, order_repo)
     o = order_repo.orders[oid]
     assert o["paymentStatus"] == "paid" and o["fulfilmentStatus"] == "preparing"
-    (tx,) = order_repo.transactions.values()
+    (tx,) = order_repo.tx.values()
     assert tx["orderId"] == oid and tx["amount"] == 15.0 and tx["status"] == "succeeded"
     assert tx["stripeChargeId"].startswith("ch_fake_")
     record = record_repo.records[o["receiptRecordId"]]
@@ -342,7 +342,7 @@ def test_uc13_3_e1_declined_card_can_retry(
         f"/api/v1/orders/{oid}/pay/fake", json={"cardNumber": "4242424242424242"}, headers=PATIENT
     ).json()
     assert res["result"] == "paid"
-    statuses = sorted(t["status"] for t in order_repo.transactions.values())
+    statuses = sorted(t["status"] for t in order_repo.tx.values())
     assert statuses == ["failed", "succeeded"]
 
 
@@ -438,14 +438,14 @@ def test_stripe_webhook_marks_the_order_paid(
     )
     assert res.json() == {"received": True, "handled": True, "result": "paid"}
     assert order_repo.orders[oid]["paymentStatus"] == "paid"
-    assert order_repo.transactions["ch_123"]["amount"] == 15.0
+    assert order_repo.tx["ch_123"]["amount"] == 15.0
     # Stripe retries deliveries: a repeat changes nothing.
     client.post(
         "/api/v1/webhooks/stripe",
         content=body,
         headers={"Stripe-Signature": _sign(body, secret, int(time.time()))},
     )
-    assert len(order_repo.transactions) == 1
+    assert len(order_repo.tx) == 1
     bad = client.post("/api/v1/webhooks/stripe", content=body, headers={"Stripe-Signature": "x"})
     assert bad.status_code == 400
 

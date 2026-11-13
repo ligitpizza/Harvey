@@ -18,6 +18,7 @@ import '../orders/state/orders_providers.dart';
 import '../provider_portal/state/portal_providers.dart';
 import 'admin_center.dart';
 import '../../shared/widgets/page_header.dart';
+import '../orders/presentation/cashflow_page.dart';
 
 /// D-77: a live dashboard as each portal role's home page. Cards summarise what needs
 /// attention today and link to the page that handles it.
@@ -503,6 +504,8 @@ class PharmacyDashboardPage extends ConsumerWidget {
             ),
           ],
           [
+            // D-85: money received, still owed and failed (last 30 days).
+            CashflowDashCard(path: '/pharmacy/cashflow'),
             DashCard(
               key: const Key('dash-queue'),
               title: 'Order queue',
@@ -739,6 +742,8 @@ class AdminDashboardPage extends ConsumerWidget {
                 );
               }),
             ),
+            // D-85: money received, still owed and failed (last 30 days).
+            CashflowDashCard(path: '/admin/cashflow'),
             DashCard(
               key: const Key('dash-deliveries'),
               title: 'Deliveries',
@@ -789,6 +794,53 @@ class AdminDashboardPage extends ConsumerWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// D-85: the cashflow box on the pharmacy and admin dashboards.
+class CashflowDashCard extends ConsumerWidget {
+  const CashflowDashCard({super.key, required this.path});
+  final String path;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final data = ref.watch(cashflowProvider(30));
+    final theme = Theme.of(context);
+    Widget figure(String label, String value, Color color) => Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: theme.textTheme.bodySmall),
+          Text(
+            value,
+            style: theme.textTheme.titleMedium?.copyWith(color: color, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+    return DashCard(
+      key: const Key('dash-cashflow'),
+      title: 'Cashflow (last 30 days)',
+      icon: Icons.payments_outlined,
+      path: path,
+      child: _async<CashflowSummary>(data, (c) {
+        final last = c.byDay.length > 14 ? c.byDay.sublist(c.byDay.length - 14) : c.byDay;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                figure('Received', rmText(c.received), Colors.green.shade700),
+                figure('Still owed', rmText(c.outstanding), Colors.orange.shade800),
+                figure('Failed', '${c.failedCount}', Colors.red.shade700),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(height: 90, child: CashflowChart(points: last)),
+          ],
+        );
+      }),
     );
   }
 }

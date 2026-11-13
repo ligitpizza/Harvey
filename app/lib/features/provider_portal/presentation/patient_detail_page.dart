@@ -19,6 +19,7 @@ import '../../symptom_checker/data/symptom_repository.dart';
 import '../../symptom_checker/state/symptom_providers.dart';
 import '../state/portal_providers.dart';
 import '../../appointments/domain/appointment_text.dart' show dateLabel, timeLabel;
+import '../../appointments/presentation/appointment_details_dialog.dart';
 import '../../appointments/presentation/reassignment_dialog.dart';
 import '../../appointments/state/appointment_providers.dart';
 import 'dose_history.dart';
@@ -441,7 +442,10 @@ class _HistoryTabs extends ConsumerWidget {
                       value: appts,
                       isEmpty: (a) => a.isEmpty,
                       emptyText: 'No past appointments.',
-                      builder: (a) => AppointmentHistoryList(appointments: a),
+                      builder: (a) => AppointmentHistoryList(
+                        appointments: a,
+                        onOpen: (x) => showAppointmentDetails(context, x),
+                      ),
                     ),
                   ),
                 ],
@@ -545,9 +549,12 @@ class _AlertHistory extends StatelessWidget {
 
 /// D-82: past appointments with their outcome (completed, no-show, cancelled…).
 class AppointmentHistoryList extends StatelessWidget {
-  const AppointmentHistoryList({super.key, required this.appointments});
+  const AppointmentHistoryList({super.key, required this.appointments, this.onOpen});
 
   final List<Appointment> appointments;
+
+  /// Opens one appointment's details.
+  final ValueChanged<Appointment>? onOpen;
 
   static (Color, IconData) _style(Appointment a) => switch (a.status) {
     AppointmentStatus.completed => (Colors.green.shade600, Icons.check_circle_outline),
@@ -566,6 +573,9 @@ class AppointmentHistoryList extends StatelessWidget {
             return ListTile(
               key: Key('history-appt-${a.id}'),
               dense: true,
+              // D-85: open the visit (outcome, notes, pre-visit summary), as on the calendar.
+              onTap: onOpen == null ? null : () => onOpen!(a),
+              trailing: onOpen == null ? null : const Icon(Icons.chevron_right),
               leading: Icon(icon, color: color),
               title: Text('${dateLabel(a.dateTime)}, ${timeLabel(a.dateTime)} · ${a.type.label}'),
               subtitle: Text(

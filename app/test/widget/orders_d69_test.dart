@@ -104,6 +104,8 @@ Widget host(String initial) {
             path: 'tracking',
             builder: (_, _) => const Scaffold(body: OrderTrackingPage()),
           ),
+          // D-85: an order opens its own page.
+          GoRoute(path: 'order/:id', builder: (_, s) => Text('ORDER ${s.pathParameters['id']}')),
           GoRoute(
             path: 'admin-inventory',
             builder: (_, _) => const Scaffold(body: InventoryPage(admin: true)),
@@ -385,10 +387,10 @@ void main() {
     await t.testTextInput.receiveAction(TextInputAction.done);
     await t.pumpAndSettle();
     expect(repo.calls, contains('overview:completed:siti'));
-    repo.patientDetail = const PharmacyPatientDetail(id: 'u-patient', name: 'Siti Aminah');
     await t.tap(find.text('CF-ABC123'));
     await t.pumpAndSettle();
-    expect(find.text('Siti Aminah'), findsOneWidget);
+    // D-85: the order itself (payments, receipt, delivery) opens, not the patient.
+    expect(find.textContaining('ORDER '), findsOneWidget);
   });
 
   tallTest('D-70 patients tab lists every patient and opens one', (t) async {

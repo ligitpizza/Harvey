@@ -44,6 +44,7 @@ List<StaffDestination> staffDestinations(UserRole role) => switch (role) {
     // D-70: tracking, inventory and patients apart from the order queue.
     StaffDestination('/pharmacy/tracking', 'Tracking', Icons.local_shipping_outlined, 'Pharmacy'),
     StaffDestination('/pharmacy/inventory', 'Inventory', Icons.inventory_2_outlined, 'Pharmacy'),
+    StaffDestination('/pharmacy/cashflow', 'Cashflow', Icons.payments_outlined, 'Pharmacy'), // D-85
     StaffDestination('/pharmacy/patients', 'Patients', Icons.people_outline, 'Pharmacy'),
     StaffDestination(
       '/pharmacy/messages',
@@ -81,6 +82,7 @@ List<StaffDestination> staffDestinations(UserRole role) => switch (role) {
     StaffDestination('/admin/orders', 'Orders', Icons.receipt_long_outlined, 'Pharmacy'), // D-70
     StaffDestination('/admin/deliveries', 'Deliveries', Icons.local_shipping_outlined, 'Pharmacy'),
     StaffDestination('/admin/inventory', 'Inventory', Icons.inventory_2_outlined, 'Pharmacy'),
+    StaffDestination('/admin/cashflow', 'Cashflow', Icons.payments_outlined, 'Pharmacy'), // D-85
     StaffDestination(
       '/admin/analytics/hospital',
       'Hospital analytics',

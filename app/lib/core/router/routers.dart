@@ -52,6 +52,7 @@ import '../../features/orders/presentation/inventory_page.dart';
 import '../../features/orders/presentation/pharmacy_patients_page.dart';
 import '../../features/orders/presentation/tracking_page.dart';
 import '../../features/orders/presentation/staff_order_page.dart';
+import '../../features/orders/presentation/cashflow_page.dart';
 
 // One router per entrypoint; each registers only its own roles' routes
 // (docs/05 "Routes per entrypoint", NFR-3.2). Feature routes are added per module.
@@ -281,6 +282,16 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
                 ],
               ),
               GoRoute(path: 'tracking', builder: (_, _) => const OrderTrackingPage()),
+              // D-85: cashflow, and one order with its payments and receipt.
+              GoRoute(path: 'cashflow', builder: (_, _) => const CashflowPage()),
+              GoRoute(
+                path: 'order/:id',
+                builder: (_, s) => StaffOrderPage(
+                  orderId: s.pathParameters['id']!,
+                  backPath: s.uri.queryParameters['back'] ?? '/pharmacy/tracking',
+                  backLabel: s.uri.queryParameters['backLabel'] ?? 'Order tracking',
+                ),
+              ),
               GoRoute(path: 'inventory', builder: (_, _) => const InventoryPage()),
               GoRoute(
                 path: 'messages',
@@ -389,6 +400,7 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
           GoRoute(path: '/admin/inventory', builder: (_, _) => const InventoryPage(admin: true)),
+          GoRoute(path: '/admin/cashflow', builder: (_, _) => const CashflowPage(admin: true)),
           GoRoute(path: '/admin/assignments', builder: (_, _) => const AdminAssignmentsPage()),
         ],
       ),
