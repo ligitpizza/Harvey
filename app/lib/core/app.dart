@@ -84,8 +84,14 @@ class CareFlowApp extends ConsumerWidget {
     });
     return MaterialApp.router(
       title: title,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
+      // D-84: the staff portal has its own look (soft background, card shadows, bolder
+      // headings); the phone apps keep theirs.
+      theme: ref.watch(clientAppProvider) == ClientApp.staff
+          ? AppTheme.portalLight()
+          : AppTheme.light(),
+      darkTheme: ref.watch(clientAppProvider) == ClientApp.staff
+          ? AppTheme.portalDark()
+          : AppTheme.dark(),
       themeMode: ref.watch(themeModeProvider),
       routerConfig: ref.watch(router),
       debugShowCheckedModeBanner: false,

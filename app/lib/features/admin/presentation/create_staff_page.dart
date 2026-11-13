@@ -7,6 +7,7 @@ import '../../../core/utils/validators.dart';
 import '../../../shared/providers/api_providers.dart';
 import '../../../shared/services/api/api_client.dart';
 import '../../auth/presentation/widgets/role_toggle.dart';
+import '../../../shared/widgets/page_header.dart';
 
 /// UC1.5 Create Staff Account (FR-1.6). Part of User Management (Fig 4.3.14.1);
 /// the user list, edit and deactivate actions follow in Module 11.
@@ -83,13 +84,14 @@ class _CreateStaffPageState extends ConsumerState<CreateStaffPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Add staff account', style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 4),
-              const Text(
-                'Doctor, Pharmacist and Admin accounts are created here; '
-                'these roles cannot register themselves.',
+              const PageHeader(
+                title: 'Add staff account',
+                subtitle:
+                    'Doctor, Pharmacist and Admin accounts are created here; '
+                    'these roles cannot register themselves.',
+                icon: Icons.person_add_alt_1_outlined,
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 4),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(20),

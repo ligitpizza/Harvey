@@ -8,6 +8,7 @@ import '../../appointments/domain/appointment_text.dart' show timeLabel;
 import '../data/order_models.dart';
 import '../state/orders_providers.dart';
 import 'package:go_router/go_router.dart';
+import '../../../shared/widgets/page_header.dart';
 
 /// Fig 4.3.14.4 Delivery oversight (FR-11.4, FR-13.4; D-66): every paid home delivery with
 /// courier, status and ETA, out-of-stock flags from the pharmacy, and manual dispatch.
@@ -66,9 +67,12 @@ class _AdminDeliveriesPageState extends ConsumerState<AdminDeliveriesPage> {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Row(
-          children: [
-            Expanded(child: Text('Delivery oversight', style: theme.textTheme.headlineSmall)),
+        PageHeader(
+          title: 'Delivery oversight',
+          subtitle: 'Every medicine delivery and its courier status.',
+          icon: Icons.local_shipping_outlined,
+          color: Colors.purple,
+          actions: [
             IconButton(
               tooltip: 'Refresh',
               onPressed: () => ref.invalidate(deliveriesProvider),

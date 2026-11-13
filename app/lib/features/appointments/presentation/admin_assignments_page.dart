@@ -10,6 +10,7 @@ import '../../admin/state/admin_providers.dart';
 import '../data/appointments_repository.dart';
 import '../domain/appointment_text.dart';
 import '../state/appointment_providers.dart';
+import '../../../shared/widgets/page_header.dart';
 
 /// Admin: Patient Assignments (Fig 4.3.14.2; FR-7.2, FR-11.2, UC7.3, UC11.2; D-54, D-59):
 /// requests on the left, each doctor's caseload against their limit on the right.
@@ -19,11 +20,13 @@ class AdminAssignmentsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final header = [
-      Text('Patient assignments', style: Theme.of(context).textTheme.headlineSmall),
-      const SizedBox(height: 4),
-      const Text(
-        'New patients asking for a doctor, and doctors asking to hand a patient over. '
-        'Check each doctor\'s caseload before assigning.',
+      const PageHeader(
+        title: 'Patient assignments',
+        subtitle:
+            'New patients asking for a doctor, and doctors asking to hand a patient over. '
+            'Check each doctor\'s caseload before assigning.',
+        icon: Icons.assignment_ind_outlined,
+        color: Colors.teal,
       ),
       const SizedBox(height: 16),
     ];

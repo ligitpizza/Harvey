@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/providers/api_providers.dart';
 import '../../shared/services/api/api_client.dart';
 import '../appointments/domain/appointment_text.dart' show dateLabel, timeLabel;
+import '../../shared/widgets/page_header.dart';
 
 /// D-78 admin center: doctors and pharmacists send the admin requests and follow them up;
 /// the admin answers them on the Staff requests page.
@@ -202,30 +203,27 @@ class AdminCenterPage extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text('Admin center', style: Theme.of(context).textTheme.headlineSmall),
+        PageHeader(
+          title: 'Admin center',
+          subtitle:
+              'Ask the admin for help: account changes, stock or supplier issues, IT problems. '
+              "You'll get a notification when they reply.",
+          icon: Icons.support_agent,
+          color: Colors.indigo,
+          actions: [
+            IconButton(
+              tooltip: 'Refresh',
+              onPressed: () => ref.invalidate(staffRequestsProvider),
+              icon: const Icon(Icons.refresh),
+            ),
             FilledButton.icon(
               key: const Key('new-request'),
               onPressed: () => _new(context, ref),
               icon: const Icon(Icons.add),
               label: const Text('New request'),
             ),
-            IconButton(
-              tooltip: 'Refresh',
-              onPressed: () => ref.invalidate(staffRequestsProvider),
-              icon: const Icon(Icons.refresh),
-            ),
           ],
         ),
-        const Text(
-          'Ask the admin for help: account changes, leave, stock or supplier issues, IT problems. '
-          "You'll get a notification when they reply.",
-        ),
-        const SizedBox(height: 12),
         list.when(
           loading: () => const LinearProgressIndicator(),
           error: (_, _) => TextButton(
@@ -366,11 +364,12 @@ class _AdminRequestsPageState extends ConsumerState<AdminRequestsPage> {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text('Staff requests', style: Theme.of(context).textTheme.headlineSmall),
-            ),
+        PageHeader(
+          title: 'Staff requests',
+          subtitle: 'Requests from doctors and pharmacists. They are notified when you reply.',
+          icon: Icons.support_agent,
+          color: Colors.indigo,
+          actions: [
             IconButton(
               tooltip: 'Refresh',
               onPressed: () => ref.invalidate(staffRequestsProvider),
@@ -378,8 +377,6 @@ class _AdminRequestsPageState extends ConsumerState<AdminRequestsPage> {
             ),
           ],
         ),
-        const Text('Requests from doctors and pharmacists. They are notified when you reply.'),
-        const SizedBox(height: 12),
         SegmentedButton<String?>(
           key: const Key('request-filter'),
           segments: [

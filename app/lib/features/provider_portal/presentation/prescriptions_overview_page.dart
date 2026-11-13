@@ -6,6 +6,7 @@ import '../../../shared/providers/api_providers.dart';
 import '../../../shared/services/api/api_client.dart';
 import '../../appointments/domain/appointment_text.dart' show dateLabel;
 import '../../orders/data/order_models.dart';
+import '../../../shared/widgets/page_header.dart';
 
 /// D-78 Prescription management (doctor only): every prescription the doctor issued.
 class DoctorPrescription {
@@ -129,9 +130,12 @@ class _State extends ConsumerState<PrescriptionsOverviewPage> {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Row(
-          children: [
-            Expanded(child: Text('Prescriptions', style: theme.textTheme.headlineSmall)),
+        PageHeader(
+          title: 'Prescriptions',
+          subtitle: 'Every prescription you issued, with its latest order.',
+          icon: Icons.medication_outlined,
+          color: Colors.teal,
+          actions: [
             IconButton(
               tooltip: 'Refresh',
               onPressed: () => ref.invalidate(doctorPrescriptionsProvider),
@@ -139,8 +143,6 @@ class _State extends ConsumerState<PrescriptionsOverviewPage> {
             ),
           ],
         ),
-        const Text('Every prescription you issued, with its latest order.'),
-        const SizedBox(height: 12),
         Wrap(
           spacing: 8,
           runSpacing: 8,

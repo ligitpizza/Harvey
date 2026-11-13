@@ -17,6 +17,7 @@ import '../orders/data/order_models.dart';
 import '../orders/state/orders_providers.dart';
 import '../provider_portal/state/portal_providers.dart';
 import 'admin_center.dart';
+import '../../shared/widgets/page_header.dart';
 
 /// D-77: a live dashboard as each portal role's home page. Cards summarise what needs
 /// attention today and link to the page that handles it.
@@ -38,16 +39,15 @@ class _DashHeader extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final name = ref.watch(currentUserProvider).value?.name ?? '';
     final now = DateTime.now();
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('${_greeting(now)}, $name', style: theme.textTheme.headlineSmall),
-          Text('${dateLabel(now)} · $subtitle', style: theme.textTheme.bodyMedium),
-        ],
-      ),
+    // D-84: the same page header as every portal page.
+    return PageHeader(
+      title: '${_greeting(now)}, $name',
+      subtitle: '${dateLabel(now)} · $subtitle',
+      icon: now.hour < 12
+          ? Icons.wb_sunny_outlined
+          : now.hour < 18
+          ? Icons.wb_cloudy_outlined
+          : Icons.nights_stay_outlined,
     );
   }
 }

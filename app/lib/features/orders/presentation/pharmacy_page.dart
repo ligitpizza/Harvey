@@ -9,6 +9,7 @@ import '../state/orders_providers.dart';
 import 'order_widgets.dart';
 import '../../staff_shell/dashboards.dart' show StatTile;
 import 'pharmacy_shared.dart';
+import '../../../shared/widgets/page_header.dart';
 
 /// Fig 4.3.13.1 Pharmacist view (UC13.6; FR-13.3; D-66): the paid-order queue, recurring
 /// prescriptions waiting for a price, stock levels and a patient lookup.
@@ -17,7 +18,6 @@ class PharmacyPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     return LayoutBuilder(
       builder: (context, box) {
         final wide = box.maxWidth >= 1000;
@@ -27,9 +27,14 @@ class PharmacyPage extends ConsumerWidget {
         return ListView(
           padding: const EdgeInsets.all(24),
           children: [
-            Row(
-              children: [
-                Expanded(child: Text('Pharmacy operations', style: theme.textTheme.headlineSmall)),
+            PageHeader(
+              title: 'Pharmacy operations',
+              subtitle:
+                  'Prepare paid orders and price older prescriptions. Stock and the catalogue '
+                  'are under Inventory.',
+              icon: Icons.local_pharmacy_outlined,
+              color: Colors.green.shade700,
+              actions: [
                 IconButton(
                   key: const Key('pharmacy-refresh'),
                   tooltip: 'Refresh',
@@ -41,10 +46,7 @@ class PharmacyPage extends ConsumerWidget {
                 ),
               ],
             ),
-            const Text(
-              'Prepare paid orders and price older prescriptions. Stock and the catalogue are under Inventory.',
-            ),
-            const SizedBox(height: 16),
+
             const _StatusStrip(),
             const SizedBox(height: 16),
             if (wide)

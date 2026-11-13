@@ -10,6 +10,7 @@ import '../data/admin_repository.dart';
 import '../state/admin_providers.dart';
 import 'user_actions.dart';
 import '../../../shared/widgets/import_dialog.dart';
+import '../../../shared/widgets/page_header.dart';
 
 const _pageSize = 10;
 
@@ -92,19 +93,11 @@ class _AdminUsersPageState extends ConsumerState<AdminUsersPage> {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Wrap(
-          spacing: 16,
-          runSpacing: 12,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          alignment: WrapAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('User Management', style: theme.textTheme.headlineSmall),
-                const Text('Manage all system users, roles, and access statuses.'),
-              ],
-            ),
+        PageHeader(
+          title: 'User Management',
+          subtitle: 'Manage all system users, roles, and access statuses.',
+          icon: Icons.manage_accounts_outlined,
+          actions: [
             SizedBox(
               width: 280,
               child: TextField(

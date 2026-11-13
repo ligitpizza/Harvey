@@ -5,6 +5,7 @@ import '../../appointments/domain/appointment_text.dart' show timeLabel;
 import '../data/admin_repository.dart';
 import '../../../shared/providers/api_providers.dart';
 import '../state/admin_providers.dart';
+import '../../../shared/widgets/page_header.dart';
 
 (String, Color) statusStyle(String status) => switch (status) {
   'operational' => ('Operational', Colors.teal.shade600),
@@ -41,8 +42,13 @@ class SystemHealthPage extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Text('System Health', style: theme.textTheme.headlineSmall),
-        const SizedBox(height: 16),
+        PageHeader(
+          title: 'System Health',
+          subtitle:
+              'Live status of every service. Test one, read its recent errors or open its console.',
+          icon: Icons.health_and_safety_outlined,
+          color: Colors.green.shade700,
+        ),
         health.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (_, _) => ListTile(

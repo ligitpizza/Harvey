@@ -6,6 +6,7 @@ import '../data/order_models.dart';
 import '../state/orders_providers.dart';
 import '../../../shared/widgets/import_dialog.dart';
 import 'pharmacy_shared.dart';
+import '../../../shared/widgets/page_header.dart';
 
 /// D-70 Inventory tab (pharmacist and admin): Stock and Catalogue as tables. Admins may
 /// also delete stock items; catalogue medicines are deactivated, never deleted (old
@@ -22,9 +23,12 @@ class InventoryPage extends ConsumerWidget {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-          child: Row(
-            children: [
-              Expanded(child: Text('Inventory', style: Theme.of(context).textTheme.headlineSmall)),
+          child: PageHeader(
+            title: 'Inventory',
+            subtitle: 'Medicines, prices and stock levels. Low stock is flagged.',
+            icon: Icons.inventory_2_outlined,
+            color: Colors.brown,
+            actions: [
               // D-79: bulk add or update medicines and stock from a CSV / JSON file.
               OutlinedButton.icon(
                 key: const Key('inventory-import'),

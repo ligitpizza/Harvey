@@ -6,6 +6,7 @@ import '../../appointments/domain/appointment_text.dart' show dateLabel, timeLab
 import '../data/order_models.dart';
 import '../state/orders_providers.dart';
 import 'order_widgets.dart';
+import '../../../shared/widgets/page_header.dart';
 
 /// D-70 order tracking: every order with its status, filterable by stage. The pharmacist's
 /// Tracking tab and the admin's Orders tab. Opening a row goes to the patient (pharmacist:
@@ -44,18 +45,15 @@ class _OrderTrackingPageState extends ConsumerState<OrderTrackingPage> {
     final filter = (group: _group, query: _query);
     final data = ref.watch(ordersOverviewProvider(filter));
     final counts = data.value?.counts ?? const <String, int>{};
-    final theme = Theme.of(context);
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                widget.admin ? 'Orders' : 'Order tracking',
-                style: theme.textTheme.headlineSmall,
-              ),
-            ),
+        PageHeader(
+          title: widget.admin ? 'Orders' : 'Order tracking',
+          subtitle: 'Every medication order and where it is now.',
+          icon: widget.admin ? Icons.receipt_long_outlined : Icons.local_shipping_outlined,
+          color: Colors.purple,
+          actions: [
             IconButton(
               key: const Key('tracking-refresh'),
               tooltip: 'Refresh',
@@ -64,8 +62,6 @@ class _OrderTrackingPageState extends ConsumerState<OrderTrackingPage> {
             ),
           ],
         ),
-        const Text('Every medication order and where it is now.'),
-        const SizedBox(height: 12),
         Wrap(
           spacing: 8,
           runSpacing: 8,

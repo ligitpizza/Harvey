@@ -1571,3 +1571,14 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
   Symptoms, Messages, AI Agent, Appointments, Orders, Records). Quick Actions removed from Home.
 - Tests: quick actions reached through "+", Records via "+", bar order; Flutter 638.
 
+### 2026-11-13 — Portal look: grouped sidebar, portal theme, page headers (D-84)
+
+- `staff_shell.dart`: `PortalSidebar` (groups, labels, accent on the current page, Settings and
+  profile at the bottom, collapse toggle in the top bar, drawer on narrow screens);
+  `StaffDestination.group`. `AppTheme.portalLight/Dark` used when the client is the staff portal.
+  `shared/widgets/page_header.dart` on 20 portal pages (dashboards, users, audit logs, add staff,
+  system health, appointments, assignments, leave x2, deliveries, inventory, pharmacy, orders /
+  tracking, prescriptions, admin center, staff requests, settings, walk-in).
+- Fixed in passing: the sidebar crashed when the signed-in name had not loaded yet.
+- Tests: Flutter 645.
+

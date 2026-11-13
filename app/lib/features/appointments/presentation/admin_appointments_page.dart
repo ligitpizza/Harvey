@@ -9,6 +9,7 @@ import '../domain/appointment_text.dart';
 import '../state/appointment_providers.dart';
 import 'admin_booking_dialog.dart';
 import 'appointment_details_dialog.dart';
+import '../../../shared/widgets/page_header.dart';
 
 /// Status filter for the admin overview (D-55). [requested] = a change awaiting a decision.
 enum AppointmentFilter {
@@ -72,9 +73,12 @@ class _AdminAppointmentsPageState extends ConsumerState<AdminAppointmentsPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Row(
-          children: [
-            Expanded(child: Text('Appointments', style: Theme.of(context).textTheme.headlineSmall)),
+        PageHeader(
+          title: 'Appointments',
+          subtitle: 'All doctors. Open an appointment to edit it, decide a request or cancel it.',
+          icon: Icons.event_note_outlined,
+          color: Colors.indigo,
+          actions: [
             FilledButton.icon(
               key: const Key('admin-book'),
               onPressed: () => showAdminBooking(context),
@@ -83,9 +87,6 @@ class _AdminAppointmentsPageState extends ConsumerState<AdminAppointmentsPage> {
             ),
           ],
         ),
-        const SizedBox(height: 4),
-        const Text('All doctors. Open an appointment to edit it, decide a request or cancel it.'),
-        const SizedBox(height: 12),
         Row(
           children: [
             IconButton(

@@ -7,6 +7,7 @@ import '../../shared/providers/api_providers.dart';
 import '../../shared/services/api/api_client.dart';
 import '../appointments/domain/appointment_text.dart' show dateLabel, timeLabel;
 import '../appointments/presentation/admin_booking_dialog.dart';
+import '../../shared/widgets/page_header.dart';
 
 /// D-80 staff leave: doctors and pharmacists apply; the admin approves or rejects and
 /// moves the appointments that clash with a doctor's approved leave.
@@ -300,30 +301,27 @@ class StaffLeavePage extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text('My leave', style: Theme.of(context).textTheme.headlineSmall),
+        PageHeader(
+          title: 'My leave',
+          subtitle:
+              'The admin approves or rejects leave and you get a notification. If you are a '
+              'doctor, patients booked on your leave days are moved by the admin.',
+          icon: Icons.beach_access_outlined,
+          color: Colors.deepOrange,
+          actions: [
+            IconButton(
+              tooltip: 'Refresh',
+              onPressed: () => ref.invalidate(leaveRequestsProvider),
+              icon: const Icon(Icons.refresh),
+            ),
             FilledButton.icon(
               key: const Key('apply-leave'),
               onPressed: () => _apply(context, ref),
               icon: const Icon(Icons.add),
               label: const Text('Apply for leave'),
             ),
-            IconButton(
-              tooltip: 'Refresh',
-              onPressed: () => ref.invalidate(leaveRequestsProvider),
-              icon: const Icon(Icons.refresh),
-            ),
           ],
         ),
-        const Text(
-          'The admin approves or rejects leave and you get a notification. If you are a doctor, '
-          'patients booked on your leave days are moved by the admin.',
-        ),
-        const SizedBox(height: 12),
         list.when(
           loading: () => const LinearProgressIndicator(),
           error: (_, _) => _error(() => ref.invalidate(leaveRequestsProvider), 'your leave'),
@@ -511,17 +509,17 @@ class _AdminLeavePageState extends ConsumerState<AdminLeavePage> {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Row(
-          children: [
-            Expanded(child: Text('Staff leave', style: theme.textTheme.headlineSmall)),
+        PageHeader(
+          title: 'Staff leave',
+          subtitle:
+              "Approve or reject doctors' and pharmacists' leave. Approved doctor leave blocks "
+              'their slots and lists the clashing appointments below to move.',
+          icon: Icons.beach_access_outlined,
+          color: Colors.deepOrange,
+          actions: [
             IconButton(tooltip: 'Refresh', onPressed: _refresh, icon: const Icon(Icons.refresh)),
           ],
         ),
-        const Text(
-          "Approve or reject doctors' and pharmacists' leave. Approved doctor leave blocks their "
-          'slots and lists the clashing appointments below to move.',
-        ),
-        const SizedBox(height: 16),
         Text('Appointments to reschedule', style: theme.textTheme.titleMedium),
         const SizedBox(height: 8),
         todo.when(

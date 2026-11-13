@@ -8,6 +8,7 @@ import '../../core/utils/validators.dart';
 import '../../shared/providers/api_providers.dart';
 import '../../shared/services/api/api_client.dart';
 import '../appointments/domain/appointment_text.dart' show timeLabel;
+import '../../shared/widgets/page_header.dart';
 
 /// D-80 walk-in (pharmacist): 1. find or register the patient, 2. pick their doctor and
 /// one of today's free slots, 3. book. The patient and doctor get a notification.
@@ -202,10 +203,13 @@ class _WalkInPageState extends ConsumerState<WalkInPage> {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Text('Walk-in', style: theme.textTheme.headlineSmall),
-        const Text(
-          'Book a patient who walked in for a visit with a doctor today. New patients get an '
-          'email to set their Harvey password.',
+        PageHeader(
+          title: 'Walk-in',
+          subtitle:
+              'Book a patient who walked in for a visit with a doctor today. New patients get '
+              'an email to set their Harvey password.',
+          icon: Icons.how_to_reg_outlined,
+          color: Colors.green.shade700,
         ),
         if (_done != null)
           Card(

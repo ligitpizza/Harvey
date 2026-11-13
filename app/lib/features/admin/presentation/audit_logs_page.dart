@@ -7,6 +7,7 @@ import '../../medications/domain/med_schedule.dart' show toMyt;
 import '../../settings/state/settings_providers.dart';
 import '../data/admin_repository.dart';
 import '../state/admin_providers.dart';
+import '../../../shared/widgets/page_header.dart';
 
 /// "DEACTIVATE_ACCOUNT" -> "Deactivate account".
 String actionLabel(String action) {
@@ -69,24 +70,16 @@ class _AuditLogsPageState extends ConsumerState<AuditLogsPage> {
   Widget build(BuildContext context) {
     final query = _query();
     final page = ref.watch(auditLogsProvider(query));
-    final theme = Theme.of(context);
     final actions = page.value?.actions ?? const <String>[];
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Security & Audit Logs', style: theme.textTheme.headlineSmall),
-                const Text('System activity, user actions and administrative changes.'),
-              ],
-            ),
+        PageHeader(
+          title: 'Security & Audit Logs',
+          subtitle: 'System activity, user actions and administrative changes.',
+          icon: Icons.policy_outlined,
+          color: Colors.blueGrey.shade700,
+          actions: [
             Wrap(
               spacing: 12,
               crossAxisAlignment: WrapCrossAlignment.center,

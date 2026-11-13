@@ -385,6 +385,25 @@ void main() {
       expect(find.text(AuthMessages.useStaffPortal), findsOneWidget);
     });
 
+    testWidgets('D-84 on a narrow screen the menu opens as a drawer', (t) async {
+      t.view.physicalSize = const Size(600, 1000);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(
+        withUser(
+          const StaffShell(location: '/admin/users', child: Text('BODY')),
+          u(UserRole.admin),
+          ClientApp.staff,
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('portal-sidebar')), findsNothing);
+      await t.tap(find.byTooltip('Open navigation menu'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('portal-sidebar')), findsOneWidget);
+      expect(find.text('Users'), findsOneWidget);
+    });
+
     tallTest('staff shell shows the signed-in role and a sign-out action', (t) async {
       await t.pumpWidget(
         withUser(
@@ -394,9 +413,12 @@ void main() {
         ),
       );
       await t.pumpAndSettle();
-      expect(find.text('Nur · Admin'), findsOneWidget);
       expect(find.text('BODY'), findsOneWidget);
       expect(find.byKey(const Key('staff-sign-out')), findsOneWidget);
+      // D-84: the sidebar shows the signed-in person and their role.
+      expect(find.byKey(const Key('sidebar-profile')), findsOneWidget);
+      expect(find.text('Nur'), findsOneWidget);
+      expect(find.text('Admin'), findsOneWidget);
     });
 
     test('FR-1.3 each staff role has its own home and menu', () {
@@ -405,20 +427,21 @@ void main() {
       expect(staffHome(UserRole.admin), '/admin/dashboard');
       expect(staffSettingsPath(UserRole.pharmacist), '/pharmacy/settings');
       expect(staffDestinations(UserRole.admin).map((d) => d.path), [
+        // D-84: grouped as People, Scheduling, Communication, Pharmacy, Insights.
         '/admin/dashboard', // D-77
         '/admin/users',
+        '/admin/assignments', // D-54
         '/admin/calendar', // D-60
         '/admin/appointments', // D-55
-        '/admin/assignments', // D-54
+        '/admin/leave', // D-80
         '/admin/messages', // D-76
         '/admin/requests', // D-78
-        '/admin/leave', // D-80
-        '/admin/audit-logs', // UC11.3
         '/admin/orders', // D-70 order tracking
         '/admin/deliveries', // UC11.4 (Module 13)
         '/admin/inventory', // D-70 drug inventory
         '/admin/analytics/hospital', // FR-11.4
         '/admin/analytics/system', // FR-11.3
+        '/admin/audit-logs', // UC11.3
         '/admin/system-health', // FR-11.3
       ]);
       expect(staffDestinations(UserRole.pharmacist).map((d) => d.path), [

@@ -8,6 +8,7 @@ import '../../shared/services/api/api_client.dart';
 import '../notifications/data/notifications_repository.dart';
 import '../notifications/state/notification_providers.dart';
 import '../auth/presentation/forgot_password_page.dart';
+import '../../shared/widgets/page_header.dart';
 
 /// D-77: the signed-in staff member's own details.
 final staffProfileProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
@@ -26,8 +27,12 @@ class StaffSettingsPage extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Text('Settings', style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: 16),
+        const PageHeader(
+          title: 'Settings',
+          subtitle: 'Your profile, password, appearance and which notifications you get.',
+          icon: Icons.settings_outlined,
+          color: Colors.blueGrey,
+        ),
         Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 720),

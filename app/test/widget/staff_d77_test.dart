@@ -159,7 +159,11 @@ void main() {
       find.descendant(of: find.byKey(const Key('bell-badge')), matching: find.text('1')),
       findsOneWidget,
     );
-    expect(t.widget<NavigationRail>(find.byType(NavigationRail)).backgroundColor, isNotNull);
+    // D-84: a wide sidebar with labelled, grouped sections and the signed-in person.
+    expect(find.byKey(const Key('portal-sidebar')), findsOneWidget);
+    expect(find.text('PATIENT CARE'), findsOneWidget);
+    expect(find.text('Prescriptions'), findsOneWidget);
+    expect(find.byKey(const Key('sidebar-profile')), findsOneWidget);
     await t.tap(find.byKey(const Key('staff-settings')));
     await t.pumpAndSettle();
     expect(find.text('ROUTE /doctor/settings'), findsOneWidget);
