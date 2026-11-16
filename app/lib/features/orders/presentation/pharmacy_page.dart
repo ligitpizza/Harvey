@@ -190,6 +190,12 @@ class _QueueCard extends ConsumerWidget {
           onPressed: () => _outOfStock(context, ref, o),
           child: const Text('Out of stock'),
         ),
+      if (o.canCancelCourier)
+        OutlinedButton(
+          key: Key('cancel-courier-${o.id}'),
+          onPressed: () => cancelCourierWithReason(context, ref, o),
+          child: const Text('Cancel courier'),
+        ),
       if (o.status == Fulfilment.readyForCollection)
         FilledButton.tonal(
           key: Key('collected-${o.id}'),
@@ -227,7 +233,7 @@ class _QueueCard extends ConsumerWidget {
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(o.patientName ?? 'Patient', style: theme.textTheme.titleMedium),
-                        OrderStatusChip(status: o.status),
+                        OrderStatusChip.of(o),
                       ],
                     ),
                     const SizedBox(height: 4),

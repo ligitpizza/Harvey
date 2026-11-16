@@ -1,9 +1,8 @@
 """Courier adapter (FR-13.4, UC13.4, UC13.5; D-11, D-66, D-67, D-68).
 
 Implementations of one interface, picked by `COURIER` (D-68):
-- `LalamoveClient` (lalamove): Lalamove API v3 sandbox. Real bookings; the sandbox has no
-  drivers, so the stages after booking follow the simulator clock unless Lalamove reports
-  something further along.
+- `LalamoveClient` (lalamove): Lalamove API v3 sandbox. Real bookings; the stages follow
+  Lalamove's own order status (D-89), moved along in the sandbox.
 - `GrabExpressClient` (grab): GrabExpress sandbox; access needs a Grab partner project
   (requested 2026-10-16).
 - `FakeGrabClient`: simulator (D-11) when the chosen courier has no keys; the parcel moves
@@ -76,6 +75,8 @@ class CourierUpdate:
     status: str
     at: datetime
     location: str | None = None
+    # D-89: booked, but the courier is still looking for a driver.
+    searching: bool = False
 
 
 class DispatchError(Exception):
@@ -165,6 +166,8 @@ def grab_updates(
         reason = failed_reason or f"Grab reported the delivery as {status.lower()}."
         return [CourierUpdate("dispatched", now), CourierUpdate("failed", now, reason)]
     reached = _GRAB_REACHED.get(status, 1)
+    if status in ("QUEUEING", "ALLOCATING"):
+        return [CourierUpdate("dispatched", now, searching=True)]
     return [CourierUpdate(s, now, place if s == "in_transit" else None) for s in STAGES[:reached]]
 
 
@@ -391,8 +394,6 @@ class LalamoveClient:
     brand = "Lalamove"
     simulated = False
     poll_in_lists = False
-    # The sandbox has no drivers: stages after booking follow the simulator clock.
-    driver_simulated = True
     demo_failures = True
 
     def __init__(
@@ -414,8 +415,7 @@ class LalamoveClient:
         self._market = market
         self._service = service_type
         self._base = base_url
-        self.name = "Lalamove (sandbox, driver simulated)"
-        self._clock = FakeGrabClient("Lalamove")
+        self.name = "Lalamove (sandbox)"
 
     def _call(self, method: str, path: str, data: dict[str, Any] | None = None) -> Any:
         body = json.dumps({"data": data}, separators=(",", ":")) if data is not None else ""
@@ -530,18 +530,22 @@ class LalamoveClient:
             status = str(self._call("GET", f"/v3/orders/{delivery_id}").get("status") or "")
         except DispatchError:
             log.warning("Lalamove status check for %s failed", delivery_id)
-            status = ""
-        status = status.upper()
-        # Sandbox orders can expire for lack of drivers; that isn't a delivery failure.
-        if status in LALAMOVE_FAILED and not (status == "EXPIRED" and self.driver_simulated):
-            reason = f"Lalamove reported the order as {status.lower()}."
-            return [CourierUpdate("dispatched", now), CourierUpdate("failed", now, reason)]
-        real = [CourierUpdate(s, now) for s in STAGES[: _LALAMOVE_REACHED.get(status, 0)]]
-        simulated = (
-            self._clock.poll(delivery_id, dispatched_at, now) if self.driver_simulated else []
-        )
-        # The real status wins when it is further along than the sandbox clock.
-        return real if len(real) >= len(simulated) else simulated
+            return []
+        return lalamove_updates(status, now)
+
+
+def lalamove_updates(status: str, now: datetime) -> list[CourierUpdate]:
+    """D-89: Harvey stages from Lalamove's order status alone (no simulated driver)."""
+    status = status.upper()
+    if status in LALAMOVE_FAILED:
+        reason = {
+            "REJECTED": "The Lalamove driver rejected the delivery.",
+            "EXPIRED": "No Lalamove driver accepted the delivery in time.",
+        }.get(status, "Lalamove cancelled the delivery.")
+        return [CourierUpdate("dispatched", now), CourierUpdate("failed", now, reason)]
+    if status == "ASSIGNING_DRIVER":
+        return [CourierUpdate("dispatched", now, searching=True)]
+    return [CourierUpdate(s, now) for s in STAGES[: _LALAMOVE_REACHED.get(status, 0)]]
 
 
 def build_courier_client(settings: Settings) -> CourierClient:

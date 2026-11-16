@@ -596,6 +596,10 @@ class ApiClient {
   Future<void> cancelOrder(String id, String reason) =>
       _post('/pharmacy/orders/$id/cancel', {'reason': reason});
 
+  /// D-89: give up on a courier booking (the delivery fails; the patient rebooks).
+  Future<void> cancelCourier(String id, String reason) =>
+      _post('/pharmacy/orders/$id/cancel-courier', {'reason': reason});
+
   Future<void> markCollected(String id) => _send('POST', '/pharmacy/orders/$id/collected', null);
 
   Future<Map<String, dynamic>> pharmacyStock() => _get('/pharmacy/stock');

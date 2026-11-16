@@ -79,7 +79,7 @@ class StaffOrderPage extends ConsumerWidget {
                   children: [
                     Text('Order ${o.ref}', style: theme.textTheme.headlineSmall),
                     const SizedBox(width: 12),
-                    OrderStatusChip(status: o.status),
+                    OrderStatusChip.of(o),
                   ],
                 ),
                 Text('${o.patientName ?? 'Patient'} · ${cycleLabel(o.cycleDate)}'),
@@ -101,6 +101,16 @@ class StaffOrderPage extends ConsumerWidget {
                       onPressed: () => cancelOrderWithReason(context, ref, o),
                       icon: const Icon(Icons.cancel_outlined),
                       label: const Text('Cancel order'),
+                    ),
+                  ),
+                if (o.canCancelCourier)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      key: const Key('staff-cancel-courier'),
+                      onPressed: () => cancelCourierWithReason(context, ref, o),
+                      icon: const Icon(Icons.no_crash_outlined),
+                      label: Text('Cancel ${o.courierBrand} booking'),
                     ),
                   ),
                 const SizedBox(height: 12),
@@ -135,7 +145,12 @@ class StaffOrderPage extends ConsumerWidget {
                     row('Address', o.deliveryAddress ?? '—'),
                     row('Contact number', o.deliveryPhone ?? '—'),
                     row('Courier booking', o.courierRef ?? 'Not booked yet'),
-                    row('Delivery status', o.deliveryStatus?.replaceAll('_', ' ') ?? '—'),
+                    row(
+                      'Delivery status',
+                      o.awaitingDriver
+                          ? 'Finding a driver'
+                          : o.deliveryStatus?.replaceAll('_', ' ') ?? '—',
+                    ),
                     row('Estimated arrival', _when(o.etaAt)),
                     if (o.failureReason != null) row('Problem', o.failureReason!),
                     if (tracking != null)

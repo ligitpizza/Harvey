@@ -103,8 +103,15 @@ class _OrderTrackPageState extends ConsumerState<OrderTrackPage> {
       ),
       Fulfilment.readyForDelivery => (
         Icons.local_shipping_outlined,
-        o.deliveryStatus == 'in_transit' ? 'Out for delivery' : 'Courier booked',
-        o.courierRef == null
+        o.deliveryStatus == 'in_transit'
+            ? 'Out for delivery'
+            : o.awaitingDriver
+            ? 'Finding a driver'
+            : 'Courier booked',
+        o.awaitingDriver
+            ? '${o.courierBrand} is looking for a driver. If none accepts within 30 minutes, '
+                  "we'll ask you to rebook or collect at the pharmacy."
+            : o.courierRef == null
             ? 'Your medication is on its way.'
             : '${o.courierBrand} booking ${o.courierRef}',
       ),

@@ -53,6 +53,9 @@ log = logging.getLogger("careflow.orders")
 DELIVERY_FEE = 5.0  # RM, flat (D-66)
 REMINDER_AFTER = timedelta(hours=48)  # UC13.2 E1
 DISPATCH_ATTEMPTS = 2  # UC13.4 E1: retry once before asking the patient
+# D-89: a booking with no driver after this long is cancelled and the delivery fails.
+DRIVER_SEARCH_LIMIT = timedelta(minutes=30)
+NO_DRIVER_REASON = "No driver accepted the delivery within 30 minutes."
 PREPARATION_TIME = timedelta(hours=2)  # D-72: estimated ready time after payment
 
 SELF_COLLECTION = "self_collection"
@@ -171,6 +174,7 @@ def order_view(
         if isinstance(o.get("paidAt"), datetime)
         else None,
         "dispatchedAt": _iso(o.get("dispatchedAt")),
+        "awaitingDriver": o.get("awaitingDriver") is True,  # D-89
         "etaAt": _iso(o.get("etaAt")),
         "receiptRecordId": o.get("receiptRecordId"),
     }
@@ -933,6 +937,7 @@ class OrderService:
                 "dispatchedAt": now,
                 "etaAt": d.eta,
                 "failureReason": None,
+                "awaitingDriver": False,
             }
             self.repo.update_order(order_id, update)
             self.repo.add_event(
@@ -962,7 +967,12 @@ class OrderService:
         if actor != "courier" and o.get("courierRef"):
             # Failed on our side (e.g. the admin demo): release the courier booking (D-68).
             self.courier.cancel(str(o["courierRef"]))
-        update = {"fulfilmentStatus": FAILED, "deliveryStatus": "failed", "failureReason": reason}
+        update = {
+            "fulfilmentStatus": FAILED,
+            "deliveryStatus": "failed",
+            "failureReason": reason,
+            "awaitingDriver": False,
+        }
         self.repo.update_order(order_id, update)
         self.repo.add_event(
             {"orderId": order_id, "status": "failed", "location": None, "timestamp": now}
@@ -1037,12 +1047,42 @@ class OrderService:
         if o.get("fulfilmentStatus") != READY_FOR_DELIVERY or not isinstance(since, datetime):
             return 0
         moved = 0
-        for u in self.courier.poll(str(ref or ""), since, now):
+        updates = self.courier.poll(str(ref or ""), since, now)
+        for u in updates:
             if o.get("fulfilmentStatus") != READY_FOR_DELIVERY:
                 break
             if self.courier_update(order_id, o, u.status, u.at, u.location):
                 moved += 1
+        if o.get("fulfilmentStatus") != READY_FOR_DELIVERY or not updates:
+            return moved
+        # D-89: "Finding a driver" while the courier searches; give up after the limit.
+        searching = updates[-1].searching
+        if searching and now - since >= DRIVER_SEARCH_LIMIT:
+            self.fail_delivery(order_id, o, NO_DRIVER_REASON, SYSTEM_SCHEDULER_USER, now)
+            return moved + 1
+        if bool(o.get("awaitingDriver")) != searching:
+            self.repo.update_order(order_id, {"awaitingDriver": searching})
+            o["awaitingDriver"] = searching
         return moved
+
+    def cancel_courier(self, order_id: str, uid: str, reason: str) -> dict[str, Any]:
+        """D-89: the pharmacist (or admin) gives up on a booking, e.g. the driver rejected
+        it on the courier's side. The booking is cancelled at the courier and the delivery
+        fails, so the patient can rebook or switch to self-collection (FR-13.5)."""
+        o = self._order(order_id)
+        if o.get("fulfilmentStatus") != READY_FOR_DELIVERY or not o.get("dispatchedAt"):
+            raise OrderError("ORDER_NOT_IN_DELIVERY", "This order isn't waiting for a courier.")
+        since = o["dispatchedAt"]
+        picked = any(
+            e.get("status") in ("picked_up", "in_transit", "delivered")
+            and (not isinstance(e.get("timestamp"), datetime) or e["timestamp"] >= since)
+            for e in self.repo.events(order_id)
+        )
+        if picked:
+            raise OrderError(
+                "ORDER_PICKED_UP", "The courier already has the parcel; it can't be cancelled."
+            )
+        return self.fail_delivery(order_id, o, reason, uid)
 
     def reschedule(self, order_id: str, uid: str) -> dict[str, Any]:
         o = self._order(order_id)

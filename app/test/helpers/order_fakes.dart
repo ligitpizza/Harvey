@@ -129,6 +129,10 @@ class FakeOrdersRepository implements OrdersRepository {
   Future<void> cancelOrder(String id, String reason) async => calls.add('cancel:$id:$reason');
 
   @override
+  Future<void> cancelCourier(String id, String reason) async =>
+      calls.add('cancelCourier:$id:$reason');
+
+  @override
   Future<List<StockItem>> stock() async => stockItems;
 
   @override

@@ -173,7 +173,7 @@ class _OrderCard extends StatelessWidget {
                   Expanded(
                     child: Text(cycleLabel(order.cycleDate), style: theme.textTheme.labelLarge),
                   ),
-                  OrderStatusChip(status: order.status),
+                  OrderStatusChip.of(order),
                 ],
               ),
               const SizedBox(height: 8),

@@ -41,6 +41,7 @@ from app.integrations.payments import (
     intent_from_stripe,
 )
 from app.schemas.orders import (
+    CancelCourierRequest,
     CancelOrderRequest,
     CatalogEditRequest,
     CatalogItemRequest,
@@ -519,6 +520,21 @@ def cancel_order(
     role = user.role.value if user.role else "staff"
     try:
         svc.cancel(order_id, user.uid, role, body.reason)
+    except OrderError as e:
+        raise _api(e) from e
+
+
+@router.post("/pharmacy/orders/{order_id}/cancel-courier")
+def cancel_courier(
+    order_id: str,
+    body: CancelCourierRequest,
+    user: CurrentUser = Depends(pharmacy_staff),
+    svc: OrderService = Depends(get_order_service),
+) -> dict[str, Any]:
+    """D-89: cancel a courier booking that isn't going anywhere (e.g. the driver rejected
+    it); the delivery fails and the patient rebooks or switches to self-collection."""
+    try:
+        return _view(svc, order_id, svc.cancel_courier(order_id, user.uid, body.reason))
     except OrderError as e:
         raise _api(e) from e
 

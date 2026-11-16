@@ -31,8 +31,15 @@ String orderRoute(MedicationOrder o) => switch (o.status) {
 };
 
 class OrderStatusChip extends StatelessWidget {
-  const OrderStatusChip({super.key, required this.status});
+  const OrderStatusChip({super.key, required this.status, this.label});
   final Fulfilment status;
+
+  /// Overrides the status name (D-89 "Finding a driver").
+  final String? label;
+
+  /// The chip for an order, including "Finding a driver".
+  factory OrderStatusChip.of(MedicationOrder o, {Key? key}) =>
+      OrderStatusChip(key: key, status: o.status, label: o.statusLabel);
 
   @override
   Widget build(BuildContext context) {
@@ -52,7 +59,7 @@ class OrderStatusChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
       child: Text(
-        status.label,
+        label ?? status.label,
         style: Theme.of(context).textTheme.labelMedium?.copyWith(color: fg),
       ),
     );

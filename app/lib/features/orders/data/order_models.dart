@@ -159,6 +159,7 @@ class MedicationOrder {
     this.readyAt,
     this.estimatedReadyAt,
     this.dispatchedAt,
+    this.awaitingDriver = false,
     this.etaAt,
     this.events = const [],
     this.items = const [],
@@ -229,6 +230,9 @@ class MedicationOrder {
   /// D-72: about 2 hours after payment, while the pharmacy prepares the order.
   final DateTime? estimatedReadyAt;
   final DateTime? dispatchedAt;
+
+  /// D-89: booked, but the courier is still looking for a driver.
+  final bool awaitingDriver;
   final DateTime? etaAt;
   final List<TrackingEvent> events;
 
@@ -242,6 +246,17 @@ class MedicationOrder {
     Fulfilment.awaitingConfirmation || Fulfilment.awaitingPayment || Fulfilment.failed => true,
     _ => false,
   };
+
+  /// D-89: "Finding a driver" while the courier searches; otherwise the status.
+  String get statusLabel =>
+      status == Fulfilment.readyForDelivery && awaitingDriver ? 'Finding a driver' : status.label;
+
+  /// D-89: staff may give up on the courier booking until the parcel is picked up.
+  bool get canCancelCourier =>
+      status == Fulfilment.readyForDelivery &&
+      dispatchedAt != null &&
+      deliveryStatus == 'dispatched' &&
+      !events.any((e) => const {'picked_up', 'in_transit', 'delivered'}.contains(e.status));
 
   /// Fig 4.3.10.3: Order Confirmed -> Preparing -> Out for Delivery -> Delivered (0-3).
   int get deliveryStage {
@@ -280,6 +295,7 @@ class MedicationOrder {
     readyAt: _time(d['readyAt']),
     estimatedReadyAt: _time(d['estimatedReadyAt']),
     dispatchedAt: _time(d['dispatchedAt']),
+    awaitingDriver: d['awaitingDriver'] == true,
     etaAt: _time(d['etaAt']),
     events: [
       for (final e in (d['events'] as List? ?? const []))

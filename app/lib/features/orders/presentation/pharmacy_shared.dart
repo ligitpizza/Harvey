@@ -375,3 +375,34 @@ Future<bool> cancelOrderWithReason(BuildContext context, WidgetRef ref, Medicati
   ref.invalidate(orderProvider(o.id));
   return true;
 }
+
+/// D-89: the driver rejected the booking, or none is coming. The booking is cancelled at
+/// the courier and the delivery fails; the patient is asked to rebook or collect.
+Future<bool> cancelCourierWithReason(BuildContext context, WidgetRef ref, MedicationOrder o) async {
+  final reason = await showDialog<String>(
+    context: context,
+    builder: (_) => PromptDialog(
+      title: 'Cancel the ${o.courierBrand} booking?',
+      message:
+          'Use this when the driver rejected the order or none is coming. The delivery is '
+          'marked failed and the patient is asked to rebook or collect at the pharmacy.',
+      fieldKey: const Key('courier-cancel-reason'),
+      label: 'Reason',
+      initial: 'The driver rejected the order.',
+      confirmKey: const Key('courier-cancel-confirm'),
+      confirmText: 'Cancel booking',
+      maxLength: 300,
+      isValid: (v) => v.trim().length >= 3,
+    ),
+  );
+  if (reason == null || !context.mounted) return false;
+  await runPharmacyAction(
+    context,
+    ref,
+    () => ref.read(ordersRepositoryProvider).cancelCourier(o.id, reason.trim()),
+    'Courier booking cancelled. The patient has been told.',
+  );
+  ref.invalidate(ordersOverviewProvider);
+  ref.invalidate(orderProvider(o.id));
+  return true;
+}

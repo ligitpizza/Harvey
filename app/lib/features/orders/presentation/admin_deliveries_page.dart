@@ -53,7 +53,7 @@ class _AdminDeliveriesPageState extends ConsumerState<AdminDeliveriesPage> {
     Fulfilment.collected || Fulfilment.readyForCollection => 'Switched to collection',
     Fulfilment.readyForDelivery => switch (o.deliveryStatus) {
       'in_transit' => 'In transit',
-      'dispatched' => 'Dispatched',
+      'dispatched' => o.awaitingDriver ? 'Finding a driver' : 'Dispatched',
       _ => 'Not dispatched',
     },
     _ => o.status.label,

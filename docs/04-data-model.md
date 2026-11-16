@@ -209,6 +209,7 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | stockItemId | Reference (medication_stock) | Stock the units were taken from (D-66) | Optional |
 | receiptRecordId | Reference (health_records) | Receipt PDF saved for the patient (D-66) | Optional |
 | failureReason | String | Out-of-stock note or delivery failure reason (D-66) | Optional |
+| awaitingDriver | Boolean | Courier booked but still looking for a driver; shown as "Finding a driver" (D-89) | Optional; written by the backend only |
 | createdAt, confirmedAt, paidAt, readyAt, dispatchedAt, etaAt, reminderSentAt | Timestamp | Order timeline (D-66) | Optional except createdAt |
 
 > D-66: one order per recurring prescription per month, document id `{prescriptionId}_{YYYY-MM}`.

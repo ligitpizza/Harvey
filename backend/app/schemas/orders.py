@@ -114,3 +114,9 @@ class GrabWebhook(BaseModel):
 
 class FailDeliveryRequest(_Body):
     reason: str = Field(default="The courier could not reach the address.", max_length=300)
+
+
+class CancelCourierRequest(_Body):
+    """D-89: why the pharmacist gave up on the courier booking."""
+
+    reason: str = Field(min_length=3, max_length=300)

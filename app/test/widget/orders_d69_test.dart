@@ -613,4 +613,61 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('Cancelled: Prescription stopped by your doctor.'), findsOneWidget);
   });
+
+  group('D-89 no driver', () {
+    MedicationOrder booked({bool searching = true, List<String> events = const ['dispatched']}) =>
+        MedicationOrder.fromJson({
+          'id': id,
+          'ref': 'CF-ABC123',
+          'patientId': 'u-patient',
+          'patientName': 'Siti',
+          'prescriptionId': 'rx1',
+          'medicationDetails': 'Amlodipine 5mg',
+          'fulfilmentStatus': 'ready_for_delivery',
+          'paymentStatus': 'paid',
+          'method': 'home_delivery',
+          'deliveryStatus': 'dispatched',
+          'courierRef': '3629365586540851273',
+          'courierBrand': 'Lalamove',
+          'dispatchedAt': '2026-10-16T03:00:00+00:00',
+          'awaitingDriver': searching,
+          'events': [
+            for (final e in events) {'status': e, 'timestamp': '2026-10-16T03:00:00+00:00'},
+          ],
+        });
+
+    test('the label says Finding a driver only while searching', () {
+      expect(booked().statusLabel, 'Finding a driver');
+      expect(booked(searching: false).statusLabel, 'Ready for delivery');
+      expect(booked().canCancelCourier, isTrue);
+      expect(booked(events: ['dispatched', 'picked_up']).canCancelCourier, isFalse);
+    });
+
+    tallTest('the queue shows it and the pharmacist cancels the booking', (t) async {
+      repo.queueData = PharmacyQueue(orders: [booked()], needsPrice: const []);
+      await t.pumpWidget(host('/pharmacy'));
+      await t.pumpAndSettle();
+      expect(find.text('Finding a driver'), findsWidgets);
+      await t.tap(find.byKey(const Key('cancel-courier-$id')));
+      await t.pumpAndSettle();
+      // A reason is suggested; the pharmacist can keep it.
+      expect(find.text('The driver rejected the order.'), findsOneWidget);
+      await t.tap(find.byKey(const Key('courier-cancel-confirm')));
+      await t.pumpAndSettle();
+      expect(repo.calls, contains('cancelCourier:$id:The driver rejected the order.'));
+    });
+
+    tallTest('the patient sees that a driver is being found', (t) async {
+      repo.orders = {id: booked()};
+      await t.pumpWidget(
+        ProviderScope(
+          overrides: [ordersRepositoryProvider.overrideWithValue(repo)],
+          child: const MaterialApp(home: OrderTrackPage(orderId: id)),
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('Finding a driver'), findsWidgets);
+      expect(find.textContaining('within 30 minutes'), findsOneWidget);
+    });
+  });
 }

@@ -4,7 +4,7 @@ with the shapes returned by the live sandbox on 2026-10-16."""
 import hashlib
 import hmac
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from app.integrations.delivery import (
     LALAMOVE_SANDBOX_URL,
     STAGE,
+    CourierUpdate,
     Destination,
     DispatchError,
     FakeGrabClient,
@@ -168,26 +169,44 @@ def test_quote_refused_is_a_dispatch_error(monkeypatch: pytest.MonkeyPatch) -> N
         client().dispatch("o", DEST, NOW)
 
 
-def test_sandbox_has_no_driver_so_the_clock_moves_the_stages(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_d89_stages_follow_lalamove_only(monkeypatch: pytest.MonkeyPatch) -> None:
     http = FakeLalamoveHttp(monkeypatch)
     c = client()
-    assert [u.status for u in c.poll("L1", NOW, NOW)] == ["dispatched"]
-    later = [u.status for u in c.poll("L1", NOW, NOW + STAGE * 2)]
-    assert later == ["dispatched", "picked_up", "in_transit"]
-    # A real status further along wins.
+    # Still looking for a driver, however long ago it was booked: no pretend progress.
+    late = c.poll("L1", NOW, NOW + STAGE * 30)
+    assert [u.status for u in late] == ["dispatched"] and late[-1].searching
+    http.status = "ON_GOING"
+    on = c.poll("L1", NOW, NOW)
+    assert [u.status for u in on] == ["dispatched"] and not on[-1].searching
+    http.status = "PICKED_UP"
+    assert [u.status for u in c.poll("L1", NOW, NOW)] == ["dispatched", "picked_up", "in_transit"]
     http.status = "COMPLETED"
     assert c.poll("L1", NOW, NOW)[-1].status == "delivered"
 
 
-def test_rejected_fails_but_sandbox_expiry_does_not(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    ("status", "reason"),
+    [
+        ("REJECTED", "The Lalamove driver rejected the delivery."),
+        ("EXPIRED", "No Lalamove driver accepted the delivery in time."),
+        ("CANCELED", "Lalamove cancelled the delivery."),
+    ],
+)
+def test_d89_rejected_expired_and_cancelled_fail(
+    status: str, reason: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     http = FakeLalamoveHttp(monkeypatch)
-    c = client()
-    http.status = "REJECTED"
-    assert c.poll("L1", NOW, NOW)[-1].status == "failed"
-    http.status = "EXPIRED"
-    assert [u.status for u in c.poll("L1", NOW, NOW)] == ["dispatched"]
+    http.status = status
+    last = client().poll("L1", NOW, NOW)[-1]
+    assert (last.status, last.location) == ("failed", reason)
+
+
+def test_d89_status_check_down_changes_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    def down(*a: Any, **k: Any) -> Any:
+        raise httpx.ConnectError("down")
+
+    monkeypatch.setattr("app.integrations.delivery.httpx.request", down)
+    assert client().poll("L1", NOW, NOW) == []
 
 
 def test_cancel_is_best_effort(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -369,3 +388,76 @@ def test_d71_flat_fee_when_the_courier_cannot_quote(
     c.app.dependency_overrides[get_courier_client] = lambda: QuotingCourier(None)
     out = _confirm_home(c, order_repo)
     assert out["preview"]["deliveryFee"] == 5.0 and out["order"]["deliveryFee"] == 5.0
+
+
+# ---------------- D-89: no driver, and the pharmacist's cancel ----------------
+
+
+class SearchingCourier(RecordingCourier):
+    """A courier that never finds a driver (Lalamove ASSIGNING_DRIVER)."""
+
+    def poll(self, delivery_id: str, dispatched_at: datetime, now: datetime) -> Any:
+        return [CourierUpdate("dispatched", dispatched_at, searching=True)]
+
+
+def _searching_client(make_client: Any) -> tuple[Any, SearchingCourier]:
+    courier = SearchingCourier()
+    c = make_client()
+    c.app.dependency_overrides[get_courier_client] = lambda: courier
+    return c, courier
+
+
+def test_d89_finding_a_driver_then_gives_up_after_30_minutes(
+    make_client: Any, order_repo: InMemoryOrderRepository
+) -> None:
+    c, courier = _searching_client(make_client)
+    oid = _home_order(c, order_repo)
+    patient = bearer("patient-token")
+    view = c.get(f"/api/v1/orders/{oid}", headers=patient).json()
+    assert view["awaitingDriver"] is True
+    assert view["fulfilmentStatus"] == "ready_for_delivery"
+    order_repo.orders[oid]["dispatchedAt"] -= timedelta(minutes=31)
+    view = c.get(f"/api/v1/orders/{oid}", headers=patient).json()
+    assert view["fulfilmentStatus"] == "failed"
+    assert view["awaitingDriver"] is False
+    assert view["failureReason"] == "No driver accepted the delivery within 30 minutes."
+    assert courier.cancelled == [order_repo.orders[oid]["courierRef"]]
+
+
+def test_d89_pharmacist_cancels_the_courier_booking(
+    make_client: Any, order_repo: InMemoryOrderRepository
+) -> None:
+    c, courier = _searching_client(make_client)
+    oid = _home_order(c, order_repo)
+    ref = order_repo.orders[oid]["courierRef"]
+    url = f"/api/v1/pharmacy/orders/{oid}/cancel-courier"
+    assert c.post(url, json={"reason": "x"}, headers=bearer("pharmacist-token")).status_code == 422
+    assert (
+        c.post(url, json={"reason": "Driver rejected"}, headers=bearer("patient-token")).status_code
+        == 403
+    )
+    res = c.post(url, json={"reason": "Driver rejected it"}, headers=bearer("pharmacist-token"))
+    assert res.status_code == 200
+    assert res.json()["fulfilmentStatus"] == "failed"
+    assert res.json()["failureReason"] == "Driver rejected it"
+    assert courier.cancelled == [ref]
+    # Nothing left to cancel; the patient's reschedule books a new courier.
+    again = c.post(url, json={"reason": "again"}, headers=bearer("admin-token"))
+    assert again.status_code == 409
+
+
+def test_d89_cannot_cancel_after_pickup(
+    make_client: Any, order_repo: InMemoryOrderRepository
+) -> None:
+    courier = RecordingCourier()
+    c = make_client()
+    c.app.dependency_overrides[get_courier_client] = lambda: courier
+    oid = _home_order(c, order_repo)
+    order_repo.orders[oid]["dispatchedAt"] -= STAGE * 2  # simulator: picked up
+    c.get(f"/api/v1/orders/{oid}", headers=bearer("patient-token"))
+    res = c.post(
+        f"/api/v1/pharmacy/orders/{oid}/cancel-courier",
+        json={"reason": "too late"},
+        headers=bearer("pharmacist-token"),
+    )
+    assert res.status_code == 409 and res.json()["error"]["code"] == "ORDER_PICKED_UP"
