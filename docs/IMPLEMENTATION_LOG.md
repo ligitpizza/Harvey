@@ -1615,3 +1615,10 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Patient ⋮ menu: Share with doctor / Stop sharing, **Share to other apps** (new), Change category, **Delete** (red).
 - Tests (`test/widget/records_test.dart`, UC6.3 / D-88): PDF and image open in-app without sharing; viewer share icon; menu share-out; red Delete; doctor view opens in-app.
 
+### 2026-11-16 — No-driver handling, doctor medicine record, collapsible prescriptions (D-89, D-90, D-91)
+
+- **D-89 (Module 13):** `integrations/delivery.py`: `lalamove_updates()` maps Lalamove's real status (no simulated driver clock); `CourierUpdate.searching` for ASSIGNING_DRIVER (and Grab QUEUEING/ALLOCATING). `services/orders.py`: `awaitingDriver` kept in step on every poll, `DRIVER_SEARCH_LIMIT` (30 min) fails the delivery and cancels the booking, `cancel_courier()`; route `POST /pharmacy/orders/{id}/cancel-courier` (pharmacist, admin). App: `MedicationOrder.awaitingDriver`, `statusLabel` ('Finding a driver'), `canCancelCourier`; 'Cancel courier' in the pharmacy queue and the staff order page; patient tracking text.
+- **D-90 (Module 5):** `routers/medications.py`: doctor medicines keep the number of reminders (or as-needed) and now save `refillThresholdDays`. App: `MedicationFormPage` shows a 'Medication details' record for doctor medicines (tap a time to move it).
+- **D-91 (Module 5):** `prescriptionLines()` splits a prescription into medicines; `_PrescriptionTile` collapses and expands.
+- Tests: `tests/test_lalamove.py` (D-89 stages, failures, timeout, cancel, after pickup), `tests/test_consolidated_orders.py` (D-90); `test/widget/orders_d69_test.dart` (D-89), `test/widget/medications_test.dart` (D-90, D-91).
+

@@ -140,6 +140,12 @@ def test_prescribed_medicines_join_the_meds_tab_locked(
     res = client.put(url, json={**change, "dosage": "2 tablets"}, headers=PATIENT)
     assert res.json()["error"]["code"] == "MEDICATION_LOCKED"
     assert client.delete(url, headers=PATIENT).json()["error"]["code"] == "MEDICATION_LOCKED"
+    # D-90: the doctor's frequency fixes the number of reminders; refill days are saved.
+    for schedule in ("09:00,21:00", "as_needed"):
+        res = client.put(url, json={**change, "schedule": schedule}, headers=PATIENT)
+        assert res.json()["error"]["code"] == "MEDICATION_LOCKED"
+    res = client.put(url, json={**change, "refillThresholdDays": 10}, headers=PATIENT)
+    assert res.status_code == 200 and med_repo.meds[amlo_id]["refillThresholdDays"] == 10
     # The doctor stopping the prescription removes its medicines.
     client.delete(f"{RX_URL}/{rx_id}", headers=DOCTOR)
     assert med_repo.meds == {}

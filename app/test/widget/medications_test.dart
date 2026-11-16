@@ -370,7 +370,8 @@ void main() {
       await t.pumpWidget(app(repo, const []));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('meds-empty')), findsNothing);
-      expect(find.text('Losartan 50mg, Twice daily, for 3 months'), findsOneWidget);
+      expect(find.text('Losartan 50mg'), findsOneWidget);
+      expect(find.text('Twice daily, for 3 months'), findsOneWidget); // D-91
       expect(find.textContaining('repeats monthly'), findsOneWidget);
     });
 
@@ -454,7 +455,10 @@ void main() {
       final repo = FakeMedicationsRepository()..rx = [mineRx];
       await t.pumpWidget(app(repo, const []));
       await t.pumpAndSettle();
-      await t.tap(find.text('Metformin 500mg, Twice daily, from Klinik Setapak'));
+      // D-91: tapping expands the card; Edit opens their own prescription.
+      await t.tap(find.text('Metformin 500mg'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('rx-edit-rx2')));
       await t.pumpAndSettle();
       expect(find.text('Edit prescription'), findsOneWidget);
       expect(find.widgetWithText(TextFormField, 'Klinik Setapak'), findsOneWidget);
@@ -478,17 +482,17 @@ void main() {
       );
       await t.pumpWidget(app(FakeMedicationsRepository()..rx = [long], const []));
       await t.pumpAndSettle();
-      final card = t.getSize(find.byKey(const Key('rx-rx3')));
-      final name = t.getSize(find.text('Losartan 50mg, Once daily, morning'));
-      expect(name.width, greaterThan(card.width * 0.6));
+      expect(find.text('Losartan 50mg'), findsOneWidget);
+      expect(find.text('Once daily, morning'), findsOneWidget);
       expect(t.takeException(), isNull); // no overflow
     });
 
     testWidgets('a doctor prescription does not open for editing', (t) async {
       await t.pumpWidget(app(FakeMedicationsRepository()..rx = [doctorRx], const []));
       await t.pumpAndSettle();
-      await t.tap(find.text('Losartan 50mg, Once daily'));
+      await t.tap(find.text('Losartan 50mg'));
       await t.pumpAndSettle();
+      expect(find.byKey(const Key('rx-edit-rx1')), findsNothing);
       expect(find.text('Edit prescription'), findsNothing);
     });
   });
@@ -688,15 +692,40 @@ void main() {
       );
       await t.pumpWidget(app(repo, const [], initial: '/medications/edit', extra: fromDoctor));
       await t.pumpAndSettle();
+      // D-90: a record of what the doctor prescribed, not an edit form.
+      expect(find.text('Medication details'), findsOneWidget);
       expect(find.byKey(const Key('med-locked')), findsOneWidget);
-      expect(find.text('Prescribed by Dr Tan'), findsOneWidget);
-      expect(find.byKey(const Key('delete-medication')), findsNothing);
-      for (final k in ['med-name', 'med-dosage', 'med-quantity']) {
-        final field = t.widget<TextField>(
-          find.descendant(of: find.byKey(Key(k)), matching: find.byType(TextField)),
-        );
-        expect(field.readOnly, isTrue, reason: k);
+      expect(find.textContaining('Prescribed by Dr Tan'), findsOneWidget);
+      expect(find.text('Once a day'), findsOneWidget);
+      expect(find.text('30'), findsOneWidget); // doses on hand
+      for (final k in ['delete-medication', 'med-name', 'med-dosage', 'med-quantity']) {
+        expect(find.byKey(Key(k)), findsNothing, reason: k);
       }
+      // No "As needed" switch and no adding or removing times.
+      expect(find.byKey(const Key('med-mode')), findsNothing);
+      expect(find.byKey(const Key('add-time')), findsNothing);
+      // Move the 8:00 AM reminder to 9:00 AM and change the refill reminder.
+      await t.tap(find.byKey(const Key('time-08:00')));
+      await t.pumpAndSettle();
+      await t.tap(find.byIcon(Icons.keyboard_outlined));
+      await t.pumpAndSettle();
+      final picker = find.byType(TimePickerDialog);
+      await t.enterText(find.descendant(of: picker, matching: find.byType(TextField)).first, '9');
+      await t.pump();
+      await t.tap(find.text('OK'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('time-09:00')), findsOneWidget);
+      await t.enterText(find.byKey(const Key('med-threshold')), '10');
+      await t.scrollUntilVisible(
+        find.byKey(const Key('save-medication')),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await t.tap(find.byKey(const Key('save-medication')));
+      await t.pumpAndSettle();
+      final (draft, id, _) = repo.saved.single;
+      expect((id, draft.schedule, draft.refillThresholdDays), ('m9', '09:00', 10));
+      expect((draft.name, draft.dosage), ('Amlodipine 5mg', '1 tablet'));
     });
 
     testWidgets('D-69 the Meds tab says who prescribed a medicine', (t) async {
@@ -714,6 +743,47 @@ void main() {
       await t.pumpAndSettle();
       expect(find.byKey(const Key('from-doctor-m9')), findsWidgets);
       expect(find.text('From Dr Tan'), findsWidgets);
+    });
+  });
+
+  group('D-91 prescription cards', () {
+    test('a prescription splits into medicines with name and details', () {
+      final lines = prescriptionLines(
+        'Felodipine 5mg 1 tablet, once daily x30; Indapamide SR 1.5mg 1 tablet, once daily x30',
+      );
+      expect(lines.map((l) => l.name), ['Felodipine 5mg', 'Indapamide SR 1.5mg']);
+      expect(lines.first.detail, '1 tablet, once daily ×30');
+      expect(prescriptionLines('Metformin 500mg, Twice daily').single, (
+        name: 'Metformin 500mg',
+        detail: 'Twice daily',
+      ));
+      expect(prescriptionLines('Vitamin D').single, (name: 'Vitamin D', detail: ''));
+    });
+
+    testWidgets('collapsed shows the names; expanding lists one row per medicine', (t) async {
+      final rx = Prescription(
+        id: 'rx9',
+        medicationDetails:
+            'Atorvastatin 20mg 1 tablet, once daily x30; Amlodipine 10mg 1 tablet, once daily '
+            'x30; Felodipine 5mg 1 tablet, once daily x30',
+        isRecurring: true,
+        issuedAt: DateTime.utc(2026, 10, 17),
+        doctorId: 'd1',
+      );
+      await t.pumpWidget(app(FakeMedicationsRepository()..rx = [rx], const []));
+      await t.pumpAndSettle();
+      expect(find.text('3 medicines'), findsOneWidget);
+      expect(find.text('Atorvastatin 20mg · Amlodipine 10mg · Felodipine 5mg'), findsOneWidget);
+      expect(find.byKey(const Key('rx-line-rx9-0')), findsNothing);
+      await t.tap(find.byKey(const Key('rx-expand-rx9')));
+      await t.pumpAndSettle();
+      for (var i = 0; i < 3; i++) {
+        expect(find.byKey(Key('rx-line-rx9-$i')), findsOneWidget);
+      }
+      expect(find.text('1 tablet, once daily ×30'), findsNWidgets(3));
+      await t.tap(find.byKey(const Key('rx-expand-rx9')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('rx-line-rx9-0')), findsNothing);
     });
   });
 }

@@ -8,8 +8,9 @@ import 'record_viewer_page.dart';
 
 /// Opens a record (UC6.3). D-88: full screen inside Harvey for both images and PDFs;
 /// sending it to another app is a separate "Share to other apps" action.
-Future<void> openRecord(BuildContext context, WidgetRef ref, HealthRecord r) =>
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => RecordViewerPage(record: r)));
+Future<void> openRecord(BuildContext context, WidgetRef ref, HealthRecord r) => Navigator.of(
+  context,
+).push(MaterialPageRoute<void>(builder: (_) => RecordViewerPage(record: r)));
 
 /// UC6.1 step 3: the category is required. Null when the patient cancels.
 Future<RecordCategory?> askRecordCategory(

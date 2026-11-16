@@ -141,7 +141,23 @@ def edit_medication(
                 "reminder times.",
                 status.HTTP_409_CONFLICT,
             )
-        data = {"schedule": data["schedule"]}
+        # D-90: the doctor's frequency fixes how many reminders there are (or "as needed");
+        # the patient may only move them. The refill reminder is the patient's own setting.
+        before = parse_schedule(str(med.data.get("schedule") or ""))
+        after = parse_schedule(data["schedule"])
+        if (before is None) != (after is None) or (
+            before is not None and after is not None and len(before) != len(after)
+        ):
+            raise ApiError(
+                "MEDICATION_LOCKED",
+                "Your doctor set how often to take this medicine. You can only move the "
+                "reminder times.",
+                status.HTTP_409_CONFLICT,
+            )
+        data = {
+            "schedule": data["schedule"],
+            "refillThresholdDays": data["refillThresholdDays"],
+        }
     else:
         others = [m for m in repo.list_for(user.uid) if m.id != medication_id]
         _check_or_raise(body, others, data)

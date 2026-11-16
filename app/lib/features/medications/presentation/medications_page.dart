@@ -356,22 +356,59 @@ class _BackgroundBanner extends ConsumerWidget {
   }
 }
 
+/// D-91: one medicine of a prescription's text ("Felodipine 5mg 1 tablet, once daily x30"):
+/// the name with its strength, and the rest (dose, how often, quantity).
+typedef RxLine = ({String name, String detail});
+
+final _strength = RegExp(
+  r'^(.*?\d+(?:\.\d+)?\s?(?:mg|mcg|g|ml|iu|units?|%))(?=\s|,|$)(.*)$',
+  caseSensitive: false,
+);
+
+List<RxLine> prescriptionLines(String details) => [
+  for (final part in details.split(';'))
+    if (part.trim().isNotEmpty) _line(part.trim()),
+];
+
+RxLine _line(String text) {
+  final m = _strength.firstMatch(text);
+  if (m != null) {
+    final rest = m.group(2)!.trim().replaceFirst(RegExp(r'^,\s*'), '');
+    return (
+      name: m.group(1)!.trim(),
+      detail: rest.replaceAllMapped(RegExp(r'\bx(\d+)\b'), (q) => '×${q.group(1)}'),
+    );
+  }
+  final comma = text.indexOf(',');
+  return comma < 0
+      ? (name: text, detail: '')
+      : (name: text.substring(0, comma).trim(), detail: text.substring(comma + 1).trim());
+}
+
 /// D-49/D-50: a prescription (doctor-issued blue, patient-reported green) that the
 /// patient can copy into their reminders; their own ones open for editing.
-class _PrescriptionTile extends StatelessWidget {
+/// D-91: collapsed to the medicine names; tap to see one row per medicine.
+class _PrescriptionTile extends StatefulWidget {
   const _PrescriptionTile({required this.prescription, required this.tracked});
 
   final Prescription prescription;
   final bool tracked;
 
   @override
+  State<_PrescriptionTile> createState() => _PrescriptionTileState();
+}
+
+class _PrescriptionTileState extends State<_PrescriptionTile> {
+  bool _open = false;
+
+  @override
   Widget build(BuildContext context) {
-    final p = prescription;
+    final p = widget.prescription;
     final issued = toMyt(p.issuedAt);
     final color = prescriptionColor(p);
     final theme = Theme.of(context);
-    // Text gets the full width; the action sits on its own row so long names never wrap
-    // letter by letter.
+    final lines = prescriptionLines(p.medicationDetails);
+    final count = lines.length;
     return Card(
       key: Key('rx-${p.id}'),
       shape: RoundedRectangleBorder(
@@ -380,9 +417,9 @@ class _PrescriptionTile extends StatelessWidget {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: p.byPatient ? () => context.push('/medications/prescription', extra: p) : null,
+        onTap: () => setState(() => _open = !_open),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+          padding: const EdgeInsets.fromLTRB(12, 12, 4, 4),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -401,7 +438,21 @@ class _PrescriptionTile extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(p.medicationDetails, style: theme.textTheme.titleMedium),
+                        Text(
+                          count <= 1
+                              ? (lines.isEmpty ? p.medicationDetails : lines.first.name)
+                              : '$count medicines',
+                          style: theme.textTheme.titleMedium,
+                        ),
+                        if (!_open && count > 1)
+                          Text(
+                            lines.map((l) => l.name).join(' · '),
+                            key: Key('rx-names-${p.id}'),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        if (!_open && count == 1 && lines.first.detail.isNotEmpty)
+                          Text(lines.first.detail, key: Key('rx-detail-${p.id}')),
                         const SizedBox(height: 2),
                         Text(
                           '${p.byPatient ? 'Recorded' : 'Prescribed'} ${issued.day} '
@@ -412,30 +463,84 @@ class _PrescriptionTile extends StatelessWidget {
                       ],
                     ),
                   ),
+                  IconButton(
+                    key: Key('rx-expand-${p.id}'),
+                    tooltip: _open ? 'Show less' : 'Show details',
+                    onPressed: () => setState(() => _open = !_open),
+                    icon: Icon(_open ? Icons.expand_less : Icons.expand_more),
+                  ),
                 ],
               ),
-              // Chip left, action right; on narrow phones the action wraps below.
-              SizedBox(
-                width: double.infinity,
-                child: Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  children: [
-                    PrescriptionSourceChip(prescription: p, forDoctor: false),
-                    if (tracked)
-                      const Chip(label: Text('On your list'))
-                    else
-                      TextButton.icon(
-                        key: Key('rx-add-${p.id}'),
-                        onPressed: () => context.push(
-                          '/medications/add',
-                          extra: draftFromPrescription(p.medicationDetails),
+              if (_open) ...[
+                const SizedBox(height: 8),
+                for (final (i, l) in lines.indexed)
+                  Container(
+                    key: Key('rx-line-${p.id}-$i'),
+                    margin: const EdgeInsets.only(left: 52, right: 8, bottom: 6),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.07),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.medication_outlined, size: 20, color: color),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                l.name,
+                                style: theme.textTheme.bodyLarge?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              if (l.detail.isNotEmpty)
+                                Text(l.detail, style: theme.textTheme.bodyMedium),
+                            ],
+                          ),
                         ),
-                        icon: const Icon(Icons.alarm_add_outlined, size: 18),
-                        label: const Text('Add to my reminders'),
-                      ),
-                  ],
+                      ],
+                    ),
+                  ),
+                if (p.byPatient)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 52),
+                    child: TextButton.icon(
+                      key: Key('rx-edit-${p.id}'),
+                      onPressed: () => context.push('/medications/prescription', extra: p),
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      label: const Text('Edit'),
+                    ),
+                  ),
+              ],
+              // Chip left, action right; on narrow phones the action wraps below.
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    children: [
+                      PrescriptionSourceChip(prescription: p, forDoctor: false),
+                      if (widget.tracked)
+                        const Chip(label: Text('On your list'))
+                      else
+                        TextButton.icon(
+                          key: Key('rx-add-${p.id}'),
+                          onPressed: () => context.push(
+                            '/medications/add',
+                            extra: draftFromPrescription(p.medicationDetails),
+                          ),
+                          icon: const Icon(Icons.alarm_add_outlined, size: 18),
+                          label: const Text('Add to my reminders'),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ],

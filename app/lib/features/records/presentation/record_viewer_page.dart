@@ -208,9 +208,7 @@ Future<void> shareRecordOut(BuildContext context, WidgetRef ref, HealthRecord r)
   final messenger = ScaffoldMessenger.of(context);
   try {
     final bytes = await ref.read(recordsRepositoryProvider).fileBytes(r.id);
-    await ref
-        .read(fileSharerProvider)
-        .share(bytes, fileName: r.fileName, mimeType: r.contentType);
+    await ref.read(fileSharerProvider).share(bytes, fileName: r.fileName, mimeType: r.contentType);
   } catch (_) {
     messenger.showSnackBar(const SnackBar(content: Text('Could not share the document.')));
   }

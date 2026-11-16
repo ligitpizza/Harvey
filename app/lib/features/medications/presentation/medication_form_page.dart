@@ -71,6 +71,27 @@ class _MedicationFormPageState extends ConsumerState<MedicationFormPage> {
     });
   }
 
+  /// D-90: move one reminder of a doctor-set medicine; the number of times stays.
+  Future<void> _moveTime(int index) async {
+    final now = _times[index];
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: now.hour, minute: now.minute),
+      helpText: 'Move this reminder (Malaysia time)',
+    );
+    if (picked == null || !mounted) return;
+    final t = DoseTime(picked.hour, picked.minute);
+    if (t != now && _times.contains(t)) {
+      setState(() => _error = 'You already have a reminder at ${t.label}.');
+      return;
+    }
+    setState(() {
+      _error = null;
+      _times[index] = t;
+      _times.sort();
+    });
+  }
+
   MedicationDraft _draft() => MedicationDraft(
     name: _name.text.trim(),
     dosage: _dosage.text.trim(),
@@ -136,6 +157,7 @@ class _MedicationFormPageState extends ConsumerState<MedicationFormPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_locked) return _record(context);
     final digits = [FilteringTextInputFormatter.digitsOnly];
     return Scaffold(
       appBar: AppBar(
@@ -271,6 +293,158 @@ class _MedicationFormPageState extends ConsumerState<MedicationFormPage> {
               child: _saving
                   ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator())
                   : const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// D-90: a doctor-set medicine is a record, not a form. The patient sees what the doctor
+  /// prescribed and may only move the reminder times (same number as the doctor's
+  /// frequency) and set when the refill reminder comes.
+  Widget _record(BuildContext context) {
+    final theme = Theme.of(context);
+    final med = widget.existing!;
+    final howOften = _asNeeded
+        ? 'As needed'
+        : switch (_times.length) {
+            1 => 'Once a day',
+            2 => 'Twice a day',
+            final n => '$n times a day',
+          };
+    final rate = med.adherenceRate;
+    Widget fact(String label, String value, {Key? key}) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 130, child: Text(label, style: theme.textTheme.bodyMedium)),
+          Expanded(
+            child: Text(
+              value,
+              key: key,
+              style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+    return Scaffold(
+      appBar: AppBar(title: const Text('Medication details')),
+      body: Form(
+        key: _form,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Card(
+              key: const Key('med-locked'),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: theme.colorScheme.primaryContainer,
+                          child: Icon(Icons.medication, color: theme.colorScheme.primary),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            med.name,
+                            key: const Key('med-record-name'),
+                            style: theme.textTheme.titleLarge,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    fact('Dose', med.dosage, key: const Key('med-record-dose')),
+                    fact('How often', howOften, key: const Key('med-record-frequency')),
+                    fact(
+                      'Doses on hand',
+                      med.quantityOnHand == null ? '—' : med.quantityOnHand!.toStringAsFixed(0),
+                    ),
+                    if (!_asNeeded)
+                      fact(
+                        'Adherence (30 days)',
+                        rate == null ? 'No history yet' : '${rate.toStringAsFixed(0)}%',
+                      ),
+                    const Divider(height: 24),
+                    Row(
+                      children: [
+                        Icon(Icons.lock_outline, size: 18, color: theme.colorScheme.outline),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Prescribed by ${med.prescribedBy ?? 'your doctor'}. Ask your doctor '
+                            'to change the medicine, dose or how often.',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text('Reminder times', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            if (_asNeeded)
+              const Text('Take it when you need it. There are no set reminders.')
+            else ...[
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final (i, t) in _times.indexed)
+                    ActionChip(
+                      key: Key('time-${t.hhmm}'),
+                      avatar: const Icon(Icons.alarm, size: 18),
+                      label: Text(t.label),
+                      onPressed: _saving ? null : () => _moveTime(i),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Tap a time to move it (Malaysia time). Your doctor set how many a day.',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+            const SizedBox(height: 20),
+            TextFormField(
+              key: const Key('med-threshold'),
+              controller: _threshold,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                labelText: 'Remind me to refill when this many days are left',
+                helperText: 'Your own setting, from 1 to 60 days.',
+              ),
+              validator: (v) {
+                final n = int.tryParse((v ?? '').trim());
+                return n == null || n < 1 || n > 60 ? 'Enter 1 to 60 days.' : null;
+              },
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _error!,
+                key: const Key('med-error'),
+                style: TextStyle(color: theme.colorScheme.error),
+              ),
+            ],
+            const SizedBox(height: 24),
+            FilledButton(
+              key: const Key('save-medication'),
+              onPressed: _saving ? null : _save,
+              child: _saving
+                  ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator())
+                  : const Text('Save changes'),
             ),
           ],
         ),
