@@ -34,6 +34,7 @@ String? notificationRoute(String? type, Map<String, String> data, UserRole? role
   };
   final id = data['id'];
   final from = data['from'];
+  final orderId = data['orderId']; // D-97
   if (staffBase == null) {
     // Patient app.
     return switch (type) {
@@ -41,7 +42,7 @@ String? notificationRoute(String? type, Map<String, String> data, UserRole? role
       'conversation' => id == null ? '/chat' : '/conversation/$id',
       'pharmacy_chat' => '/pharmacy-chat',
       'weekly_summary' => '/ai-agent',
-      'order' => '/orders',
+      'order' => orderId == null ? '/orders' : '/orders/$orderId/open',
       'appointment' || 'assignment' => '/appointments',
       'dose' || 'refill' => '/medications',
       'bp_alert' || 'risk' || 'triage' => '/dashboard',
@@ -56,8 +57,10 @@ String? notificationRoute(String? type, Map<String, String> data, UserRole? role
     'conversation' when id != null =>
       role == UserRole.admin ? '/admin/messages/$id' : '$staffBase/messages/team/$id',
     'pharmacy_chat' when role == UserRole.pharmacist => '/pharmacy/messages',
-    'order' when role == UserRole.pharmacist => '/pharmacy',
-    'order' when role == UserRole.admin => '/admin/orders',
+    'order' when role == UserRole.pharmacist =>
+      orderId == null ? '/pharmacy' : '/pharmacy/order/$orderId',
+    'order' when role == UserRole.admin =>
+      orderId == null ? '/admin/orders' : '/admin/orders/$orderId',
     'clinical_alert' ||
     'escalation' ||
     'bp_alert' ||

@@ -28,6 +28,9 @@ abstract interface class OrdersRepository {
   Future<PaymentResult> refreshPayment(String id);
   Future<void> reschedule(String id);
   Future<void> switchToCollection(String id);
+
+  /// D-94: the patient confirms the medicine arrived.
+  Future<void> confirmReceived(String id);
   Future<int> devNextCycle();
 
   Future<PharmacyQueue> queue();
@@ -153,6 +156,9 @@ class ApiOrdersRepository implements OrdersRepository {
 
   @override
   Future<void> switchToCollection(String id) => _api.switchToCollection(id);
+
+  @override
+  Future<void> confirmReceived(String id) => _api.confirmReceived(id);
 
   @override
   Future<int> devNextCycle() async =>

@@ -22,7 +22,8 @@ class PharmacyPage extends ConsumerWidget {
       builder: (context, box) {
         final wide = box.maxWidth >= 1000;
         // D-79: counts on top, then the queue by stage, then what waits for the patient.
-        const main = [_QueueCard(), SizedBox(height: 16), _WaitingForPatient(), _PriceCard()];
+        // D-96: one tabbed Orders card (to prepare, collection, delivery, waiting, completed).
+        const main = [_OrdersTabs(), SizedBox(height: 16), _PriceCard()];
         const side = [_QuickActions()];
         return ListView(
           padding: const EdgeInsets.all(24),
@@ -40,6 +41,7 @@ class PharmacyPage extends ConsumerWidget {
                   tooltip: 'Refresh',
                   onPressed: () => ref
                     ..invalidate(ordersOverviewProvider((group: 'awaiting_patient', query: '')))
+                    ..invalidate(ordersOverviewProvider(_completed))
                     ..invalidate(pharmacyQueueProvider)
                     ..invalidate(stockProvider),
                   icon: const Icon(Icons.refresh),
@@ -75,8 +77,92 @@ class PharmacyPage extends ConsumerWidget {
 
 // ---------------- queue ----------------
 
+/// D-96: the Orders tabs.
+enum _OrdersTab {
+  prepare('To prepare', Icons.medication_outlined),
+  collection('Ready for collection', Icons.storefront_outlined),
+  delivery('Delivery', Icons.local_shipping_outlined),
+  waiting('Waiting for patient', Icons.hourglass_top_outlined),
+  completed('Completed', Icons.task_alt);
+
+  const _OrdersTab(this.label, this.icon);
+  final String label;
+  final IconData icon;
+
+  bool holds(MedicationOrder o) => switch (this) {
+    prepare => o.status == Fulfilment.preparing || o.status == Fulfilment.outOfStock,
+    collection => o.status == Fulfilment.readyForCollection,
+    delivery => o.status == Fulfilment.readyForDelivery || o.status == Fulfilment.failed,
+    waiting || completed => true,
+  };
+}
+
+const _completed = (group: 'completed', query: '');
+
+class _SelectedOrdersTab extends Notifier<_OrdersTab> {
+  @override
+  _OrdersTab build() => _OrdersTab.prepare;
+
+  void select(_OrdersTab t) => state = t;
+}
+
+final _ordersTabProvider = NotifierProvider<_SelectedOrdersTab, _OrdersTab>(_SelectedOrdersTab.new);
+
+class _OrdersTabs extends ConsumerWidget {
+  const _OrdersTabs();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tab = ref.watch(_ordersTabProvider);
+    final queue = ref.watch(pharmacyQueueProvider).value?.orders ?? const <MedicationOrder>[];
+    final waiting =
+        ref.watch(ordersOverviewProvider((group: 'awaiting_patient', query: ''))).value?.orders ??
+        const <MedicationOrder>[];
+    final completed =
+        ref.watch(ordersOverviewProvider(_completed)).value?.orders ?? const <MedicationOrder>[];
+    int count(_OrdersTab t) => switch (t) {
+      _OrdersTab.waiting => waiting.length,
+      _OrdersTab.completed => completed.length,
+      _ => queue.where(t.holds).length,
+    };
+    return PharmacySection(
+      key: const Key('orders-tabs'),
+      icon: Icons.receipt_long_outlined,
+      title: 'Orders',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final t in _OrdersTab.values)
+                ChoiceChip(
+                  key: Key('orders-tab-${t.name}'),
+                  avatar: Icon(t.icon, size: 18),
+                  label: Text('${t.label} (${count(t)})'),
+                  selected: tab == t,
+                  showCheckmark: false,
+                  onSelected: (_) => ref.read(_ordersTabProvider.notifier).select(t),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          switch (tab) {
+            _OrdersTab.waiting => const _WaitingForPatient(),
+            _OrdersTab.completed => _CompletedList(orders: completed),
+            _ => _QueueCard(tab: tab),
+          },
+        ],
+      ),
+    );
+  }
+}
+
 class _QueueCard extends ConsumerWidget {
-  const _QueueCard();
+  const _QueueCard({required this.tab});
+
+  final _OrdersTab tab;
 
   Future<void> _ready(BuildContext context, WidgetRef ref, MedicationOrder o) async {
     if (o.items.isNotEmpty) {
@@ -280,77 +366,77 @@ class _QueueCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final queue = ref.watch(pharmacyQueueProvider);
-    return PharmacySection(
-      icon: Icons.receipt_long_outlined,
-      title: 'Active prescription queue',
-      child: queue.when(
-        loading: () => const LinearProgressIndicator(),
-        error: (_, _) => TextButton(
-          onPressed: () => ref.invalidate(pharmacyQueueProvider),
-          child: const Text('Could not load the queue. Retry'),
-        ),
-        data: (q) {
-          if (q.orders.isEmpty) {
-            return const Padding(
-              key: Key('queue-empty'),
-              padding: EdgeInsets.all(8),
-              child: Text('No paid orders to prepare.'),
-            );
-          }
-          // D-79: grouped by stage, so what needs doing next is on top.
-          final groups = <(String, IconData, List<MedicationOrder>)>[
-            (
-              'To prepare',
-              Icons.medication_outlined,
-              [
-                for (final o in q.orders)
-                  if (o.status == Fulfilment.preparing || o.status == Fulfilment.outOfStock) o,
-              ],
-            ),
-            (
-              'Ready for collection',
-              Icons.storefront_outlined,
-              [
-                for (final o in q.orders)
-                  if (o.status == Fulfilment.readyForCollection) o,
-              ],
-            ),
-            (
-              'Delivery',
-              Icons.local_shipping_outlined,
-              [
-                for (final o in q.orders)
-                  if (o.status != Fulfilment.preparing &&
-                      o.status != Fulfilment.outOfStock &&
-                      o.status != Fulfilment.readyForCollection)
-                    o,
-              ],
-            ),
-          ];
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final (title, icon, orders) in groups)
-                if (orders.isNotEmpty) ...[
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8, bottom: 6),
-                    child: Row(
-                      children: [
-                        Icon(icon, size: 18),
-                        const SizedBox(width: 6),
-                        Text(
-                          '$title (${orders.length})',
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                      ],
-                    ),
-                  ),
-                  for (final o in orders) _row(context, ref, o),
-                ],
-            ],
-          );
-        },
+    return queue.when(
+      loading: () => const LinearProgressIndicator(),
+      error: (_, _) => TextButton(
+        onPressed: () => ref.invalidate(pharmacyQueueProvider),
+        child: const Text('Could not load the queue. Retry'),
       ),
+      data: (q) {
+        final orders = q.orders.where(tab.holds).toList();
+        if (orders.isEmpty) {
+          return Padding(
+            key: const Key('queue-empty'),
+            padding: const EdgeInsets.all(8),
+            child: Text(switch (tab) {
+              _OrdersTab.prepare => 'No paid orders to prepare.',
+              _OrdersTab.collection => 'Nothing waiting for collection.',
+              _ => 'No deliveries in progress.',
+            }),
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [for (final o in orders) _row(context, ref, o)],
+        );
+      },
+    );
+  }
+}
+
+/// D-96: delivered and collected orders; a delivery the patient confirmed shows
+/// "Received by patient" (D-94).
+class _CompletedList extends StatelessWidget {
+  const _CompletedList({required this.orders});
+  final List<MedicationOrder> orders;
+
+  @override
+  Widget build(BuildContext context) {
+    if (orders.isEmpty) {
+      return const Padding(padding: EdgeInsets.all(8), child: Text('No completed orders yet.'));
+    }
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final o in orders)
+          ListTile(
+            key: Key('completed-${o.id}'),
+            contentPadding: EdgeInsets.zero,
+            onTap: () => context.go('/pharmacy/order/${o.id}'),
+            leading: Icon(
+              o.receivedAt != null
+                  ? Icons.verified
+                  : o.isDelivery
+                  ? Icons.home_outlined
+                  : Icons.storefront_outlined,
+              color: o.receivedAt != null ? Colors.green.shade700 : null,
+            ),
+            title: Text(
+              '${o.patientName ?? 'Patient'} · '
+              '${o.items.isEmpty ? o.medicationDetails : o.items.map((i) => '${i.label} ×${i.quantity}').join(', ')}',
+            ),
+            subtitle: Text(
+              [
+                o.ref,
+                if (o.isDelivery) 'Home delivery' else 'Self-collection',
+                if (o.total != null) rm(o.total!),
+              ].join(' · '),
+              style: theme.textTheme.bodySmall,
+            ),
+            trailing: OrderStatusChip.of(o),
+          ),
+      ],
     );
   }
 }
@@ -376,6 +462,7 @@ class _StatusStrip extends ConsumerWidget {
           icon: Icons.medication_outlined,
           color: Colors.blue.shade600,
           label: 'To prepare',
+          onTap: () => ref.read(_ordersTabProvider.notifier).select(_OrdersTab.prepare),
           value:
               '${n((o) => o.status == Fulfilment.preparing || o.status == Fulfilment.outOfStock)}',
         ),
@@ -384,6 +471,7 @@ class _StatusStrip extends ConsumerWidget {
           color: Colors.green.shade600,
           label: 'Ready for collection',
           value: '${n((o) => o.status == Fulfilment.readyForCollection)}',
+          onTap: () => ref.read(_ordersTabProvider.notifier).select(_OrdersTab.collection),
         ),
         StatTile(
           icon: Icons.local_shipping_outlined,
@@ -391,13 +479,14 @@ class _StatusStrip extends ConsumerWidget {
           label: 'Delivery',
           value:
               '${n((o) => o.status == Fulfilment.readyForDelivery || o.status == Fulfilment.failed)}',
-          onTap: () => context.go('/pharmacy/tracking'),
+          onTap: () => ref.read(_ordersTabProvider.notifier).select(_OrdersTab.delivery),
         ),
         StatTile(
           icon: Icons.hourglass_top_outlined,
           color: Colors.orange.shade700,
           label: 'Waiting for patient',
           value: '${waiting.length}',
+          onTap: () => ref.read(_ordersTabProvider.notifier).select(_OrdersTab.waiting),
         ),
       ],
     );
@@ -587,11 +676,14 @@ class _WaitingForPatient extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final waiting = ref.watch(ordersOverviewProvider((group: 'awaiting_patient', query: '')));
     final orders = waiting.value?.orders ?? const <MedicationOrder>[];
-    if (orders.isEmpty) return const SizedBox.shrink();
-    return PharmacySection(
+    if (orders.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(8),
+        child: Text('No orders waiting for a patient.'),
+      );
+    }
+    return KeyedSubtree(
       key: const Key('waiting-for-patient'),
-      icon: Icons.hourglass_top_outlined,
-      title: 'Waiting for the patient (${orders.length})',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

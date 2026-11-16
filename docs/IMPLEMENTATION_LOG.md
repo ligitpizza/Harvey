@@ -1622,3 +1622,13 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - **D-91 (Module 5):** `prescriptionLines()` splits a prescription into medicines; `_PrescriptionTile` collapses and expands.
 - Tests: `tests/test_lalamove.py` (D-89 stages, failures, timeout, cancel, after pickup), `tests/test_consolidated_orders.py` (D-90); `test/widget/orders_d69_test.dart` (D-89), `test/widget/medications_test.dart` (D-90, D-91).
 
+### 2026-11-16 — Password code fix, Medicine received, receipt, pharmacy tabs, notifications (D-93 to D-98)
+
+- **D-93:** `ForgotPasswordPage`: no auto-send from Settings; 'I already have a code' (`reset-have-code`).
+- **D-94:** `OrderService.received()`, `POST /orders/{id}/received` (patient); `receivedAt` in the order view. App: `canConfirmReceived`, `statusLabel` ('On the way', 'Received by patient'), 'Medicine received' button and timeline step.
+- **D-95:** `services/receipts.py`: logo header, details, `pdf.table()` item table and totals; `backend/app/assets/harvey_logo.png`.
+- **D-96:** `pharmacy_page.dart`: `_OrdersTabs` (To prepare, Ready for collection, Delivery, Waiting for patient, Completed), `_CompletedList`; counter tiles select tabs.
+- **D-97:** `notificationRoute` uses `orderId`; `/orders/:id/open` (`OrderOpenPage`) shows the order with Orders on the right tab; `OrdersPage(completed:)`.
+- **D-98:** `NotificationsPanel` redesign (filters, day groups, card rows).
+- Tests: `tests/test_lalamove.py` (D-94), `tests/test_cashflow.py` (D-95); `test/widget/auth_pages_test.dart`, `staff_d77_test.dart` (D-93, D-97, D-98), `orders_d69_test.dart`, `orders_test.dart` (D-94, D-96, D-97).
+

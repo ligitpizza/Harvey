@@ -461,3 +461,51 @@ def test_d89_cannot_cancel_after_pickup(
         headers=bearer("pharmacist-token"),
     )
     assert res.status_code == 409 and res.json()["error"]["code"] == "ORDER_PICKED_UP"
+
+
+# ---------------- D-94: the patient confirms the medicine arrived ----------------
+
+
+def test_d94_patient_confirms_received_once_picked_up(
+    make_client: Any, order_repo: InMemoryOrderRepository
+) -> None:
+    c, _ = _searching_client(make_client)
+    oid = _home_order(c, order_repo)
+    url = f"/api/v1/orders/{oid}/received"
+    patient = bearer("patient-token")
+    # Still looking for a driver: too early.
+    res = c.post(url, headers=patient)
+    assert res.status_code == 409 and res.json()["error"]["code"] == "ORDER_NOT_OUT"
+    order_repo.add_event(
+        {
+            "orderId": oid,
+            "status": "picked_up",
+            "location": None,
+            "timestamp": order_repo.orders[oid]["dispatchedAt"],
+        }
+    )
+    assert c.post(url, headers=bearer("pharmacist-token")).status_code == 403
+    res = c.post(url, headers=patient)
+    assert res.status_code == 200
+    body = res.json()
+    assert body["fulfilmentStatus"] == "delivered" and body["receivedAt"]
+    assert any(
+        e["status"] == "delivered" and e["location"] == "Confirmed by the patient"
+        for e in order_repo.tracking
+    )
+    assert c.post(url, headers=patient).json()["error"]["code"] == "ORDER_ALREADY_RECEIVED"
+
+
+def test_d94_received_after_the_courier_delivered(
+    client: TestClient, order_repo: InMemoryOrderRepository
+) -> None:
+    oid = _home_order(client, order_repo)
+    order_repo.orders[oid]["dispatchedAt"] -= STAGE * 5
+    patient = bearer("patient-token")
+    assert client.get(f"/api/v1/orders/{oid}", headers=patient).json()["fulfilmentStatus"] == (
+        "delivered"
+    )
+    events = len(order_repo.tracking)
+    res = client.post(f"/api/v1/orders/{oid}/received", headers=patient)
+    assert res.status_code == 200 and res.json()["receivedAt"]
+    assert len(order_repo.tracking) == events  # no second "delivered"

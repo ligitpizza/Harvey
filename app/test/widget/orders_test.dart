@@ -504,6 +504,8 @@ void main() {
       expect(find.text('2027-01-31'), findsOneWidget);
       await t.pumpWidget(host('/pharmacy'));
       await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('orders-tab-collection')));
+      await t.pumpAndSettle();
       await t.tap(find.byKey(const Key('collected-$id')));
       await t.pumpAndSettle();
       expect(repo.calls, contains('collected:$id'));

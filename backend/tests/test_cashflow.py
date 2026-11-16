@@ -127,3 +127,43 @@ def test_receipt_pdf_for_staff_and_the_owner_only(client: TestClient) -> None:
     assert client.get("/api/v1/orders/o1/receipt.pdf", headers=PATIENT).status_code == 200
     assert client.get("/api/v1/orders/o3/receipt.pdf", headers=ADMIN).status_code == 409
     assert client.get("/api/v1/orders/nope/receipt.pdf", headers=ADMIN).status_code == 404
+
+
+def test_d95_receipt_has_the_logo_and_an_item_table() -> None:
+    from datetime import UTC, datetime
+
+    from app.services.receipts import LOGO, receipt_pdf
+
+    assert LOGO.exists()
+    order = {
+        "patientName": "Siti",
+        "method": "home_delivery",
+        "deliveryAddress": "25 Lintang Sungai Ara 6",
+        "amount": 63.0,
+        "deliveryFee": 13.2,
+        "items": [
+            {
+                "name": "Amlodipine",
+                "strength": "5mg",
+                "dose": "1 tablet",
+                "frequency": "once_daily",
+                "quantity": 30,
+                "unitPrice": 0.3,
+            },
+            {
+                "name": "Losartan",
+                "strength": "50mg",
+                "dose": "1 tablet",
+                "frequency": "twice_daily",
+                "quantity": 60,
+                "unitPrice": 0.9,
+            },
+        ],
+    }
+    pdf = receipt_pdf("o1", order, "ch_1", datetime(2026, 11, 16, 3, tzinfo=UTC))
+    assert pdf.startswith(b"%PDF") and b"/Subtype /Image" in pdf
+    # An older single-line order without items still prints.
+    old = receipt_pdf(
+        "o2", {"amount": 15.0, "medicationDetails": "Amlodipine 5mg"}, "", datetime.now(UTC)
+    )
+    assert old.startswith(b"%PDF")

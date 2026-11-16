@@ -160,6 +160,7 @@ class MedicationOrder {
     this.estimatedReadyAt,
     this.dispatchedAt,
     this.awaitingDriver = false,
+    this.receivedAt,
     this.etaAt,
     this.events = const [],
     this.items = const [],
@@ -233,6 +234,9 @@ class MedicationOrder {
 
   /// D-89: booked, but the courier is still looking for a driver.
   final bool awaitingDriver;
+
+  /// D-94: when the patient pressed "Medicine received".
+  final DateTime? receivedAt;
   final DateTime? etaAt;
   final List<TrackingEvent> events;
 
@@ -247,9 +251,26 @@ class MedicationOrder {
     _ => false,
   };
 
-  /// D-89: "Finding a driver" while the courier searches; otherwise the status.
-  String get statusLabel =>
-      status == Fulfilment.readyForDelivery && awaitingDriver ? 'Finding a driver' : status.label;
+  /// The courier has the parcel (picked up or further).
+  bool get courierHasIt =>
+      deliveryStatus == 'in_transit' ||
+      events.any((e) => const {'picked_up', 'in_transit', 'delivered'}.contains(e.status));
+
+  /// D-89 / D-94: delivery progress in words: Finding a driver -> Courier booked ->
+  /// On the way -> Delivered -> Received by patient.
+  String get statusLabel => switch (status) {
+    Fulfilment.readyForDelivery when awaitingDriver => 'Finding a driver',
+    Fulfilment.readyForDelivery when courierHasIt => 'On the way',
+    Fulfilment.readyForDelivery when dispatchedAt != null => 'Courier booked',
+    Fulfilment.delivered when receivedAt != null => 'Received by patient',
+    _ => status.label,
+  };
+
+  /// D-94: the patient may confirm once the courier has the medicine.
+  bool get canConfirmReceived =>
+      isDelivery &&
+      receivedAt == null &&
+      (status == Fulfilment.delivered || (status == Fulfilment.readyForDelivery && courierHasIt));
 
   /// D-89: staff may give up on the courier booking until the parcel is picked up.
   bool get canCancelCourier =>
@@ -260,6 +281,7 @@ class MedicationOrder {
 
   /// Fig 4.3.10.3: Order Confirmed -> Preparing -> Out for Delivery -> Delivered (0-3).
   int get deliveryStage {
+    if (receivedAt != null) return 4; // D-94
     if (status == Fulfilment.delivered) return 3;
     if (deliveryStatus == 'dispatched' || deliveryStatus == 'in_transit') return 2;
     return isPaid ? 1 : 0;
@@ -296,6 +318,7 @@ class MedicationOrder {
     estimatedReadyAt: _time(d['estimatedReadyAt']),
     dispatchedAt: _time(d['dispatchedAt']),
     awaitingDriver: d['awaitingDriver'] == true,
+    receivedAt: _time(d['receivedAt']),
     etaAt: _time(d['etaAt']),
     events: [
       for (final e in (d['events'] as List? ?? const []))

@@ -33,6 +33,7 @@ import '../../features/vitals/presentation/vitals_page.dart';
 import '../../features/orders/presentation/order_confirm_page.dart';
 import '../../features/orders/presentation/order_pay_page.dart';
 import '../../features/orders/presentation/order_track_page.dart';
+import '../../features/orders/presentation/order_widgets.dart' show OrderOpenPage;
 import '../../features/orders/presentation/orders_page.dart';
 import '../../features/orders/presentation/address_page.dart';
 import '../../features/orders/presentation/pharmacy_chat_pages.dart';
@@ -112,7 +113,15 @@ final List<RouteBase> patientFeatureRoutes = [
         AgentPage(quickReplies: state.extra is List<String> ? state.extra! as List<String> : null),
   ),
   // Module 13 (D-66; Figs 4.3.10.1-4.3.10.3).
-  GoRoute(path: '/orders', builder: (_, _) => const OrdersPage()),
+  GoRoute(
+    path: '/orders',
+    builder: (_, s) => OrdersPage(completed: s.uri.queryParameters['tab'] == 'completed'),
+  ),
+  // D-97: an order notification opens that order, with Orders (right tab) behind it.
+  GoRoute(
+    path: '/orders/:id/open',
+    builder: (_, s) => OrderOpenPage(orderId: s.pathParameters['id']!),
+  ),
   // D-69: the Harvey Pharmacy conversation and the delivery address.
   GoRoute(path: '/pharmacy-chat', builder: (_, _) => const PatientPharmacyChatPage()),
   // D-77: the bell on Home.

@@ -153,6 +153,12 @@ class _OrderTrackPageState extends ConsumerState<OrderTrackPage> {
               icon: Icons.local_shipping_outlined,
             ),
             const TimelineStep('Delivered', icon: Icons.home_outlined),
+            // D-94: the patient's own confirmation.
+            TimelineStep(
+              'Received by you',
+              subtitle: o.receivedAt == null ? null : timeLabel(o.receivedAt!),
+              icon: Icons.verified_outlined,
+            ),
           ]
         : [
             TimelineStep(
@@ -227,6 +233,37 @@ class _OrderTrackPageState extends ConsumerState<OrderTrackPage> {
           ),
           const SizedBox(height: 16),
         ],
+        if (o.canConfirmReceived) ...[
+          // D-94: tells the pharmacy the medicine arrived.
+          FilledButton.icon(
+            key: const Key('confirm-received'),
+            onPressed: _busy
+                ? null
+                : () => _act(
+                    () => repo.confirmReceived(o.id),
+                    'Thanks! The pharmacy can see you received your medicine.',
+                  ),
+            icon: const Icon(Icons.check_circle_outline),
+            label: const Text('Medicine received'),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Press this once the medicine is in your hands.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 16),
+        ],
+        if (o.receivedAt != null)
+          Card(
+            key: const Key('received-note'),
+            color: Colors.green.shade50,
+            child: ListTile(
+              leading: Icon(Icons.verified, color: Colors.green.shade700),
+              title: const Text('You received this medicine'),
+              subtitle: Text('${dateLabel(o.receivedAt!)}, ${timeLabel(o.receivedAt!)}'),
+            ),
+          ),
         if (o.status == Fulfilment.readyForCollection) _CollectionSlip(order: o),
         // D-68: the courier's own tracking page (Lalamove share link).
         if (o.trackingUrl != null && o.status == Fulfilment.readyForDelivery)

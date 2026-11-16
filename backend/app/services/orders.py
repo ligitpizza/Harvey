@@ -175,6 +175,7 @@ def order_view(
         else None,
         "dispatchedAt": _iso(o.get("dispatchedAt")),
         "awaitingDriver": o.get("awaitingDriver") is True,  # D-89
+        "receivedAt": _iso(o.get("receivedAt")),  # D-94
         "etaAt": _iso(o.get("etaAt")),
         "receiptRecordId": o.get("receiptRecordId"),
     }
@@ -1083,6 +1084,53 @@ class OrderService:
                 "ORDER_PICKED_UP", "The courier already has the parcel; it can't be cancelled."
             )
         return self.fail_delivery(order_id, o, reason, uid)
+
+    def received(self, order_id: str, uid: str, now: datetime | None = None) -> dict[str, Any]:
+        """D-94: the patient confirms the medicine arrived. Allowed once the courier has the
+        parcel (picked up or later), so a delivery the driver forgot to close still ends."""
+        now = now or datetime.now(UTC)
+        o = self._order(order_id)
+        if o.get("receivedAt"):
+            raise OrderError("ORDER_ALREADY_RECEIVED", "You already confirmed this delivery.")
+        status_now = o.get("fulfilmentStatus")
+        since = o.get("dispatchedAt")
+        out = status_now == READY_FOR_DELIVERY and any(
+            e.get("status") in ("picked_up", "in_transit", "delivered")
+            and (
+                not isinstance(since, datetime)
+                or not isinstance(e.get("timestamp"), datetime)
+                or e["timestamp"] >= since
+            )
+            for e in self.repo.events(order_id)
+        )
+        if status_now != DELIVERED and not out:
+            raise OrderError(
+                "ORDER_NOT_OUT",
+                "You can confirm once the courier has picked up your medicine.",
+            )
+        update: dict[str, Any] = {"receivedAt": now, "awaitingDriver": False}
+        if status_now != DELIVERED:
+            # The courier never marked it delivered: the patient's word closes it.
+            update |= {"fulfilmentStatus": DELIVERED, "deliveryStatus": "delivered"}
+            self.repo.add_event(
+                {
+                    "orderId": order_id,
+                    "status": "delivered",
+                    "location": "Confirmed by the patient",
+                    "timestamp": now,
+                }
+            )
+        self.repo.update_order(order_id, update)
+        if status_now != DELIVERED:
+            self._restock_patient(o)
+        self.audit.log(
+            user_id=uid,
+            action="ORDER_RECEIVED",
+            details="Patient confirmed the medicine was received.",
+            target_type=Collection.MEDICATION_ORDERS.value,
+            target_id=order_id,
+        )
+        return {**o, **update}
 
     def reschedule(self, order_id: str, uid: str) -> dict[str, Any]:
         o = self._order(order_id)

@@ -10,7 +10,10 @@ import '../../../shared/widgets/patient_hero.dart';
 
 /// The patient's monthly recurring orders (UC13.2), newest first.
 class OrdersPage extends ConsumerWidget {
-  const OrdersPage({super.key});
+  const OrdersPage({super.key, this.completed = false});
+
+  /// D-97: open on the Completed tab (from a finished order's notification).
+  final bool completed;
 
   Future<void> _nextCycle(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
@@ -38,6 +41,7 @@ class OrdersPage extends ConsumerWidget {
     final orders = ref.watch(myOrdersProvider);
     return DefaultTabController(
       length: 2,
+      initialIndex: completed ? 1 : 0,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Orders'),

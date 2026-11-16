@@ -368,6 +368,20 @@ def reschedule_delivery(
         raise _api(e) from e
 
 
+@router.post("/orders/{order_id}/received")
+def confirm_received(
+    order_id: str,
+    user: CurrentUser = Depends(patient_only),
+    svc: OrderService = Depends(get_order_service),
+) -> dict[str, Any]:
+    """D-94: "Medicine received"; the pharmacy and admin then see it as received."""
+    _own_order(svc, order_id, user.uid)
+    try:
+        return _view(svc, order_id, svc.received(order_id, user.uid))
+    except OrderError as e:
+        raise _api(e) from e
+
+
 @router.post("/orders/{order_id}/switch-to-collection", status_code=status.HTTP_204_NO_CONTENT)
 def switch_to_collection(
     order_id: str,

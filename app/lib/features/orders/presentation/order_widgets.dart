@@ -196,3 +196,56 @@ class MonthlyOrdersBanner extends ConsumerWidget {
 
 /// "Ready 2:30 PM, Thu 16 Oct".
 String readyLabel(DateTime t) => '${timeLabel(t)}, ${dateLabel(t)}';
+
+/// D-97: from an order notification. Loads the order, then shows it with the Orders list
+/// behind it on the matching tab (Active while it is still going, Completed when done).
+class OrderOpenPage extends ConsumerStatefulWidget {
+  const OrderOpenPage({super.key, required this.orderId});
+  final String orderId;
+
+  @override
+  ConsumerState<OrderOpenPage> createState() => _OrderOpenPageState();
+}
+
+class _OrderOpenPageState extends ConsumerState<OrderOpenPage> {
+  bool _moved = false;
+
+  void _go(MedicationOrder o) {
+    if (_moved) return;
+    _moved = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final router = GoRouter.of(context);
+      router.pushReplacement(o.isActive ? '/orders' : '/orders?tab=completed');
+      router.push(orderRoute(o));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final order = ref.watch(orderProvider(widget.orderId));
+    return Scaffold(
+      appBar: AppBar(title: const Text('Order')),
+      body: order.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (_, _) => Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('This order could not be opened.'),
+              TextButton(
+                key: const Key('order-open-list'),
+                onPressed: () => context.pushReplacement('/orders'),
+                child: const Text('See all orders'),
+              ),
+            ],
+          ),
+        ),
+        data: (o) {
+          _go(o);
+          return const Center(child: CircularProgressIndicator());
+        },
+      ),
+    );
+  }
+}

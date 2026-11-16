@@ -101,6 +101,9 @@ class FakeOrdersRepository implements OrdersRepository {
   Future<void> switchToCollection(String id) async => calls.add('switch:$id');
 
   @override
+  Future<void> confirmReceived(String id) async => calls.add('received:$id');
+
+  @override
   Future<int> devNextCycle() async {
     calls.add('devNextCycle');
     return 1;

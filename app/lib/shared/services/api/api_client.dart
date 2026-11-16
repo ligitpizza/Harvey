@@ -569,6 +569,9 @@ class ApiClient {
   Future<Map<String, dynamic>> rescheduleDelivery(String id) =>
       _send('POST', '/orders/$id/reschedule', null);
 
+  /// D-94: "Medicine received" (patient).
+  Future<void> confirmReceived(String id) => _post('/orders/$id/received', const {});
+
   Future<void> switchToCollection(String id) =>
       _send('POST', '/orders/$id/switch-to-collection', null);
 

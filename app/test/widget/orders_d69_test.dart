@@ -8,6 +8,7 @@ import 'package:hypertension/features/orders/data/order_models.dart';
 import 'package:hypertension/features/orders/presentation/address_page.dart';
 import 'package:hypertension/features/orders/presentation/order_confirm_page.dart';
 import 'package:hypertension/features/orders/presentation/order_track_page.dart';
+import 'package:hypertension/features/orders/presentation/order_widgets.dart' show OrderOpenPage;
 import 'package:hypertension/features/orders/presentation/orders_page.dart';
 import 'package:hypertension/features/orders/presentation/pharmacy_chat_pages.dart';
 import 'package:hypertension/features/orders/presentation/pharmacy_page.dart';
@@ -504,6 +505,9 @@ void main() {
     await t.pumpWidget(host('/pharmacy'));
     await t.pumpAndSettle();
     expect(repo.calls, contains('overview:awaiting_patient:'));
+    // D-96: under the "Waiting for patient" tab.
+    await t.tap(find.byKey(const Key('orders-tab-waiting')));
+    await t.pumpAndSettle();
     expect(find.byKey(const Key('incoming-$id')), findsOneWidget);
     expect(find.textContaining('Siti · Amlodipine 5mg ×30, Losartan 50mg ×60'), findsOneWidget);
     expect(find.textContaining('Waiting for you to confirm'), findsOneWidget);
@@ -582,6 +586,8 @@ void main() {
     );
     await t.pumpWidget(host('/pharmacy'));
     await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('orders-tab-waiting')));
+    await t.pumpAndSettle();
     expect(find.byKey(const Key('waiting-for-patient')), findsOneWidget);
     await t.tap(find.byKey(const Key('cancel-$id')));
     await t.pumpAndSettle();
@@ -638,7 +644,11 @@ void main() {
 
     test('the label says Finding a driver only while searching', () {
       expect(booked().statusLabel, 'Finding a driver');
-      expect(booked(searching: false).statusLabel, 'Ready for delivery');
+      expect(booked(searching: false).statusLabel, 'Courier booked');
+      expect(
+        booked(searching: false, events: ['dispatched', 'picked_up']).statusLabel,
+        'On the way',
+      );
       expect(booked().canCancelCourier, isTrue);
       expect(booked(events: ['dispatched', 'picked_up']).canCancelCourier, isFalse);
     });
@@ -646,6 +656,8 @@ void main() {
     tallTest('the queue shows it and the pharmacist cancels the booking', (t) async {
       repo.queueData = PharmacyQueue(orders: [booked()], needsPrice: const []);
       await t.pumpWidget(host('/pharmacy'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('orders-tab-delivery')));
       await t.pumpAndSettle();
       expect(find.text('Finding a driver'), findsWidgets);
       await t.tap(find.byKey(const Key('cancel-courier-$id')));
@@ -668,6 +680,146 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('Finding a driver'), findsWidgets);
       expect(find.textContaining('within 30 minutes'), findsOneWidget);
+    });
+  });
+
+  group('D-94 / D-96 received and the Completed tab', () {
+    MedicationOrder delivery({
+      String status = 'ready_for_delivery',
+      List<String> events = const ['dispatched', 'picked_up'],
+      String? receivedAt,
+    }) => MedicationOrder.fromJson({
+      'id': id,
+      'ref': 'CF-ABC123',
+      'patientId': 'u-patient',
+      'patientName': 'Siti',
+      'prescriptionId': 'rx1',
+      'medicationDetails': 'Amlodipine 5mg',
+      'fulfilmentStatus': status,
+      'paymentStatus': 'paid',
+      'method': 'home_delivery',
+      'deliveryStatus': status == 'delivered' ? 'delivered' : 'dispatched',
+      'courierRef': 'L1',
+      'dispatchedAt': '2026-10-16T03:00:00+00:00',
+      'receivedAt': ?receivedAt,
+      'events': [
+        for (final e in events) {'status': e, 'timestamp': '2026-10-16T03:00:00+00:00'},
+      ],
+    });
+
+    Future<void> track(WidgetTester t) async {
+      await t.pumpWidget(
+        ProviderScope(
+          overrides: [ordersRepositoryProvider.overrideWithValue(repo)],
+          child: const MaterialApp(home: OrderTrackPage(orderId: id)),
+        ),
+      );
+      await t.pumpAndSettle();
+    }
+
+    test('the button shows once the courier has it, until confirmed', () {
+      expect(delivery(events: ['dispatched']).canConfirmReceived, isFalse);
+      expect(delivery().canConfirmReceived, isTrue);
+      expect(delivery(status: 'delivered').canConfirmReceived, isTrue);
+      final done = delivery(status: 'delivered', receivedAt: '2026-10-16T05:00:00+00:00');
+      expect(done.canConfirmReceived, isFalse);
+      expect(done.statusLabel, 'Received by patient');
+    });
+
+    tallTest('the patient presses Medicine received', (t) async {
+      repo.orders = {id: delivery()};
+      await track(t);
+      await t.tap(find.byKey(const Key('confirm-received')));
+      await t.pumpAndSettle();
+      expect(repo.calls, contains('received:$id'));
+    });
+
+    tallTest('after confirming the patient sees it was received', (t) async {
+      repo.orders = {id: delivery(status: 'delivered', receivedAt: '2026-10-16T05:00:00+00:00')};
+      await track(t);
+      expect(find.byKey(const Key('confirm-received')), findsNothing);
+      expect(find.byKey(const Key('received-note')), findsOneWidget);
+    });
+
+    tallTest('the pharmacy Completed tab shows Received by patient', (t) async {
+      repo.overviewData = OrdersOverview(
+        orders: [delivery(status: 'delivered', receivedAt: '2026-10-16T05:00:00+00:00')],
+        counts: const {'completed': 1},
+      );
+      await t.pumpWidget(host('/pharmacy'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('orders-tab-completed')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('completed-$id')), findsOneWidget);
+      expect(find.text('Received by patient'), findsOneWidget);
+    });
+  });
+
+  group('D-97 an order notification opens that order', () {
+    Future<List<String>> open(WidgetTester t, String status) async {
+      repo.orders = {
+        id: MedicationOrder.fromJson({
+          'id': id,
+          'ref': 'CF-ABC123',
+          'patientId': 'u-patient',
+          'prescriptionId': 'rx1',
+          'medicationDetails': 'Amlodipine 5mg',
+          'fulfilmentStatus': status,
+          'paymentStatus': 'paid',
+          'method': 'home_delivery',
+        }),
+      };
+      final seen = <String>[];
+      final router = GoRouter(
+        initialLocation: '/notifications',
+        routes: [
+          GoRoute(path: '/notifications', builder: (_, _) => const Text('INBOX')),
+          GoRoute(
+            path: '/orders',
+            builder: (_, s) {
+              seen.add('orders:${s.uri.queryParameters['tab'] ?? 'active'}');
+              return const Text('ORDERS');
+            },
+          ),
+          GoRoute(
+            path: '/orders/:id/open',
+            builder: (_, s) => OrderOpenPage(orderId: s.pathParameters['id']!),
+          ),
+          GoRoute(
+            path: '/orders/:id/track',
+            builder: (_, s) {
+              seen.add('track:${s.pathParameters['id']}');
+              return const Text('TRACK');
+            },
+          ),
+        ],
+      );
+      await t.pumpWidget(
+        ProviderScope(
+          overrides: [ordersRepositoryProvider.overrideWithValue(repo)],
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await t.pumpAndSettle();
+      router.push('/orders/$id/open');
+      await t.pumpAndSettle();
+      expect(find.text('TRACK'), findsOneWidget);
+      router.pop();
+      await t.pumpAndSettle();
+      expect(find.text('ORDERS'), findsOneWidget);
+      return seen;
+    }
+
+    testWidgets('a delivered order: the order, with Completed behind it', (t) async {
+      final seen = await open(t, 'delivered');
+      expect(seen, containsAll(['orders:completed', 'track:$id']));
+      expect(seen, isNot(contains('orders:active')));
+    });
+
+    testWidgets('an order still on its way: Active behind it', (t) async {
+      final seen = await open(t, 'ready_for_delivery');
+      expect(seen, containsAll(['orders:active', 'track:$id']));
+      expect(seen, isNot(contains('orders:completed')));
     });
   });
 }

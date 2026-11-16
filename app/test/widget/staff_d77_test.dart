@@ -287,6 +287,53 @@ void main() {
     expect(find.text('TABS /medications'), findsOneWidget);
   });
 
+  testWidgets('D-98 notifications: filters, day groups and the unread count', (t) async {
+    final now = DateTime.now().toUtc();
+    AppNotification n(String id, String category, {bool read = false, int daysAgo = 0}) =>
+        AppNotification(
+          id: id,
+          title: 'Title $id',
+          body: 'Body $id',
+          category: category,
+          read: read,
+          data: const {},
+          createdAt: now.subtract(Duration(days: daysAgo, minutes: 5)),
+        );
+    notes.items = [
+      n('a', 'orders'),
+      n('b', 'messages', read: true),
+      n('c', 'alerts', read: true, daysAgo: 1),
+      n('d', 'orders', read: true, daysAgo: 10),
+    ];
+    await t.pumpWidget(
+      ProviderScope(
+        overrides: [
+          notificationsRepositoryProvider.overrideWithValue(notes),
+          currentUserProvider.overrideWith((ref) => Stream.value(staff(UserRole.patient))),
+        ],
+        child: const MaterialApp(home: NotificationsPage()),
+      ),
+    );
+    await t.pumpAndSettle();
+    expect(find.text('1 new'), findsOneWidget);
+    for (final day in ['Today', 'Yesterday', 'Earlier']) {
+      expect(find.byKey(Key('notif-day-$day')), findsOneWidget, reason: day);
+    }
+    expect(find.text('5 min ago'), findsNWidgets(2));
+    // Only the kinds present get a chip.
+    expect(find.byKey(const Key('notif-filter-orders')), findsOneWidget);
+    expect(find.byKey(const Key('notif-filter-medication')), findsNothing);
+    await t.tap(find.byKey(const Key('notif-filter-orders')));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('notification-a')), findsOneWidget);
+    expect(find.byKey(const Key('notification-d')), findsOneWidget);
+    expect(find.byKey(const Key('notification-b')), findsNothing);
+    await t.tap(find.byKey(const Key('notif-filter-unread')));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('notification-a')), findsOneWidget);
+    expect(find.byKey(const Key('notification-d')), findsNothing);
+  });
+
   testWidgets('pharmacist dashboard counts what needs attention', (t) async {
     await wide(t);
     orders
@@ -334,10 +381,14 @@ void main() {
     await t.ensureVisible(find.byKey(const Key('staff-password-reset')));
     await t.tap(find.byKey(const Key('staff-password-reset')));
     await t.pumpAndSettle();
-    // D-80: the code flow, with the email filled in and the code sent straight away.
+    // D-93: opening it sends nothing; the email is fixed and "Send code" sends it.
+    expect(auth.calls.where((c) => c.startsWith('code:')), isEmpty);
+    expect(find.byKey(const Key('reset-email')), findsNothing);
+    expect(find.textContaining('tan@harvey.my'), findsOneWidget);
+    await t.tap(find.byKey(const Key('reset-submit')));
+    await t.pumpAndSettle();
     expect(auth.calls, contains('code:tan@harvey.my'));
     expect(find.byKey(const Key('reset-sent')), findsOneWidget);
-    expect(find.byKey(const Key('reset-email')), findsNothing);
     await t.enterText(find.byKey(const Key('reset-code')), '123456');
     await t.enterText(find.byKey(const Key('reset-password')), 'NewPass123');
     await t.enterText(find.byKey(const Key('reset-confirm')), 'NewPass123');
@@ -362,6 +413,12 @@ void main() {
       '/pharmacy/messages/team/c1',
     );
     expect(notificationRoute('order', const {}, UserRole.pharmacist), '/pharmacy');
+    // D-97: an order notification opens that order.
+    const o = {'orderId': 'o1'};
+    expect(notificationRoute('order', o, UserRole.patient), '/orders/o1/open');
+    expect(notificationRoute('order', o, UserRole.pharmacist), '/pharmacy/order/o1');
+    expect(notificationRoute('order', o, UserRole.admin), '/admin/orders/o1');
+    expect(isTabRoute('/orders/o1/open'), isFalse);
     expect(notificationRoute('clinical_alert', const {}, UserRole.doctor), '/doctor');
     expect(notificationRoute('unknown', const {}, UserRole.doctor), isNull);
     // D-80: tab pages are switched to (go), other pages pushed.

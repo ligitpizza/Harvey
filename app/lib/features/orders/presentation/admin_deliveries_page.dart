@@ -49,7 +49,7 @@ class _AdminDeliveriesPageState extends ConsumerState<AdminDeliveriesPage> {
     Fulfilment.outOfStock => 'Waiting for stock',
     Fulfilment.preparing => 'Preparing',
     Fulfilment.failed => 'Failed',
-    Fulfilment.delivered => 'Delivered',
+    Fulfilment.delivered => o.receivedAt != null ? 'Received by patient' : 'Delivered',
     Fulfilment.collected || Fulfilment.readyForCollection => 'Switched to collection',
     Fulfilment.readyForDelivery => switch (o.deliveryStatus) {
       'in_transit' => 'In transit',
