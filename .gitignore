@@ -37,6 +37,7 @@ build/
 
 # ---- ML ----
 ml/data/raw/
+ml/data/raw_csv/
 ml/data/*.csv
 
 # ---- Flutter / Dart ----
