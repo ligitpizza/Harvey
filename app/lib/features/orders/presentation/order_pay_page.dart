@@ -40,7 +40,10 @@ class _OrderPayPageState extends ConsumerState<OrderPayPage> {
   Future<void> _prepare() async {
     try {
       final s = await ref.read(ordersRepositoryProvider).startPayment(widget.orderId);
-      if (mounted) setState(() => _start = s);
+      if (!mounted) return;
+      setState(() => _start = s);
+      // D-102: show the order as confirmed (method and delivery fee), not a cached copy.
+      ref.invalidate(orderProvider(widget.orderId));
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (_) {

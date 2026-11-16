@@ -191,6 +191,25 @@ void main() {
       );
     });
 
+    tallTest('D-102 payment page shows the delivery fee straight after confirming', (t) async {
+      repo.orders = {id: anOrder()};
+      await t.pumpWidget(host('/orders/$id/confirm'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('method-delivery')));
+      await t.pumpAndSettle();
+      await t.enterText(find.byKey(const Key('delivery-address')), '12 Jalan Ampang');
+      await t.enterText(find.byKey(const Key('delivery-phone')), '012-345 6789');
+      await t.tap(find.byKey(const Key('use-location')));
+      await t.pumpAndSettle();
+      // The server now has the order as home delivery with the courier fee.
+      repo.orders = {id: anOrder(status: Fulfilment.awaitingPayment, method: homeDelivery)};
+      await t.tap(find.byKey(const Key('confirm-order')));
+      await t.pumpAndSettle();
+      expect(find.text('Payment'), findsOneWidget);
+      expect(find.text('Delivery'), findsOneWidget);
+      expect(t.widget<Text>(find.byKey(const Key('pay-total'))).data, 'RM20.00');
+    });
+
     tallTest('D-67 location refused: explains and opens settings', (t) async {
       repo.orders = {id: anOrder()};
       location

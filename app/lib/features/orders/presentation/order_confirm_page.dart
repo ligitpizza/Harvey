@@ -174,7 +174,10 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
             lng: home ? _location!['lng'] : null,
             phone: home ? _phone.text.trim() : null,
           );
-      ref.invalidate(myOrdersProvider);
+      // D-102: the payment page reads this order, so it must see the delivery fee now.
+      ref
+        ..invalidate(myOrdersProvider)
+        ..invalidate(orderProvider(widget.orderId));
       if (mounted) context.pushReplacement('/orders/${widget.orderId}/pay');
     } on ApiException catch (e) {
       setState(() => _error = e.message);

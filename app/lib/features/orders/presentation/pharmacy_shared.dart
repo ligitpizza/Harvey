@@ -24,6 +24,8 @@ Future<void> runPharmacyAction(
       ..invalidate(stockProvider);
     messenger.showSnackBar(SnackBar(content: Text(done)));
   } on ApiException catch (e) {
+    // D-102: the order moved on elsewhere (courier, another tab); show where it is now.
+    ref.invalidate(pharmacyQueueProvider);
     messenger.showSnackBar(SnackBar(content: Text(e.message)));
   } catch (_) {
     messenger.showSnackBar(const SnackBar(content: Text('Something went wrong. Try again.')));

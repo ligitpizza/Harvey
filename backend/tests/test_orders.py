@@ -517,6 +517,34 @@ def test_uc13_6_e1_out_of_stock_flags_admin_and_tells_patient(
     assert res.json()["fulfilmentStatus"] == "ready_for_collection"
 
 
+def test_d102_out_of_order_pharmacy_actions_are_refused(
+    client: TestClient, order_repo: InMemoryOrderRepository
+) -> None:
+    """UC13.6: a stale screen or double press can't move an order backwards or twice."""
+    oid = paid_order(client, order_repo)
+    stock = add_stock(client, units=100)
+
+    def code(path: str, body: dict[str, object] | None = None) -> str | None:
+        res = client.post(f"/api/v1/pharmacy/orders/{oid}/{path}", json=body or {}, headers=PHARM)
+        return None if res.status_code < 300 else res.json()["error"]["code"]
+
+    # Not ready yet: can't be collected.
+    assert code("collected") == "ORDER_NOT_READY"
+    ready = {"stockItemId": stock, "units": 30}
+    assert code("ready", ready) is None
+    # Ready for collection: can't go back to out of stock, or be readied (and stock taken) twice.
+    assert code("out-of-stock", {"note": "late"}) == "ORDER_NOT_PREPARING"
+    assert code("ready", ready) == "ORDER_NOT_PREPARING"
+    assert order_repo.stock_items[stock]["units"] == 70
+    assert code("cancel-courier", {"reason": "driver rejected"}) == "ORDER_NOT_IN_DELIVERY"
+    assert code("collected") is None
+    # Collected: every other action is refused and nothing changes.
+    assert code("collected") == "ORDER_NOT_READY"
+    assert code("out-of-stock") == "ORDER_NOT_PREPARING"
+    assert order_repo.orders[oid]["fulfilmentStatus"] == "collected"
+    assert order_repo.stock_items[stock]["units"] == 70
+
+
 def test_stock_management(client: TestClient) -> None:
     stock = add_stock(client, units=0)
     res = client.post(
