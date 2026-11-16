@@ -717,17 +717,27 @@ void main() {
       await t.pumpAndSettle();
     }
 
-    test('the button shows once the courier has it, until confirmed', () {
+    test('D-101 the button shows only after the delivery is complete, until confirmed', () {
       expect(delivery(events: ['dispatched']).canConfirmReceived, isFalse);
-      expect(delivery().canConfirmReceived, isTrue);
+      expect(delivery().canConfirmReceived, isFalse); // picked up, on the way
+      expect(
+        delivery(events: ['dispatched', 'picked_up', 'in_transit']).canConfirmReceived,
+        isFalse,
+      );
       expect(delivery(status: 'delivered').canConfirmReceived, isTrue);
       final done = delivery(status: 'delivered', receivedAt: '2026-10-16T05:00:00+00:00');
       expect(done.canConfirmReceived, isFalse);
       expect(done.statusLabel, 'Received by patient');
     });
 
-    tallTest('the patient presses Medicine received', (t) async {
+    tallTest('D-101 no button while the courier is on the way', (t) async {
       repo.orders = {id: delivery()};
+      await track(t);
+      expect(find.byKey(const Key('confirm-received')), findsNothing);
+    });
+
+    tallTest('the patient presses Medicine received', (t) async {
+      repo.orders = {id: delivery(status: 'delivered')};
       await track(t);
       await t.tap(find.byKey(const Key('confirm-received')));
       await t.pumpAndSettle();

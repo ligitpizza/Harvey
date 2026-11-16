@@ -266,11 +266,8 @@ class MedicationOrder {
     _ => status.label,
   };
 
-  /// D-94: the patient may confirm once the courier has the medicine.
-  bool get canConfirmReceived =>
-      isDelivery &&
-      receivedAt == null &&
-      (status == Fulfilment.delivered || (status == Fulfilment.readyForDelivery && courierHasIt));
+  /// D-94 / D-101: the patient may confirm only after the courier completed the delivery.
+  bool get canConfirmReceived => isDelivery && receivedAt == null && status == Fulfilment.delivered;
 
   /// D-89: staff may give up on the courier booking until the parcel is picked up.
   bool get canCancelCourier =>

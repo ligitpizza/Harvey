@@ -1086,43 +1086,19 @@ class OrderService:
         return self.fail_delivery(order_id, o, reason, uid)
 
     def received(self, order_id: str, uid: str, now: datetime | None = None) -> dict[str, Any]:
-        """D-94: the patient confirms the medicine arrived. Allowed once the courier has the
-        parcel (picked up or later), so a delivery the driver forgot to close still ends."""
+        """D-94 (revised D-101): the patient confirms the medicine arrived, only after the
+        courier has completed the delivery (Lalamove COMPLETED -> delivered)."""
         now = now or datetime.now(UTC)
         o = self._order(order_id)
         if o.get("receivedAt"):
             raise OrderError("ORDER_ALREADY_RECEIVED", "You already confirmed this delivery.")
-        status_now = o.get("fulfilmentStatus")
-        since = o.get("dispatchedAt")
-        out = status_now == READY_FOR_DELIVERY and any(
-            e.get("status") in ("picked_up", "in_transit", "delivered")
-            and (
-                not isinstance(since, datetime)
-                or not isinstance(e.get("timestamp"), datetime)
-                or e["timestamp"] >= since
-            )
-            for e in self.repo.events(order_id)
-        )
-        if status_now != DELIVERED and not out:
+        if o.get("fulfilmentStatus") != DELIVERED:
             raise OrderError(
-                "ORDER_NOT_OUT",
-                "You can confirm once the courier has picked up your medicine.",
+                "ORDER_NOT_DELIVERED",
+                "You can confirm once the courier has completed the delivery.",
             )
-        update: dict[str, Any] = {"receivedAt": now, "awaitingDriver": False}
-        if status_now != DELIVERED:
-            # The courier never marked it delivered: the patient's word closes it.
-            update |= {"fulfilmentStatus": DELIVERED, "deliveryStatus": "delivered"}
-            self.repo.add_event(
-                {
-                    "orderId": order_id,
-                    "status": "delivered",
-                    "location": "Confirmed by the patient",
-                    "timestamp": now,
-                }
-            )
+        update: dict[str, Any] = {"receivedAt": now}
         self.repo.update_order(order_id, update)
-        if status_now != DELIVERED:
-            self._restock_patient(o)
         self.audit.log(
             user_id=uid,
             action="ORDER_RECEIVED",
