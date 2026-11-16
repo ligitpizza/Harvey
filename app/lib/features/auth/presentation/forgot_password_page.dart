@@ -13,8 +13,9 @@ import '../state/auth_providers.dart';
 /// 1. enter the email; a 6-digit code is emailed (valid 10 minutes);
 /// 2. enter the code and a new password; then sign in with it.
 ///
-/// From portal Settings (D-80) the signed-in staff member's [email] is given: the code
-/// is sent straight away, and afterwards they sign in again with the new password.
+/// From Settings (D-80) the signed-in user's [email] is given; D-93: the code is sent
+/// only when they press "Send code" (opening the page never sends one), and "I already
+/// have a code" goes straight to the code step. Afterwards they sign in again.
 class ForgotPasswordPage extends ConsumerStatefulWidget {
   const ForgotPasswordPage({super.key, this.email});
 
@@ -63,7 +64,6 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
     final email = widget.email;
     if (email != null) {
       _email.text = email;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _sendCode(resend: true));
     }
   }
 
@@ -109,6 +109,17 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
       });
       _startCooldown();
     }
+  }
+
+  /// D-93: a code was already emailed (e.g. before "Too many codes requested").
+  void _haveCode() {
+    if (!widget.fromSettings && !_emailForm.currentState!.validate()) return;
+    setState(() {
+      _error = null;
+      _info = null;
+      _step = _Step.code;
+      _code.clear();
+    });
   }
 
   Future<void> _verify() async {
@@ -171,21 +182,39 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text('Enter your email and we will send you a 6-digit code to reset your password.'),
-        const SizedBox(height: 16),
-        TextFormField(
-          key: const Key('reset-email'),
-          controller: _email,
-          keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(labelText: 'Email address'),
-          validator: Validators.email,
-        ),
+        if (widget.fromSettings) ...[
+          const Icon(Icons.lock_reset, size: 48),
+          const SizedBox(height: 12),
+          Text(
+            "To change your password we'll email a 6-digit code to ${widget.email}.",
+            key: const Key('reset-settings-intro'),
+            textAlign: TextAlign.center,
+          ),
+        ] else ...[
+          const Text(
+            'Enter your email and we will send you a 6-digit code to reset your password.',
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            key: const Key('reset-email'),
+            controller: _email,
+            keyboardType: TextInputType.emailAddress,
+            decoration: const InputDecoration(labelText: 'Email address'),
+            validator: Validators.email,
+          ),
+        ],
         _errorText(),
         const SizedBox(height: 20),
         FilledButton(
           key: const Key('reset-submit'),
-          onPressed: _busy ? null : _sendCode,
+          onPressed: _busy ? null : () => _sendCode(resend: widget.fromSettings),
           child: const Text('Send code'),
+        ),
+        const SizedBox(height: 8),
+        TextButton(
+          key: const Key('reset-have-code'),
+          onPressed: _busy ? null : _haveCode,
+          child: const Text('I already have a code'),
         ),
       ],
     ),

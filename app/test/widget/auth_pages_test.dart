@@ -287,6 +287,11 @@ void main() {
       await t.pumpAndSettle();
       expect(find.byKey(const Key('reset-error')), findsOneWidget);
       expect(find.byKey(const Key('reset-sent')), findsNothing);
+      // D-93: the code from earlier can still be used.
+      await t.tap(find.byKey(const Key('reset-have-code')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('reset-code')), findsOneWidget);
+      expect(repo.calls.where((c) => c.startsWith('code:')).length, 1);
     });
   });
 
