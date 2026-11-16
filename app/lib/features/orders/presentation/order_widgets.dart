@@ -165,30 +165,106 @@ class MonthlyOrdersBanner extends ConsumerWidget {
     final orders = ref.watch(myOrdersProvider).value ?? const <MedicationOrder>[];
     if (orders.isEmpty) return const SizedBox.shrink();
     final waiting = orders.where((o) => o.needsPatient).toList();
+    final active = orders.where((o) => o.isActive).length;
     final theme = Theme.of(context);
-    return Card(
-      key: const Key('orders-banner'),
-      color: waiting.isEmpty ? null : theme.colorScheme.primaryContainer,
-      child: ListTile(
-        leading: Icon(
-          waiting.isEmpty ? Icons.local_pharmacy_outlined : Icons.notifications_active_outlined,
+    final urgent = waiting.isNotEmpty;
+    // D-99: green when all is well, orange when an order needs the patient.
+    final colors = urgent
+        ? [Colors.orange.shade600, Colors.deepOrange.shade400]
+        : [Colors.green.shade600, Colors.teal.shade400];
+    final title = !urgent
+        ? 'Monthly orders'
+        : waiting.length == 1
+        ? 'Your monthly order needs you'
+        : '${waiting.length} monthly orders need you';
+    final subtitle = !urgent
+        ? 'Track your recurring prescription refills'
+        : '${waiting.first.medicationDetails}: ${waiting.first.statusLabel.toLowerCase()}';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: LinearGradient(
+          colors: colors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        title: Text(
-          waiting.isEmpty
-              ? 'Monthly orders'
-              : waiting.length == 1
-              ? 'Your monthly order needs you'
-              : '${waiting.length} monthly orders need you',
+        boxShadow: [
+          BoxShadow(
+            color: colors.first.withValues(alpha: 0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          key: const Key('orders-banner'),
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => context.push(waiting.length == 1 ? orderRoute(waiting.first) : '/orders'),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.22),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    urgent ? Icons.notifications_active : Icons.local_pharmacy,
+                    color: Colors.white,
+                    size: 26,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      if (active > 0) ...[
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.25),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            '$active active',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: Colors.white),
+              ],
+            ),
+          ),
         ),
-        subtitle: Text(
-          waiting.isEmpty
-              ? 'Track your recurring prescription refills'
-              : '${waiting.first.medicationDetails}: ${waiting.first.status.label.toLowerCase()}',
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => context.push(waiting.length == 1 ? orderRoute(waiting.first) : '/orders'),
       ),
     );
   }

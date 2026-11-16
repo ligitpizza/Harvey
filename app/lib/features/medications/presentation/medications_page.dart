@@ -219,27 +219,167 @@ class _ReminderStatusLine extends ConsumerWidget {
         'reminders-partial',
         'Some reminders could not be set:\n${value.errors.join('\n')}',
       ),
-      AsyncData(:final value) => Padding(
+      AsyncData(:final value) => _RemindersCard(
         key: const Key('reminders-ok'),
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Row(
-          children: [
-            Icon(Icons.alarm_on, size: 16, color: scheme.primary),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                value.scheduled.isEmpty
-                    ? 'No phone reminders set.'
-                    : 'Phone reminders set${value.exact ? '' : ' (may be a few minutes late)'}: '
-                          '${value.scheduled.join(', ')}',
-                style: small,
-              ),
-            ),
-          ],
-        ),
+        scheduled: value.scheduled,
+        exact: value.exact,
       ),
       _ => const SizedBox.shrink(),
     };
+  }
+}
+
+/// D-99: "Atorvastatin 20mg 8:00 AM" lines grouped by time, in time order.
+List<(String, List<String>)> remindersByTime(List<String> scheduled) {
+  final pattern = RegExp(r'^(.*)\s(\d{1,2}):(\d{2})\s([AP]M)$');
+  final groups = <String, List<String>>{};
+  final order = <String, int>{};
+  for (final line in scheduled) {
+    final m = pattern.firstMatch(line.trim());
+    if (m == null) {
+      (groups['Other'] ??= []).add(line);
+      order['Other'] = 24 * 60;
+      continue;
+    }
+    final h = int.parse(m.group(2)!) % 12 + (m.group(4) == 'PM' ? 12 : 0);
+    final time = '${m.group(2)}:${m.group(3)} ${m.group(4)}';
+    (groups[time] ??= []).add(m.group(1)!.trim());
+    order[time] = h * 60 + int.parse(m.group(3)!);
+  }
+  final keys = groups.keys.toList()..sort((a, b) => order[a]!.compareTo(order[b]!));
+  return [for (final k in keys) (k, groups[k]!)];
+}
+
+/// D-99: the reminders the phone set, folded to one line; tap to see them by time.
+class _RemindersCard extends StatefulWidget {
+  const _RemindersCard({super.key, required this.scheduled, required this.exact});
+
+  final List<String> scheduled;
+  final bool exact;
+
+  @override
+  State<_RemindersCard> createState() => _RemindersCardState();
+}
+
+class _RemindersCardState extends State<_RemindersCard> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final n = widget.scheduled.length;
+    final groups = remindersByTime(widget.scheduled);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 0,
+      color: scheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: n == 0 ? null : () => setState(() => _open = !_open),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: (widget.exact ? Colors.green : Colors.orange).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.alarm_on,
+                      size: 20,
+                      color: widget.exact ? Colors.green.shade700 : Colors.orange.shade800,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          n == 0 ? 'No phone reminders set' : 'Phone reminders on · $n set',
+                          key: const Key('reminders-summary'),
+                          style: theme.textTheme.titleSmall,
+                        ),
+                        if (n > 0)
+                          Text(
+                            widget.exact
+                                ? 'At ${groups.map((g) => g.$1).join(', ')}'
+                                : 'Reminders may be a few minutes late',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall,
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (n > 0)
+                    Icon(_open ? Icons.expand_less : Icons.expand_more, color: scheme.outline),
+                ],
+              ),
+              if (_open) ...[
+                const SizedBox(height: 10),
+                for (final (time, names) in groups)
+                  Padding(
+                    key: Key('reminder-time-$time'),
+                    padding: const EdgeInsets.only(bottom: 8, right: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 76,
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: scheme.primaryContainer,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            time,
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: scheme.onPrimaryContainer,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (final name in names)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 2),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.circle, size: 6, color: scheme.primary),
+                                      const SizedBox(width: 8),
+                                      Expanded(child: Text(name)),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -619,29 +759,110 @@ class _ProgressCard extends StatelessWidget {
     final taken = doses.where((d) => d.state == DoseState.taken).length;
     final left = doses.length - taken;
     final scheme = Theme.of(context).colorScheme;
-    final text = left == 0
-        ? 'All done for today. Well done!'
+    final total = doses.length;
+    final (headline, detail) = left == 0
+        ? ('All done for today', 'Every dose is taken. Well done!')
         : taken == 0
-        ? '$left ${left == 1 ? 'dose' : 'doses'} to take today.'
-        : 'Great progress! $left ${left == 1 ? 'dose' : 'doses'} left for today.';
-    return Card(
+        ? ("Today's doses", '$left ${left == 1 ? 'dose' : 'doses'} to take today.')
+        : ('Great progress!', '$left ${left == 1 ? 'dose' : 'doses'} left for today.');
+    // D-99: the next dose still to take.
+    final next = doses
+        .where((d) => d.state == DoseState.due || d.state == DoseState.upcoming)
+        .fold<ScheduledDose?>(null, (a, d) => a == null || d.moment.isBefore(a.moment) ? d : a);
+    final missed = doses.where((d) => d.state == DoseState.missed).length;
+    final colors = left == 0
+        ? [Colors.green.shade500, Colors.teal.shade400]
+        : [scheme.primary, Colors.blue.shade400];
+    return Container(
       key: const Key('meds-progress'),
-      color: scheme.primaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 28,
-              backgroundColor: scheme.surface,
-              child: Text('$taken/${doses.length}', style: const TextStyle(fontSize: 16)),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(text, style: TextStyle(color: scheme.onPrimaryContainer)),
-            ),
-          ],
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: LinearGradient(
+          colors: colors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: colors.first.withValues(alpha: 0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          SizedBox.square(
+            dimension: 72,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox.expand(
+                  child: CircularProgressIndicator(
+                    value: total == 0 ? 0 : taken / total,
+                    strokeWidth: 7,
+                    strokeCap: StrokeCap.round,
+                    backgroundColor: Colors.white.withValues(alpha: 0.25),
+                    valueColor: const AlwaysStoppedAnimation(Colors.white),
+                  ),
+                ),
+                Text(
+                  '$taken/$total',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  headline,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(detail, style: const TextStyle(color: Colors.white)),
+                if (next != null) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    key: const Key('meds-next-dose'),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.22),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'Next: ${next.medication.name} at ${next.time.label}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+                if (missed > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      '$missed missed today',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -877,6 +1098,8 @@ class _RefillCard extends ConsumerWidget {
   }
 }
 
+/// D-99: one medicine: name and dose, its reminder times, adherence as a bar, doses
+/// left and who prescribed it. Tap to open it (details for doctor medicines, D-90).
 class _MedicineTile extends StatelessWidget {
   const _MedicineTile({required this.med});
 
@@ -884,27 +1107,150 @@ class _MedicineTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheduled = tryParseSchedule(med.schedule) != null;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final times = tryParseSchedule(med.schedule);
     final rate = med.adherenceRate;
-    // UC5.5 E1: no doses logged yet -> no rate.
-    final adherence = !scheduled
-        ? 'As needed'
-        : rate == null
-        ? 'Adherence: no history yet'
-        : 'Adherence (30 days): ${rate.toStringAsFixed(0)}%';
-    final stock = med.quantityOnHand == null
-        ? ''
-        : ' • ${med.quantityOnHand!.toStringAsFixed(0)} left';
+    final rateColor = rate == null
+        ? scheme.outline
+        : rate >= 80
+        ? Colors.green.shade600
+        : rate >= 50
+        ? Colors.orange.shade700
+        : Colors.red.shade600;
+    final accent = med.fromDoctor ? scheme.primary : Colors.teal.shade600;
+    final left = med.quantityOnHand;
     return Card(
       key: Key('medicine-${med.id}'),
-      child: ListTile(
-        leading: const CircleAvatar(child: Icon(Icons.medication)),
-        title: Text('${med.name} ${med.dosage}'.trim()),
-        subtitle: Text('${describeSchedule(med.schedule)}\n$adherence$stock'),
-        isThreeLine: true,
-        trailing: const Icon(Icons.edit_outlined),
+      margin: const EdgeInsets.only(bottom: 10),
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
         onTap: () => context.push('/medications/edit', extra: med),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(color: accent, width: 5)),
+          ),
+          padding: const EdgeInsets.fromLTRB(14, 14, 8, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(Icons.medication, color: accent),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          med.name,
+                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        Text(
+                          med.fromDoctor
+                              ? '${med.dosage} · from ${med.prescribedBy ?? 'your doctor'}'
+                              : med.dosage,
+                          style: theme.textTheme.bodyMedium?.copyWith(color: scheme.outline),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    med.fromDoctor ? Icons.chevron_right : Icons.edit_outlined,
+                    color: scheme.outline,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  if (times == null)
+                    _Pill(icon: Icons.water_drop_outlined, text: 'As needed', color: Colors.teal)
+                  else
+                    for (final t in times)
+                      _Pill(icon: Icons.alarm, text: t.label, color: periodColor(DosePeriod.of(t))),
+                  if (left != null)
+                    _Pill(
+                      icon: Icons.inventory_2_outlined,
+                      text: '${left.toStringAsFixed(0)} left',
+                      color: needsRefill(med) ? Colors.red : Colors.blueGrey,
+                    ),
+                ],
+              ),
+              if (times != null) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Text('Adherence (30 days)', style: theme.textTheme.bodySmall),
+                    const Spacer(),
+                    Text(
+                      rate == null ? 'No history yet' : '${rate.toStringAsFixed(0)}%',
+                      key: Key('adherence-${med.id}'),
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: rateColor,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: (rate ?? 0) / 100,
+                      minHeight: 7,
+                      color: rateColor,
+                      backgroundColor: rateColor.withValues(alpha: 0.15),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill({required this.icon, required this.text, required this.color});
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: TextStyle(color: color, fontSize: 12.5, fontWeight: FontWeight.w600),
+        ),
+      ],
+    ),
+  );
 }

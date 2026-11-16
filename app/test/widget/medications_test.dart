@@ -263,8 +263,9 @@ void main() {
     );
     await t.pumpAndSettle();
     await t.scrollUntilVisible(find.byKey(const Key('medicine-m2')), 200);
-    expect(find.textContaining('Adherence (30 days): 75%'), findsOneWidget);
-    expect(find.textContaining('Adherence: no history yet'), findsOneWidget);
+    // D-99: a bar with the rate, or "No history yet".
+    expect(t.widget<Text>(find.byKey(const Key('adherence-m1'))).data, '75%');
+    expect(t.widget<Text>(find.byKey(const Key('adherence-m2'))).data, 'No history yet');
   });
 
   testWidgets('UC5.2 refill alert opens a pre-filled request to the doctor', (t) async {
@@ -512,7 +513,25 @@ void main() {
         t,
         const AsyncData(ReminderStatus(scheduled: ['Lisinopril 10:48 PM'], exact: true)),
       );
-      expect(find.text('Phone reminders set: Lisinopril 10:48 PM'), findsOneWidget);
+      // D-99: one line; tap to see the reminders grouped by time.
+      expect(find.text('Phone reminders on · 1 set'), findsOneWidget);
+      expect(find.text('At 10:48 PM'), findsOneWidget);
+      await t.tap(find.byKey(const Key('reminders-summary')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('reminder-time-10:48 PM')), findsOneWidget);
+      expect(find.text('Lisinopril'), findsWidgets);
+    });
+
+    test('D-99 reminders are grouped by time in time order', () {
+      final groups = remindersByTime(const [
+        'Candesartan 8mg 8:00 PM',
+        'Atorvastatin 20mg 8:00 AM',
+        'Amlodipine 5mg 2:00 PM',
+        'Amlodipine 10mg 8:00 AM',
+        'Odd line',
+      ]);
+      expect(groups.map((g) => g.$1), ['8:00 AM', '2:00 PM', '8:00 PM', 'Other']);
+      expect(groups.first.$2, ['Atorvastatin 20mg', 'Amlodipine 10mg']);
     });
 
     testWidgets('says when reminders may be late', (t) async {
