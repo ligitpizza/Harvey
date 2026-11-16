@@ -30,6 +30,9 @@ abstract interface class PortalRepository {
 
   Future<void> addNote(String patientId, String content);
 
+  /// D-100: a written report saved to the patient's Records as a PDF (read-only for them).
+  Future<void> writeReport(String patientId, {required String title, required String content});
+
   Future<void> saveCarePlan(String patientId, String content);
 
   /// Throws [ApiException] `DRUG_INTERACTION` with details until acknowledged (UC8.4 E1).
@@ -139,6 +142,10 @@ class FirestorePortalRepository implements PortalRepository {
   @override
   Future<void> addNote(String patientId, String content) =>
       _api.addClinicalNote(patientId, content);
+
+  @override
+  Future<void> writeReport(String patientId, {required String title, required String content}) =>
+      _api.writeDoctorReport(patientId, title: title, content: content);
 
   @override
   Future<void> saveCarePlan(String patientId, String content) =>

@@ -28,6 +28,23 @@ class _RecordsPageState extends ConsumerState<RecordsPage> {
   void _say(String text) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
+  bool _summarising = false;
+
+  /// D-100: builds the health summary PDF on the server; it appears in the list.
+  Future<void> _createSummary() async {
+    setState(() => _summarising = true);
+    try {
+      await ref.read(recordsRepositoryProvider).createHealthSummary();
+      _say('Health summary saved to your Records. Tap it to open, or share it with your doctor.');
+    } on ApiException catch (e) {
+      _say(e.message);
+    } catch (_) {
+      _say('Could not create the summary. Please try again.');
+    } finally {
+      if (mounted) setState(() => _summarising = false);
+    }
+  }
+
   Future<void> _chooseSource() async {
     final source = await showModalBottomSheet<RecordSource>(
       context: context,
@@ -210,6 +227,27 @@ class _RecordsPageState extends ConsumerState<RecordsPage> {
         children: [
           _RecordsHeader(records: records.value ?? const []),
           const SizedBox(height: 12),
+          // D-100: a PDF of the latest numbers, saved here and shareable with the doctor.
+          Card(
+            key: const Key('health-summary-card'),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.indigo.withValues(alpha: 0.12),
+                foregroundColor: Colors.indigo,
+                child: const Icon(Icons.summarize_outlined),
+              ),
+              title: const Text('Health summary'),
+              subtitle: const Text('Your last 30 days of BP, risk, medicines and appointments.'),
+              trailing: _summarising
+                  ? const SizedBox.square(dimension: 24, child: CircularProgressIndicator())
+                  : FilledButton.tonal(
+                      key: const Key('create-health-summary'),
+                      onPressed: _createSummary,
+                      child: const Text('Create'),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 8),
           if (uploading != null)
             Card(
               key: const Key('upload-progress'),
@@ -341,7 +379,16 @@ class _RecordCard extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(recordSubtitle(r)),
-              if (r.sharedWithDoctor)
+              if (r.locked)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    'From ${r.authorName ?? 'your doctor'} · read-only',
+                    key: Key('locked-${r.id}'),
+                    style: TextStyle(color: Colors.indigo.shade700, fontWeight: FontWeight.w600),
+                  ),
+                )
+              else if (r.sharedWithDoctor)
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
@@ -357,15 +404,23 @@ class _RecordCard extends ConsumerWidget {
             key: Key('record-menu-${r.id}'),
             onSelected: (a) => onAction(r, a),
             itemBuilder: (_) => [
-              r.sharedWithDoctor
-                  ? const PopupMenuItem(value: 'unshare', child: Text('Stop sharing'))
-                  : const PopupMenuItem(value: 'share', child: Text('Share with doctor')),
-              const PopupMenuItem(value: 'out', child: Text('Share to other apps')), // D-88
-              const PopupMenuItem(value: 'category', child: Text('Change category')),
-              PopupMenuItem(
-                value: 'delete',
-                child: Text('Delete', style: TextStyle(color: Theme.of(context).colorScheme.error)),
-              ),
+              // D-100: a doctor's report can only be opened and sent on.
+              if (r.locked)
+                const PopupMenuItem(value: 'out', child: Text('Share to other apps'))
+              else ...[
+                r.sharedWithDoctor
+                    ? const PopupMenuItem(value: 'unshare', child: Text('Stop sharing'))
+                    : const PopupMenuItem(value: 'share', child: Text('Share with doctor')),
+                const PopupMenuItem(value: 'out', child: Text('Share to other apps')), // D-88
+                const PopupMenuItem(value: 'category', child: Text('Change category')),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Text(
+                    'Delete',
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

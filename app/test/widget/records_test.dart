@@ -111,6 +111,12 @@ class FakeRecordsRepository implements RecordsRepository {
   @override
   Future<Uint8List> fileBytes(String recordId) async =>
       current.firstWhere((r) => r.id == recordId).isPdf ? pdfBytes : pngBytes;
+
+  @override
+  Future<String> createHealthSummary() async {
+    calls.add('summary');
+    return 'summary1';
+  }
 }
 
 class FakeRecordPicker implements RecordPicker {
@@ -247,6 +253,47 @@ void main() {
       await t.pumpAndSettle();
       expect(repo.calls.last, 'discard:new1');
       expect(find.text('Not supported.'), findsOneWidget);
+    });
+  });
+
+  group('D-100 reports', () {
+    tallTest('Create makes a health summary', (t) async {
+      await t.pumpWidget(host(const RecordsPage()));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('create-health-summary')));
+      await t.pumpAndSettle();
+      expect(repo.calls, ['summary']);
+      expect(find.textContaining('Health summary saved'), findsOneWidget);
+    });
+
+    tallTest("a doctor's report can only be opened and shared on", (t) async {
+      repo.current = [
+        HealthRecord(
+          id: 'd1',
+          patientId: 'p1',
+          category: RecordCategory.doctorReport,
+          fileName: 'Review after 4 weeks.pdf',
+          contentType: 'application/pdf',
+          sizeBytes: 2048,
+          uploadedAt: DateTime(2026, 11, 16),
+          sharedWithDoctor: true,
+          authorName: 'Dr John',
+        ),
+      ];
+      await t.pumpWidget(host(const RecordsPage()));
+      await t.pumpAndSettle();
+      expect(find.text('From Dr John · read-only'), findsOneWidget);
+      await t.tap(find.byKey(const Key('record-menu-d1')));
+      await t.pumpAndSettle();
+      expect(find.text('Share to other apps'), findsOneWidget);
+      for (final item in ['Stop sharing', 'Change category', 'Delete']) {
+        expect(find.text(item), findsNothing, reason: item);
+      }
+    });
+
+    test('the patient never picks the generated categories', () {
+      expect(RecordCategory.fromValue('doctor_report'), RecordCategory.doctorReport);
+      expect(RecordCategory.fromValue('health_summary').label, 'Health summary');
     });
   });
 

@@ -12,6 +12,14 @@ class NoteRequest(BaseModel):
     content: str = Field(min_length=1, max_length=10_000)
 
 
+class DoctorReportRequest(BaseModel):
+    """D-100: a written report saved to the patient's Records as a PDF."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    title: str = Field(min_length=3, max_length=120)
+    content: str = Field(min_length=10, max_length=8_000)
+
+
 class CarePlanRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     content: str = Field(min_length=1, max_length=10_000)

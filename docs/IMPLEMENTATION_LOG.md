@@ -1632,3 +1632,10 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - **D-98:** `NotificationsPanel` redesign (filters, day groups, card rows).
 - Tests: `tests/test_lalamove.py` (D-94), `tests/test_cashflow.py` (D-95); `test/widget/auth_pages_test.dart`, `staff_d77_test.dart` (D-93, D-97, D-98), `orders_d69_test.dart`, `orders_test.dart` (D-94, D-96, D-97).
 
+
+### 2026-11-16 - Meds tab tidy-up and health reports (D-99, D-100)
+
+- **D-99:** `medications_page.dart`: `_RemindersCard` (folded line, list grouped by time via `remindersByTime`), progress ring with the next dose, medicine cards with time pills and an adherence bar; `MonthlyOrdersBanner` redesign.
+- **D-100 backend:** `services/health_report.py` (`snapshot`, `report_pdf`, `save_report`); `POST /records/health-summary`, `POST /agent/messages/{id}/save-pdf`, `POST /provider/patients/{id}/reports`; `LOCKED_CATEGORIES` blocks recategorise/unshare/delete of doctor reports; `AgentDataRepository.message` and `mark_saved`.
+- **D-100 app:** Records "Health summary - Create" card, doctor reports shown "From Dr X - read-only" with only "Share to other apps"; "Save to Records as PDF" under each weekly summary; portal patient page "Write report" dialog (`write_report_dialog.dart`).
+- Tests: `tests/test_reports.py`; `test/widget/records_test.dart`, `agent_page_test.dart`, `doctor_portal_test.dart`, `medications_test.dart`.

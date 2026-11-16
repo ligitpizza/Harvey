@@ -1238,6 +1238,15 @@ class InMemoryAgentDataRepository:
         ]
         return mine[-1] if mine else None
 
+    def message(self, uid: str, message_id: str) -> dict[str, Any] | None:
+        i = int(message_id.removeprefix("msg") or 0) - 1 if message_id.startswith("msg") else -1
+        if not 0 <= i < len(self.messages) or self.messages[i]["patientId"] != uid:
+            return None
+        return {**self.messages[i], "sentAt": self.sent_at[i]}
+
+    def mark_saved(self, uid: str, message_id: str, record_id: str) -> None:
+        self.messages[int(message_id.removeprefix("msg")) - 1]["savedRecordId"] = record_id
+
     def latest_of_kind(self, uid: str, kind: str) -> Any:
         times = [
             t

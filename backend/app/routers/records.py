@@ -1,6 +1,7 @@
 """Module 6 health records (FR-6.1, FR-6.2; UC6.1-UC6.3; D-58).
 
 POST   /records                 patient: save an uploaded file with its category
+POST   /records/health-summary  patient: D-100 health summary PDF from their latest numbers
 PATCH  /records/{id}            patient: change the category
 DELETE /records/{id}            patient: delete the record and its file
 POST   /records/{id}/share      patient: share with the assigned doctor (pushed)
@@ -17,14 +18,17 @@ from fastapi import APIRouter, Depends, Response, status
 
 from app.core.audit import AuditLogger, get_audit_logger
 from app.core.auth import CurrentUser, require_roles
-from app.core.enums import Collection, UserRole
+from app.core.enums import Collection, RecordCategory, UserRole
 from app.core.errors import ApiError
 from app.integrations.push import PushMessage
 from app.schemas.records import CreateRecordRequest, UpdateRecordRequest
+from app.services.agent_context import MYT, AgentDataRepository, get_agent_data_repository
+from app.services.health_report import report_pdf, save_report, snapshot
 from app.services.notifications import Notifier, get_notifier
 from app.services.records import (
     CATEGORY_LABELS,
     CONTENT_TYPES,
+    LOCKED_CATEGORIES,
     MAX_BYTES,
     SUPPORTED_TEXT,
     FileStore,
@@ -48,6 +52,49 @@ def _own(repo: RecordRepository, record_id: str, uid: str) -> dict[str, Any]:
     if r is None or r.get("patientId") != uid:
         raise _not_found()
     return r
+
+
+def _editable(r: dict[str, Any]) -> None:
+    """D-100: a doctor's report stays as the doctor wrote it, shared with them."""
+    if r.get("category") in LOCKED_CATEGORIES:
+        raise ApiError(
+            "RECORD_LOCKED",
+            "This report was written by your doctor. You can open and share it, but not "
+            "change or delete it.",
+            status.HTTP_409_CONFLICT,
+        )
+
+
+@router.post("/health-summary", status_code=status.HTTP_201_CREATED)
+def create_health_summary(
+    user: CurrentUser = Depends(patient_only),
+    repo: RecordRepository = Depends(get_record_repository),
+    files: FileStore = Depends(get_file_store),
+    data: AgentDataRepository = Depends(get_agent_data_repository),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    """D-100: a PDF of the patient's latest numbers, saved to their Records."""
+    now = datetime.now(UTC)
+    pdf = report_pdf("Health summary", snapshot(data, user.uid, now), now)
+    record_id, record = save_report(
+        repo,
+        files,
+        user.uid,
+        prefix="summary",
+        file_name=f"Health summary {now.astimezone(MYT):%d %b %Y}.pdf",
+        data=pdf,
+        category=RecordCategory.HEALTH_SUMMARY,
+        shared=False,
+        now=now,
+    )
+    audit.log(
+        user_id=user.uid,
+        action="CREATE_HEALTH_SUMMARY",
+        details="Health summary PDF created.",
+        target_type=Collection.HEALTH_RECORDS.value,
+        target_id=record_id,
+    )
+    return record_view(record_id, record)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -106,6 +153,7 @@ def update_record(
     audit: AuditLogger = Depends(get_audit_logger),
 ) -> dict[str, Any]:
     r = _own(repo, record_id, user.uid)
+    _editable(r)
     repo.update(record_id, {"category": body.category})
     audit.log(
         user_id=user.uid,
@@ -127,6 +175,7 @@ def delete_record(
     audit: AuditLogger = Depends(get_audit_logger),
 ) -> Response:
     r = _own(repo, record_id, user.uid)
+    _editable(r)
     repo.delete(record_id)
     files.delete(str(r.get("fileUrl") or storage_path(user.uid, record_id)))
     audit.log(
@@ -189,6 +238,7 @@ def unshare_record(
 ) -> dict[str, Any]:
     """D-58: the patient withdraws the doctor's access."""
     r = _own(repo, record_id, user.uid)
+    _editable(r)
     if r.get("sharedWithDoctor"):
         repo.update(record_id, {"sharedWithDoctor": False, "sharedAt": None})
         audit.log(

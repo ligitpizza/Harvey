@@ -462,6 +462,8 @@ enum RecordCategory {
   dischargeSummary('discharge_summary', 'Discharge summary'),
   referralLetter('referral_letter', 'Referral letter'),
   emergency('emergency', 'Emergency summary'), // D-86: made by Harvey, not uploaded
+  healthSummary('health_summary', 'Health summary'), // D-100: made by Harvey
+  doctorReport('doctor_report', 'Doctor report'), // D-100: read-only for the patient
   other('other', 'Other');
 
   const RecordCategory(this.value, this.label);

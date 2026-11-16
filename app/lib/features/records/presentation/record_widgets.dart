@@ -50,7 +50,12 @@ class _CategoryDialogState extends State<_CategoryDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             for (final c in RecordCategory.values)
-              if (c != RecordCategory.emergency)
+              // Made by Harvey or the doctor, never picked by the patient (D-86, D-100).
+              if (!const {
+                RecordCategory.emergency,
+                RecordCategory.healthSummary,
+                RecordCategory.doctorReport,
+              }.contains(c))
                 RadioListTile<RecordCategory>(
                   key: Key('category-${c.value}'),
                   dense: true,
@@ -83,6 +88,8 @@ IconData recordIcon(HealthRecord r) => r.isPdf ? Icons.picture_as_pdf : Icons.im
   RecordCategory.dischargeSummary => (Icons.local_hospital_outlined, Colors.red.shade400),
   RecordCategory.referralLetter => (Icons.mail_outline, Colors.orange.shade700),
   RecordCategory.emergency => (Icons.emergency_outlined, Colors.red.shade700),
+  RecordCategory.healthSummary => (Icons.summarize_outlined, Colors.indigo.shade600),
+  RecordCategory.doctorReport => (Icons.assignment_ind_outlined, Colors.blue.shade800),
   RecordCategory.other => (Icons.description_outlined, Colors.blueGrey),
 };
 

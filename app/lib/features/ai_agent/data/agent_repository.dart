@@ -11,11 +11,15 @@ class AgentMessage {
     required this.text,
     this.sentAt,
     this.kind,
+    this.savedRecordId,
   });
 
   final String id;
   final bool fromPatient;
   final String text;
+
+  /// D-100: the weekly summary was saved to Records as this PDF record.
+  final String? savedRecordId;
 
   /// D-76: "weekly_summary" or "chat_alert"; null for ordinary replies.
   final String? kind;
@@ -29,6 +33,7 @@ class AgentMessage {
     text: d['text'] as String? ?? '',
     sentAt: (d['sentAt'] as Timestamp?)?.toDate(),
     kind: d['kind'] as String?,
+    savedRecordId: d['savedRecordId'] as String?,
   );
 }
 
@@ -101,6 +106,9 @@ abstract interface class AgentRepository {
   Future<AgentReply> send(String message);
 
   Future<ProactiveUpdate> proactive();
+
+  /// D-100: save a weekly summary to Records as a PDF.
+  Future<void> saveSummaryPdf(String messageId);
 }
 
 class ApiAgentRepository implements AgentRepository {
@@ -124,4 +132,7 @@ class ApiAgentRepository implements AgentRepository {
 
   @override
   Future<ProactiveUpdate> proactive() async => ProactiveUpdate.fromApi(await _api.agentProactive());
+
+  @override
+  Future<void> saveSummaryPdf(String messageId) => _api.saveSummaryPdf(messageId);
 }

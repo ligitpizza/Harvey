@@ -216,6 +216,15 @@ class FakePortalRepository implements PortalRepository {
   @override
   Future<void> addNote(String patientId, String content) async => addedNotes.add(content);
 
+  final reports = <String>[];
+
+  @override
+  Future<void> writeReport(
+    String patientId, {
+    required String title,
+    required String content,
+  }) async => reports.add('$patientId|$title|$content');
+
   @override
   Future<void> saveCarePlan(String patientId, String content) async => savedPlans.add(content);
 
@@ -443,6 +452,24 @@ void main() {
       expect(find.byKey(const Key('factors-cad')), findsNothing);
       // A Low complication is not explained even if old data carries factors.
       expect(find.textContaining('not proven causes'), findsOneWidget);
+    });
+
+    tallTest('D-100 the doctor writes a report into the patient records', (t) async {
+      await t.pumpWidget(portal(repo, data, '/doctor/patient/p1'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('action-report')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('report-save')));
+      await t.pumpAndSettle();
+      expect(find.text('Write at least a sentence.'), findsOneWidget);
+      expect(repo.reports, isEmpty);
+      await t.enterText(find.byKey(const Key('report-title')), 'Review after 4 weeks');
+      await t.enterText(find.byKey(const Key('report-content')), 'BP improving. Continue.');
+      await t.tap(find.byKey(const Key('report-save')));
+      await t.pumpAndSettle();
+      expect(repo.reports, ['p1|Review after 4 weeks|BP improving. Continue.']);
+      expect(find.byKey(const Key('write-report-dialog')), findsNothing);
+      expect(find.textContaining('Report saved'), findsOneWidget);
     });
 
     tallTest('UC8.3 E1 a patient without history shows empty states', (t) async {

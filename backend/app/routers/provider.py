@@ -1,6 +1,7 @@
 """Module 8 doctor actions (FR-8.3; UC8.4, UC8.5; docs/05 endpoints).
 
 POST /provider/patients/{id}/notes          clinical note (Fig 4.3.12.5)
+POST /provider/patients/{id}/reports        D-100: written report saved to the patient's Records
 PUT  /provider/patients/{id}/care-plan      the patient's single living care plan
 POST /provider/patients/{id}/prescriptions  with drug interaction warning (UC8.4 E1)
 DELETE /provider/patients/{id}/prescriptions/{rxId}  the issuing doctor only (D-50)
@@ -16,10 +17,17 @@ from fastapi import APIRouter, Depends, status
 
 from app.core.audit import AuditLogger, get_audit_logger
 from app.core.auth import CurrentUser, require_roles
-from app.core.enums import Collection, PrescriptionSource, UserRole
+from app.core.enums import Collection, PrescriptionSource, RecordCategory, UserRole
 from app.core.errors import ApiError
+from app.integrations.push import PushMessage
 from app.ml.risk_model import RiskModel, get_risk_model
-from app.schemas.provider import CarePlanRequest, NoteRequest, PrescriptionRequest
+from app.schemas.provider import (
+    CarePlanRequest,
+    DoctorReportRequest,
+    NoteRequest,
+    PrescriptionRequest,
+)
+from app.services.agent_context import MYT, AgentDataRepository, get_agent_data_repository
 from app.services.catalog import (
     FREQUENCIES,
     CatalogRepository,
@@ -28,6 +36,7 @@ from app.services.catalog import (
     items_summary,
     items_total,
 )
+from app.services.health_report import report_pdf, save_report, snapshot
 from app.services.interactions import check
 from app.services.medication_effect import medication_effect
 from app.services.medications import (
@@ -36,6 +45,7 @@ from app.services.medications import (
     MedicationRepository,
     get_medication_repository,
 )
+from app.services.notifications import Notifier, get_notifier
 from app.services.orders import (
     OrderRepository,
     OrderService,
@@ -46,6 +56,13 @@ from app.services.provider import (
     ProviderRepository,
     get_provider_repository,
     medication_details,
+)
+from app.services.records import (
+    FileStore,
+    RecordRepository,
+    get_file_store,
+    get_record_repository,
+    record_view,
 )
 from app.services.risk import RiskDataRepository, get_risk_data_repository
 
@@ -88,6 +105,64 @@ def add_note(
         target_id=note_id,
     )
     return {"id": note_id}
+
+
+@router.post("/{patient_id}/reports", status_code=status.HTTP_201_CREATED)
+def write_report(
+    patient_id: str,
+    body: DoctorReportRequest,
+    doctor: CurrentUser = Depends(doctor_only),
+    repo: ProviderRepository = Depends(get_provider_repository),
+    data: AgentDataRepository = Depends(get_agent_data_repository),
+    records: RecordRepository = Depends(get_record_repository),
+    files: FileStore = Depends(get_file_store),
+    notifier: Notifier = Depends(get_notifier),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    """D-100: the doctor's report, with the patient's latest numbers attached, saved to the
+    patient's Records as a PDF. Shared with the doctor; read-only for the patient."""
+    _assigned_patient(patient_id, doctor, repo)
+    me = repo.patient(doctor.uid) or {}
+    author = str(me.get("name") or "Your doctor")
+    now = datetime.now(UTC)
+    pdf = report_pdf(
+        "Doctor report",
+        snapshot(data, patient_id, now),
+        now,
+        text_heading=body.title,
+        text=body.content,
+        author=author,
+        footer=f"Written by {author} in Harvey. The numbers below were attached automatically "
+        "from the patient's records on the date shown. In an emergency call 999.",
+    )
+    record_id, record = save_report(
+        records,
+        files,
+        patient_id,
+        prefix="report",
+        file_name=f"{body.title} ({now.astimezone(MYT):%d %b %Y}).pdf",
+        data=pdf,
+        category=RecordCategory.DOCTOR_REPORT,
+        shared=True,
+        now=now,
+        extra={"authorId": doctor.uid, "authorName": author},
+    )
+    notifier.notify(
+        patient_id,
+        PushMessage(
+            "New report from your doctor",
+            f"{author} wrote a report: {body.title}. It's in your Records.",
+            {"type": "record_shared", "recordId": record_id},
+        ),
+    )
+    audit.log(
+        user_id=doctor.uid,
+        action="WRITE_DOCTOR_REPORT",
+        details="Doctor report saved to the patient's records.",
+        target_type=Collection.HEALTH_RECORDS.value,
+        target_id=record_id,
+    )
+    return record_view(record_id, record)
 
 
 @router.put("/{patient_id}/care-plan")

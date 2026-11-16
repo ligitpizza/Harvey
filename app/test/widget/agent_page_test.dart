@@ -52,6 +52,11 @@ class FakeAgentRepository implements AgentRepository {
 
   @override
   Future<ProactiveUpdate> proactive() => onProactive();
+
+  final savedPdfs = <String>[];
+
+  @override
+  Future<void> saveSummaryPdf(String messageId) async => savedPdfs.add(messageId);
 }
 
 Widget agentApp(FakeAgentRepository repo, {Widget home = const AgentPage()}) {
@@ -98,6 +103,32 @@ void main() {
       expect(find.text('What was my BP?'), findsOneWidget);
       expect(find.text('Your last reading was 128/82.'), findsOneWidget);
       expect(find.byKey(const Key('agent-typing')), findsNothing);
+    });
+
+    tallTest('D-100 a weekly summary can be saved to Records as a PDF', (t) async {
+      repo.current = const [
+        AgentMessage(
+          id: 'w1',
+          fromPatient: false,
+          text: 'Your weekly health summary',
+          kind: 'weekly_summary',
+        ),
+        AgentMessage(
+          id: 'w0',
+          fromPatient: false,
+          text: 'An older summary',
+          kind: 'weekly_summary',
+          savedRecordId: 'weekly_1',
+        ),
+      ];
+      await t.pumpWidget(agentApp(repo));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('summary-saved-w0')), findsOneWidget); // already saved
+      await t.tap(find.byKey(const Key('summary-save-w1')));
+      await t.pumpAndSettle();
+      expect(repo.savedPdfs, ['w1']);
+      expect(find.byKey(const Key('summary-saved-w1')), findsOneWidget);
+      expect(find.text('Saved to your Records as a PDF.'), findsOneWidget);
     });
 
     tallTest('a suggestion chip asks that question', (t) async {

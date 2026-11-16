@@ -198,6 +198,20 @@ class ApiClient {
   Future<Map<String, dynamic>> addClinicalNote(String patientId, String content) =>
       _post('/provider/patients/$patientId/notes', {'content': content});
 
+  /// D-100: the doctor's report, saved to the patient's Records as a PDF.
+  Future<Map<String, dynamic>> writeDoctorReport(
+    String patientId, {
+    required String title,
+    required String content,
+  }) => _post('/provider/patients/$patientId/reports', {'title': title, 'content': content});
+
+  /// D-100: the patient's health summary PDF.
+  Future<Map<String, dynamic>> createHealthSummary() => _post('/records/health-summary', const {});
+
+  /// D-100: save a weekly summary from the assistant to Records as a PDF.
+  Future<Map<String, dynamic>> saveSummaryPdf(String messageId) =>
+      _post('/agent/messages/$messageId/save-pdf', const {});
+
   /// UC8.5: replace the patient's single living care plan.
   Future<Map<String, dynamic>> updateCarePlan(String patientId, String content) async {
     try {

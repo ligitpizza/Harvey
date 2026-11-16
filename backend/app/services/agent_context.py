@@ -96,6 +96,14 @@ class AgentDataRepository(Protocol):
         """D-76: when the latest agent message of this kind was saved."""
         ...
 
+    def message(self, uid: str, message_id: str) -> dict[str, Any] | None:
+        """D-100: one of this patient's assistant messages (with sentAt), or None."""
+        ...
+
+    def mark_saved(self, uid: str, message_id: str, record_id: str) -> None:
+        """D-100: the summary now has a PDF in Records (agent_messages.savedRecordId)."""
+        ...
+
 
 class FirestoreAgentDataRepository:
     def __init__(self, db: Any) -> None:
@@ -187,6 +195,16 @@ class FirestoreAgentDataRepository:
             .limit(1)
         )
         return next((dict(d.to_dict()) for d in query.stream()), None)
+
+    def message(self, uid: str, message_id: str) -> dict[str, Any] | None:
+        """D-100: one of this patient's assistant messages, or None."""
+        row = self._doc(Collection.AGENT_MESSAGES, message_id)
+        return row if row is not None and row.get("patientId") == uid else None
+
+    def mark_saved(self, uid: str, message_id: str, record_id: str) -> None:
+        self._db.collection(Collection.AGENT_MESSAGES.value).document(message_id).update(
+            {"savedRecordId": record_id}
+        )
 
     def latest_of_kind(self, uid: str, kind: str) -> datetime | None:
         query = (

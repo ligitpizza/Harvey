@@ -37,6 +37,29 @@ class _AgentPageState extends ConsumerState<AgentPage> {
   String? _notice; // fallback / error text, not saved to the history
   String? _unsent; // the patient's message when the request failed
 
+  /// D-100: weekly summaries being saved / saved as PDFs in this visit.
+  final _saving = <String>{};
+  final _saved = <String>{};
+
+  Future<void> _savePdf(String messageId) async {
+    setState(() => _saving.add(messageId));
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(agentRepositoryProvider).saveSummaryPdf(messageId);
+      if (mounted) setState(() => _saved.add(messageId));
+      messenger.showSnackBar(const SnackBar(content: Text('Saved to your Records as a PDF.')));
+    } on ApiException catch (e) {
+      if (e.code == 'SUMMARY_ALREADY_SAVED' && mounted) setState(() => _saved.add(messageId));
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not save the PDF. Please try again.')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving.remove(messageId));
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -154,6 +177,25 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                         title: 'Weekly health summary',
                         text: m.text,
                         time: m.sentAt == null ? null : chatTime(m.sentAt!),
+                        // D-100: keep it in Records as a PDF.
+                        action: m.savedRecordId != null || _saved.contains(m.id)
+                            ? TextButton.icon(
+                                key: Key('summary-saved-${m.id}'),
+                                onPressed: () => context.push('/records'),
+                                icon: const Icon(Icons.check_circle_outline, size: 18),
+                                label: const Text('Saved in Records'),
+                              )
+                            : OutlinedButton.icon(
+                                key: Key('summary-save-${m.id}'),
+                                onPressed: _saving.contains(m.id) ? null : () => _savePdf(m.id),
+                                icon: _saving.contains(m.id)
+                                    ? const SizedBox.square(
+                                        dimension: 16,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                                label: const Text('Save to Records as PDF'),
+                              ),
                       )
                     else if (m.kind == 'chat_alert')
                       ChatNotice(

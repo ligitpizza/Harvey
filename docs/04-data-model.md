@@ -120,9 +120,10 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | fileName | String | Original file name (D-58) | Required |
 | contentType | String | application/pdf / image/jpeg / image/png (D-58) | Required |
 | sizeBytes | Number | File size (D-58) | Required; ≤ 10 MB |
-| category | String | lab_result / prescription / imaging / discharge_summary / referral_letter / other (D-58) | Required (UC6.1); `emergency` = automatic emergency event summary (D-86) |
+| category | String | lab_result / prescription / imaging / discharge_summary / referral_letter / other (D-58) | Required (UC6.1); `emergency` = automatic emergency event summary (D-86); `health_summary` = Harvey health summary or saved weekly summary, `doctor_report` = written by the doctor, read-only for the patient (D-100) |
 | uploadedAt | Timestamp | Upload time | Required |
 | sharedWithDoctor | Boolean | Whether shared with the assigned doctor | Default: false |
+| authorId, authorName | String | The doctor who wrote a `doctor_report` (D-100) | Only for doctor_report; written by the backend |
 | sharedAt | Timestamp | When sharing was granted | Optional; present once shared (UC6.2) |
 
 ### `appointments`  (Table 4.2.3.9)
@@ -239,6 +240,7 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | sentAt | Timestamp | Send time | Required |
 | kind | String | chat_alert / weekly_summary (D-76) | Optional; absent for ordinary turns |
 | doctorId | Reference (users) | The doctor whose chat a chat_alert belongs to (D-76) | Only for chat_alert |
+| savedRecordId | Reference (health_records) | The PDF this weekly summary was saved as (D-100) | Optional; set by the backend |
 
 > Persists the AI Health Agent's conversation history (FR-14.1) so Gemini has session context and past exchanges can be reviewed. A separate collection rather than an embedded array, since a 24/7 agent produces an unbounded, ever-growing history per patient.
 

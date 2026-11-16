@@ -3,6 +3,7 @@
 POST /agent/chat       patient question -> grounded reply (or safe emergency reply)
 POST /agent/proactive  status update after the latest reading, with action buttons
 POST /agent/weekly-summary  D-76: post this week's summary if none in the last 7 days
+POST /agent/messages/{id}/save-pdf  D-100: save a weekly summary to Records as a PDF
 """
 
 from datetime import UTC, datetime
@@ -12,21 +13,30 @@ from typing import Any
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.audit import AuditLogger, get_audit_logger
 from app.core.auth import CurrentUser, require_roles
 from app.core.config import get_settings
-from app.core.enums import UserRole
+from app.core.enums import Collection, RecordCategory, UserRole
 from app.core.errors import ApiError
 from app.core.rate_limit import RateLimiter
 from app.integrations.gemini import LlmClient, get_llm_client
 from app.services.agent import HealthAgent, NoReadingError
-from app.services.agent_context import AgentDataRepository, get_agent_data_repository
+from app.services.agent_context import MYT, AgentDataRepository, get_agent_data_repository
 from app.services.escalation import Escalator, get_escalator
+from app.services.health_report import report_pdf, save_report, snapshot
+from app.services.records import (
+    FileStore,
+    RecordRepository,
+    get_file_store,
+    get_record_repository,
+    record_view,
+)
 from app.services.settings import (
     SettingsRepository,
     get_settings_repository,
     parse_profile_field,
 )
-from app.services.weekly_summary import ensure_summary
+from app.services.weekly_summary import KIND, ensure_summary
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -113,3 +123,59 @@ def weekly_summary(
 ) -> dict[str, Any]:
     """D-76: called when the patient's inbox opens, so the first summary needs no wait."""
     return {"created": ensure_summary(repo, user.uid, datetime.now(UTC))}
+
+
+@router.post("/messages/{message_id}/save-pdf", status_code=status.HTTP_201_CREATED)
+def save_summary_pdf(
+    message_id: str,
+    user: CurrentUser = Depends(require_roles(UserRole.PATIENT)),
+    repo: AgentDataRepository = Depends(get_agent_data_repository),
+    records: RecordRepository = Depends(get_record_repository),
+    files: FileStore = Depends(get_file_store),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    """D-100: the patient saves a weekly summary to their Records as a PDF. The text comes
+    from the stored message (never from the request), with today's numbers attached."""
+    m = repo.message(user.uid, message_id)
+    if m is None or m.get("kind") != KIND:
+        raise ApiError(
+            "SUMMARY_NOT_FOUND", "That weekly summary was not found.", status.HTTP_404_NOT_FOUND
+        )
+    if m.get("savedRecordId") and records.get(str(m["savedRecordId"])) is not None:
+        raise ApiError(
+            "SUMMARY_ALREADY_SAVED",
+            "This summary is already in your Records.",
+            status.HTTP_409_CONFLICT,
+        )
+    now = datetime.now(UTC)
+    sent_at = m.get("sentAt")
+    sent = sent_at if isinstance(sent_at, datetime) else now
+    pdf = report_pdf(
+        "Weekly health summary",
+        snapshot(repo, user.uid, now),
+        now,
+        text_heading=f"From the Harvey Assistant ({sent.astimezone(MYT):%d %b %Y})",
+        text=str(m.get("text") or ""),
+        footer="Written by the Harvey Assistant from your own records. It is not medical "
+        "advice or a diagnosis; in an emergency call 999.",
+    )
+    record_id, record = save_report(
+        records,
+        files,
+        user.uid,
+        prefix="weekly",
+        file_name=f"Weekly health summary {sent.astimezone(MYT):%d %b %Y}.pdf",
+        data=pdf,
+        category=RecordCategory.HEALTH_SUMMARY,
+        shared=False,
+        now=now,
+    )
+    repo.mark_saved(user.uid, message_id, record_id)
+    audit.log(
+        user_id=user.uid,
+        action="SAVE_WEEKLY_SUMMARY",
+        details="Weekly summary saved to Records as a PDF.",
+        target_type=Collection.HEALTH_RECORDS.value,
+        target_id=record_id,
+    )
+    return record_view(record_id, record)

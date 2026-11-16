@@ -192,12 +192,16 @@ class ChatNotice extends StatelessWidget {
     required this.text,
     this.time,
     this.urgent = false,
+    this.action,
   });
 
   final String title;
   final String text;
   final String? time;
   final bool urgent;
+
+  /// D-100: e.g. "Save as PDF" under a weekly summary.
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -231,6 +235,7 @@ class ChatNotice extends StatelessWidget {
           const SizedBox(height: 4),
           SelectableText(text),
           if (time != null) Text(time!, style: small),
+          if (action != null) ...[const SizedBox(height: 6), action!],
         ],
       ),
     );

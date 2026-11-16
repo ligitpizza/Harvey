@@ -28,8 +28,13 @@ CATEGORY_LABELS = {
     "discharge_summary": "Discharge summary",
     "referral_letter": "Referral letter",
     "emergency": "Emergency summary",  # D-86: made by Harvey, not uploadable
+    "health_summary": "Health summary",  # D-100: made by Harvey, not uploadable
+    "doctor_report": "Doctor report",  # D-100: written by the doctor, read-only
     "other": "Other",
 }
+
+# D-100: the patient can open and share these but not change, unshare or delete them.
+LOCKED_CATEGORIES = {"doctor_report"}
 
 
 def storage_path(patient_id: str, record_id: str) -> str:

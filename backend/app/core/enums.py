@@ -106,6 +106,8 @@ class RecordCategory(StrEnum):
     DISCHARGE_SUMMARY = "discharge_summary"
     REFERRAL_LETTER = "referral_letter"
     EMERGENCY = "emergency"  # D-86: automatic emergency event summary
+    HEALTH_SUMMARY = "health_summary"  # D-100: patient or assistant summary PDF
+    DOCTOR_REPORT = "doctor_report"  # D-100: written by the doctor; read-only for the patient
     OTHER = "other"
 
 

@@ -22,6 +22,7 @@ class HealthRecord {
     required this.uploadedAt,
     this.sharedWithDoctor = false,
     this.sharedAt,
+    this.authorName,
   });
 
   final String id;
@@ -33,6 +34,9 @@ class HealthRecord {
   final DateTime uploadedAt;
   final bool sharedWithDoctor;
   final DateTime? sharedAt;
+
+  /// D-100: the doctor who wrote a doctor report.
+  final String? authorName;
 
   bool get isPdf => contentType == 'application/pdf';
 
@@ -46,7 +50,11 @@ class HealthRecord {
     uploadedAt: (d['uploadedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     sharedWithDoctor: d['sharedWithDoctor'] == true,
     sharedAt: (d['sharedAt'] as Timestamp?)?.toDate(),
+    authorName: d['authorName'] as String?,
   );
+
+  /// D-100: a doctor's report: the patient can open and share it, nothing else.
+  bool get locked => category == RecordCategory.doctorReport;
 }
 
 /// A file the patient chose, before upload.
@@ -117,6 +125,9 @@ abstract interface class RecordsRepository {
   Future<void> unshare(String recordId);
 
   Future<Uint8List> fileBytes(String recordId);
+
+  /// D-100: a PDF of the patient's latest numbers, saved to Records; returns its id.
+  Future<String> createHealthSummary();
 }
 
 class FirebaseRecordsRepository implements RecordsRepository {
@@ -210,4 +221,7 @@ class FirebaseRecordsRepository implements RecordsRepository {
   @override
   Future<Uint8List> fileBytes(String recordId) async =>
       Uint8List.fromList(await _api.recordFile(recordId));
+
+  @override
+  Future<String> createHealthSummary() async => '${(await _api.createHealthSummary())['id']}';
 }

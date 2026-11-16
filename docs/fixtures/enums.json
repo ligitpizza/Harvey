@@ -220,6 +220,8 @@
     "discharge_summary",
     "referral_letter",
     "emergency",
+    "health_summary",
+    "doctor_report",
     "other"
   ]
 }

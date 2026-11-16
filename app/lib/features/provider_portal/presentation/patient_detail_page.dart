@@ -28,6 +28,7 @@ import 'portal_prescription_tile.dart';
 import 'portal_widgets.dart';
 import '../../../core/utils/ic_number.dart';
 import 'delivery_preference_card.dart';
+import 'write_report_dialog.dart';
 
 /// Fig 4.3.12.4 Patient Detail (FR-8.2; UC8.3): vitals, risk, BP trend, medications,
 /// prescriptions, care plan and clinical notes for one assigned patient.
@@ -176,6 +177,24 @@ class _Header extends StatelessWidget {
               onPressed: () => context.go('/doctor/patient/${patient.uid}/prescriptions'),
               icon: const Icon(Icons.medication_outlined),
               label: const Text('Prescribe'),
+            ),
+            // D-100: a written report saved to the patient's Records as a PDF.
+            OutlinedButton.icon(
+              key: const Key('action-report'),
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                if (await showWriteReport(context, patient.uid, patient.name)) {
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        "Report saved to the patient's Records. You'll find it under Records.",
+                      ),
+                    ),
+                  );
+                }
+              },
+              icon: const Icon(Icons.assignment_ind_outlined),
+              label: const Text('Write report'),
             ),
             OutlinedButton.icon(
               key: const Key('action-care-plan'),
