@@ -8,6 +8,7 @@ import 'package:hypertension/core/constants/enums.dart';
 import 'package:hypertension/features/auth/state/auth_providers.dart';
 import 'package:hypertension/features/records/data/record_picker.dart';
 import 'package:hypertension/features/records/data/records_repository.dart';
+import 'package:hypertension/features/records/presentation/record_viewer_page.dart';
 import 'package:hypertension/features/records/presentation/records_page.dart';
 import 'package:hypertension/features/records/presentation/shared_records_tab.dart';
 import 'package:hypertension/features/records/state/records_providers.dart';
@@ -139,6 +140,10 @@ late FakeSharer sharer;
 
 Widget host(Widget child) => ProviderScope(
   overrides: [
+    // the native PDF renderer can't run in widget tests
+    pdfPagesBuilderProvider.overrideWithValue(
+      (bytes, name) => const SizedBox(key: Key('record-pdf')),
+    ),
     recordsRepositoryProvider.overrideWithValue(repo),
     recordPickerProvider.overrideWithValue(picker),
     fileSharerProvider.overrideWithValue(sharer),
@@ -262,19 +267,29 @@ void main() {
       expect(find.byKey(const Key('record-r2')), findsOneWidget);
     });
 
-    tallTest('a PDF opens through the system viewer; an image in the app', (t) async {
+    tallTest('D-88: a PDF and an image both open inside the app, without sharing', (t) async {
       repo.current = [
-        rec('r1'),
+        rec('r1', shared: true),
         rec('r2', category: RecordCategory.imaging, name: 'xray.png', type: 'image/png'),
       ];
       await t.pumpWidget(host(const RecordsPage()));
       await t.pumpAndSettle();
       await t.tap(find.text('blood_test.pdf'));
       await t.pumpAndSettle();
+      expect(find.byKey(const Key('record-viewer')), findsOneWidget);
+      expect(find.byKey(const Key('record-pdf')), findsOneWidget);
+      expect(find.byKey(const Key('viewer-shared')), findsOneWidget);
+      expect(sharer.shared, isEmpty);
+      // the viewer can still send it on
+      await t.tap(find.byKey(const Key('viewer-share-out')));
+      await t.pumpAndSettle();
       expect(sharer.shared, ['blood_test.pdf|application/pdf']);
+      await t.pageBack();
+      await t.pumpAndSettle();
       await t.tap(find.text('xray.png'));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('record-image')), findsOneWidget);
+      expect(find.byKey(const Key('viewer-shared')), findsNothing);
     });
   });
 
@@ -285,6 +300,20 @@ void main() {
       await t.tap(find.text(item).last);
       await t.pumpAndSettle();
     }
+
+    tallTest('D-88: "Share to other apps" is in the menu and Delete is red', (t) async {
+      repo.current = [rec('r1')];
+      await t.pumpWidget(host(const RecordsPage()));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('record-menu-r1')));
+      await t.pumpAndSettle();
+      final delete = t.widget<Text>(find.text('Delete').last);
+      expect(delete.style?.color, Theme.of(t.element(find.text('Delete').last)).colorScheme.error);
+      await t.tap(find.text('Share to other apps'));
+      await t.pumpAndSettle();
+      expect(sharer.shared, ['blood_test.pdf|application/pdf']);
+      expect(find.byKey(const Key('record-viewer')), findsNothing);
+    });
 
     tallTest('share, then stop sharing', (t) async {
       repo.current = [rec('r1'), rec('r2', shared: true)];
@@ -329,7 +358,8 @@ void main() {
       expect(find.textContaining('shared 15 Oct 2026'), findsOneWidget);
       await t.tap(find.byKey(const Key('shared-record-r1')));
       await t.pumpAndSettle();
-      expect(sharer.shared, ['blood_test.pdf|application/pdf']);
+      expect(find.byKey(const Key('record-pdf')), findsOneWidget); // D-88: in the portal
+      expect(sharer.shared, isEmpty);
     });
 
     tallTest('E1 nothing shared shows an empty state', (t) async {

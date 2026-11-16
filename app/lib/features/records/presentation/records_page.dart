@@ -7,6 +7,7 @@ import '../../auth/state/auth_providers.dart';
 import '../data/record_picker.dart';
 import '../data/records_repository.dart';
 import '../state/records_providers.dart';
+import 'record_viewer_page.dart';
 import 'record_widgets.dart';
 
 /// Patient Records tab (FR-6.1, FR-6.2; UC6.1, UC6.2; D-58). Not mocked in Ch4, so it
@@ -159,6 +160,8 @@ class _RecordsPageState extends ConsumerState<RecordsPage> {
     switch (action) {
       case 'share':
         await _share(r.id);
+      case 'out':
+        await shareRecordOut(context, ref, r);
       case 'unshare':
         await _run(() => repo.unshare(r.id), 'Your doctor can no longer see this document.');
       case 'category':
@@ -357,8 +360,12 @@ class _RecordCard extends ConsumerWidget {
               r.sharedWithDoctor
                   ? const PopupMenuItem(value: 'unshare', child: Text('Stop sharing'))
                   : const PopupMenuItem(value: 'share', child: Text('Share with doctor')),
+              const PopupMenuItem(value: 'out', child: Text('Share to other apps')), // D-88
               const PopupMenuItem(value: 'category', child: Text('Change category')),
-              const PopupMenuItem(value: 'delete', child: Text('Delete')),
+              PopupMenuItem(
+                value: 'delete',
+                child: Text('Delete', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              ),
             ],
           ),
         ),

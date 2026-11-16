@@ -29,7 +29,7 @@ class SharedRecordsTab extends ConsumerWidget {
               '${recordSubtitle(r)}'
               '${r.sharedAt == null ? '' : ' · shared ${formatDate(r.sharedAt!)}'}',
             ),
-            trailing: Icon(r.isPdf ? Icons.download_outlined : Icons.open_in_full),
+            trailing: const Icon(Icons.open_in_full),
             onTap: () => openRecord(context, ref, r),
           ),
       ],

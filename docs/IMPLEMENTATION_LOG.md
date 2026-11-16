@@ -1608,3 +1608,10 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - Trends: '+' sheet item, app-bar button on Vitals and Log vitals, 'View trends' chip on Home.
 - Tests: Flutter 652.
 
+### 2026-11-16 — Records open inside the app (D-88)
+
+- `records/presentation/record_viewer_page.dart`: `RecordViewerPage` (details chips, zoomable image, PDF pages through `pdfPagesBuilderProvider`, retry on failure) and `shareRecordOut`.
+- `openRecord` now pushes the viewer for every type; the doctor's `SharedRecordsTab` uses it too.
+- Patient ⋮ menu: Share with doctor / Stop sharing, **Share to other apps** (new), Change category, **Delete** (red).
+- Tests (`test/widget/records_test.dart`, UC6.3 / D-88): PDF and image open in-app without sharing; viewer share icon; menu share-out; red Delete; doctor view opens in-app.
+

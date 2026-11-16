@@ -3,52 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/enums.dart';
 import '../../provider_portal/presentation/portal_widgets.dart' show formatDate;
-import '../../settings/state/settings_providers.dart';
 import '../data/records_repository.dart';
-import '../state/records_providers.dart';
+import 'record_viewer_page.dart';
 
-/// Opens a record (UC6.3): images in a zoomable dialog, PDFs through the system viewer
-/// (share sheet on the phone, a download in the browser).
-Future<void> openRecord(BuildContext context, WidgetRef ref, HealthRecord r) async {
-  final messenger = ScaffoldMessenger.of(context);
-  try {
-    final bytes = await ref.read(recordsRepositoryProvider).fileBytes(r.id);
-    if (r.isPdf) {
-      await ref
-          .read(fileSharerProvider)
-          .share(bytes, fileName: r.fileName, mimeType: r.contentType);
-      return;
-    }
-    if (!context.mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (c) => Dialog(
-        key: const Key('record-image'),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: Text(r.fileName),
-              subtitle: Text(r.category.label),
-              trailing: IconButton(
-                tooltip: 'Close',
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.of(c).pop(),
-              ),
-            ),
-            Flexible(
-              child: InteractiveViewer(
-                child: Image.memory(bytes, fit: BoxFit.contain, semanticLabel: r.fileName),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  } catch (_) {
-    messenger.showSnackBar(const SnackBar(content: Text('Could not open the document.')));
-  }
-}
+/// Opens a record (UC6.3). D-88: full screen inside Harvey for both images and PDFs;
+/// sending it to another app is a separate "Share to other apps" action.
+Future<void> openRecord(BuildContext context, WidgetRef ref, HealthRecord r) =>
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => RecordViewerPage(record: r)));
 
 /// UC6.1 step 3: the category is required. Null when the patient cancels.
 Future<RecordCategory?> askRecordCategory(

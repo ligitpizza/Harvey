@@ -61,6 +61,7 @@ dependencies:
   flutter_stripe: ^14.2.0
   geocoding: ^5.0.0
   workmanager: ^0.10.10
+  pdfx: ^2.11.0
 
 dev_dependencies:
   flutter_test:
