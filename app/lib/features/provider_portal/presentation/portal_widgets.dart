@@ -123,6 +123,9 @@ String formatDate(DateTime d) {
       '${d.hour < 12 ? 'AM' : 'PM'}';
 }
 
+/// "Critical", "High"... for alert severities.
+String severityWord(RiskLevel l) => '${l.value[0].toUpperCase()}${l.value.substring(1)}';
+
 String alertTypeLabel(ClinicalAlertType t) => switch (t) {
   ClinicalAlertType.threshold => 'BP spike',
   ClinicalAlertType.riskEscalation => 'Risk escalation',

@@ -132,3 +132,12 @@ final medicationEffectProvider = FutureProvider.autoDispose.family<MedicationEff
   );
   return ref.watch(portalRepositoryProvider).medicationEffect(id);
 }, retry: (_, _) => null);
+
+/// One reading by id (the reading behind an alert).
+final portalReadingProvider = FutureProvider.autoDispose.family<VitalReading?, String>((
+  ref,
+  id,
+) async {
+  final d = await FirebaseFirestore.instance.collection('vital_readings').doc(id).get();
+  return d.exists ? VitalReading.fromFirestore(d.id, d.data()!) : null;
+}, retry: _noRetry);

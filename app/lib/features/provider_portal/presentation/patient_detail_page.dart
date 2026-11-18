@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'alert_detail_page.dart' show openAlert;
+import '../../symptom_checker/presentation/triage_result_page.dart' show TriageResultLoader;
 import '../../vitals/presentation/reading_detail_page.dart' show openReading;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -494,10 +496,18 @@ class _AlertHistory extends StatelessWidget {
           children: [
             for (final x in a)
               ListTile(
+                key: Key('alert-${x.id}'),
                 dense: true,
+                // Opens the alert in full: trigger, timeline, next steps, actions.
+                onTap: () => openAlert(context, x),
+                trailing: const Icon(Icons.chevron_right),
                 leading: CircleAvatar(radius: 6, backgroundColor: riskColor(x.severity)),
-                title: Text('${alertTypeLabel(x.type)} · ${x.severity.value}'),
-                subtitle: Text('${alertTimeline(x)}\n${x.message}'),
+                title: Text('${alertTypeLabel(x.type)} · ${severityWord(x.severity)}'),
+                subtitle: Text(
+                  '${alertTimeline(x)}\n${x.message}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 isThreeLine: true,
               ),
           ],
@@ -515,6 +525,12 @@ class _AlertHistory extends StatelessWidget {
               ListTile(
                 key: Key('triage-${x.id}'),
                 dense: true,
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => TriageResultLoader(id: x.id, staff: true),
+                  ),
+                ),
                 title: Text('${_outcome(x.outcome)} · ${x.severity.value}'),
                 subtitle: Text(
                   '${formatDate(x.generatedAt)} · ${x.symptomIds.map((s) => s.replaceAll('_', ' ')).join(', ')}',

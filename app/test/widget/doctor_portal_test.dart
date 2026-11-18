@@ -936,10 +936,28 @@ void main() {
       await t.pumpAndSettle();
       await t.tap(find.text('Alerts & triage'));
       await t.pumpAndSettle();
-      expect(find.text('BP spike · critical'), findsOneWidget);
+      expect(find.text('BP spike · Critical'), findsOneWidget);
       expect(find.text('Contact doctor · moderate'), findsOneWidget);
       expect(find.textContaining('dizziness'), findsOneWidget);
       symptoms.records = const [];
+    });
+
+    tallTest('an alert opens in full and can be acknowledged there', (t) async {
+      repo.alerts = [critical('p1')];
+      await t.pumpWidget(portal(repo, data, '/doctor/patient/p1'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Alerts & triage'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('alert-c-p1')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('alert-header')), findsOneWidget);
+      expect(find.text('EMERGENCY: crisis reading.'), findsOneWidget);
+      expect(find.byKey(const Key('alert-waiting')), findsOneWidget);
+      expect(find.textContaining('Contact the patient now'), findsOneWidget);
+      await t.tap(find.byKey(const Key('alert-acknowledge')));
+      await t.pumpAndSettle();
+      expect(repo.closed.last, ('c-p1', ClinicalAlertStatus.acknowledged));
+      expect(find.text('Alert acknowledged.'), findsOneWidget);
     });
   });
 }

@@ -76,6 +76,7 @@ class ClinicalAlert {
     required this.status,
     required this.createdAt,
     this.acknowledgedAt,
+    this.vitalReadingId,
   });
 
   final String id;
@@ -89,6 +90,9 @@ class ClinicalAlert {
   /// When the doctor acknowledged or dismissed it (D-32); null while open.
   final DateTime? acknowledgedAt;
 
+  /// The reading that raised it, when there was one (opens from the alert page).
+  final String? vitalReadingId;
+
   factory ClinicalAlert.fromFirestore(String id, Map<String, dynamic> d) => ClinicalAlert(
     id: id,
     patientId: d['patientId'] as String,
@@ -98,6 +102,7 @@ class ClinicalAlert {
     status: ClinicalAlertStatus.fromValue(d['status'] as String),
     createdAt: _time(d['createdAt']),
     acknowledgedAt: d['acknowledgedAt'] == null ? null : _time(d['acknowledgedAt']),
+    vitalReadingId: d['vitalReadingId'] as String?,
   );
 }
 
