@@ -331,7 +331,7 @@ class _QueueCard extends ConsumerWidget {
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(o.patientName ?? 'Patient', style: theme.textTheme.titleMedium),
-                        OrderStatusChip.of(o),
+                        OrderStatusChip.staff(o),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -446,7 +446,7 @@ class _CompletedList extends StatelessWidget {
               ].join(' · '),
               style: theme.textTheme.bodySmall,
             ),
-            trailing: OrderStatusChip.of(o),
+            trailing: OrderStatusChip.staff(o),
           ),
       ],
     );
@@ -713,7 +713,7 @@ class _WaitingForPatient extends ConsumerWidget {
               subtitle: Text(
                 [
                   o.ref,
-                  o.status.label,
+                  o.staffStatusLabel,
                   if (o.total != null) rm(o.total!) else 'awaiting price',
                 ].join(' · '),
               ),

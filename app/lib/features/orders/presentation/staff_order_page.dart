@@ -79,7 +79,7 @@ class StaffOrderPage extends ConsumerWidget {
                   children: [
                     Text('Order ${o.ref}', style: theme.textTheme.headlineSmall),
                     const SizedBox(width: 12),
-                    OrderStatusChip.of(o),
+                    OrderStatusChip.staff(o),
                   ],
                 ),
                 Row(

@@ -56,7 +56,7 @@ class _AdminDeliveriesPageState extends ConsumerState<AdminDeliveriesPage> {
       'dispatched' => o.awaitingDriver ? 'Finding a driver' : 'Dispatched',
       _ => 'Not dispatched',
     },
-    _ => o.status.label,
+    _ => o.staffStatusLabel,
   };
 
   @override

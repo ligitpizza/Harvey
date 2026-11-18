@@ -23,6 +23,15 @@ enum Fulfilment {
   final String value;
   final String label;
 
+  /// The same status worded for pharmacy and admin screens ("you" is the patient).
+  String get staffLabel => switch (this) {
+    awaitingConfirmation => 'Waiting for patient to confirm',
+    awaitingPayment => 'Waiting for patient to pay',
+    skipped => 'Skipped by the doctor',
+    outOfStock => 'Out of stock',
+    _ => label,
+  };
+
   static Fulfilment fromValue(Object? v) =>
       values.firstWhere((f) => f.value == v, orElse: () => Fulfilment.awaitingConfirmation);
 }
@@ -274,6 +283,12 @@ class MedicationOrder {
     Fulfilment.readyForDelivery when dispatchedAt != null => 'Courier booked',
     Fulfilment.delivered when receivedAt != null => 'Received by patient',
     _ => status.label,
+  };
+
+  /// [statusLabel] worded for staff screens.
+  String get staffStatusLabel => switch (status) {
+    Fulfilment.readyForDelivery || Fulfilment.delivered => statusLabel,
+    _ => status.staffLabel,
   };
 
   /// D-94 / D-101: the patient may confirm only after the courier completed the delivery.

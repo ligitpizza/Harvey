@@ -510,7 +510,9 @@ void main() {
     await t.pumpAndSettle();
     expect(find.byKey(const Key('incoming-$id')), findsOneWidget);
     expect(find.textContaining('Siti · Amlodipine 5mg ×30, Losartan 50mg ×60'), findsOneWidget);
-    expect(find.textContaining('Waiting for you to confirm'), findsOneWidget);
+    // The pharmacy sees staff wording, not the patient's "Waiting for you".
+    expect(find.textContaining('Waiting for patient to confirm'), findsOneWidget);
+    expect(find.textContaining('Waiting for you'), findsNothing);
   });
 
   tallTest('D-73 admin order detail shows medicines, payment, delivery and history', (t) async {

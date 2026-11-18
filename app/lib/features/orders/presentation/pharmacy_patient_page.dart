@@ -139,7 +139,7 @@ class PharmacyPatientPage extends ConsumerWidget {
                       title: Text('${o.ref} · ${cycleLabel(o.cycleDate)}'),
                       subtitle: Text(
                         [
-                          o.status.label,
+                          o.staffStatusLabel,
                           'payment ${o.paymentStatus}',
                           if (o.total != null) rm(o.total!),
                           if (o.method == homeDelivery) 'delivery',

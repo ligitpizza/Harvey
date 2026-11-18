@@ -41,6 +41,10 @@ class OrderStatusChip extends StatelessWidget {
   factory OrderStatusChip.of(MedicationOrder o, {Key? key}) =>
       OrderStatusChip(key: key, status: o.status, label: o.statusLabel);
 
+  /// Staff screens: "Waiting for patient to confirm", not "Waiting for you".
+  factory OrderStatusChip.staff(MedicationOrder o, {Key? key}) =>
+      OrderStatusChip(key: key, status: o.status, label: o.staffStatusLabel);
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;

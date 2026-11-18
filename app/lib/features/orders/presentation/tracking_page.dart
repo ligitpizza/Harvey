@@ -148,7 +148,7 @@ class _OrderTrackingPageState extends ConsumerState<OrderTrackingPage> {
                               ),
                               DataCell(Text(o.total == null ? '—' : rm(o.total!))),
                               DataCell(Text(o.paymentStatus)),
-                              DataCell(OrderStatusChip.of(o)),
+                              DataCell(OrderStatusChip.staff(o)),
                               DataCell(Text(_courier(o))),
                               DataCell(Text(o.cycleDate == null ? '—' : dateLabel(o.cycleDate!))),
                             ],

@@ -535,7 +535,7 @@ class PharmacyDashboardPage extends ConsumerWidget {
                         dense: true,
                         contentPadding: EdgeInsets.zero,
                         title: Text('${o.ref} · ${o.patientName ?? 'Patient'}'),
-                        subtitle: Text(o.status.label),
+                        subtitle: Text(o.staffStatusLabel),
                         onTap: () => context.go('/pharmacy'),
                       ),
                   ],
