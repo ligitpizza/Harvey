@@ -35,60 +35,60 @@ class EmergencyEvent:
     actions: list[str] = field(default_factory=list)
 
 
-def _latin1(text: object) -> str:
-    return str(text).encode("latin-1", "replace").decode("latin-1")
-
-
 def emergency_pdf(e: EmergencyEvent) -> bytes:
-    from fpdf import FPDF
+    """D-108: Harvey logo header, an alert banner, then tables like the other reports."""
+    from app.services.pdf_layout import HarveyDoc
 
-    pdf = FPDF()
-    pdf.add_page()
-    width = pdf.epw
+    when = f"{e.at.astimezone(MYT):%a %d %b %Y, %H:%M} (Malaysia time)"
+    doc = HarveyDoc("Emergency event summary", [e.patient_name, when])
+    doc.banner(f"Trigger: {e.trigger}", alert=True)
+    doc.facts([("Patient", e.patient_name), ("Time", when)])
 
-    def line(text: object, size: int = 11, style: str = "") -> None:
-        pdf.set_font("Helvetica", style, size)
-        pdf.multi_cell(width, 6 if size <= 11 else 9, _latin1(text), new_x="LMARGIN", new_y="NEXT")
-
-    def heading(text: str) -> None:
-        pdf.ln(3)
-        line(text, 12, "B")
-
-    line("Harvey - Emergency event summary", 16, "B")
-    line(f"Patient: {e.patient_name}")
-    line(f"Time: {e.at.astimezone(MYT):%a %d %b %Y, %H:%M} (Malaysia time)")
-    line(f"Trigger: {e.trigger}")
-    heading("Vital signs")
-    if e.systolic is not None and e.diastolic is not None:
-        line(f"Blood pressure: {e.systolic}/{e.diastolic} mmHg")
-    else:
-        line("Blood pressure: not recorded with this event")
-    line(
-        f"Heart rate: {e.heart_rate} bpm (camera estimate)"
-        if e.heart_rate
-        else "Heart rate: not recorded"
+    doc.heading("Vital signs")
+    bp = (
+        f"{e.systolic}/{e.diastolic} mmHg"
+        if e.systolic is not None and e.diastolic is not None
+        else "Not recorded with this event"
     )
+    hr = f"{e.heart_rate} bpm (camera estimate)" if e.heart_rate else "Not recorded"
+    doc.table(["Measure", "Value"], [["Blood pressure", bp], ["Heart rate", hr]], (40, 60))
+
     if e.symptoms:
-        heading("Symptoms reported")
-        line(", ".join(e.symptoms) + (f" (severity: {e.severity})" if e.severity else ""))
-    heading("Risk scores at the time")
-    for r in e.risk_lines or ["No risk score yet."]:
-        line(f"- {r}")
-    heading("Who was notified")
-    for n in e.notified or ["The patient (in the app)."]:
-        line(f"- {n}")
-    heading("Actions taken")
-    if e.appointment:
-        line(f"- Emergency appointment booked: {e.appointment}")
-    for a in e.actions:
-        line(f"- {a}")
-    pdf.ln(4)
-    line(
-        "If you feel unwell, call 999. This summary was generated automatically by Harvey "
-        "and is not a diagnosis.",
-        9,
+        doc.heading("Symptoms reported")
+        doc.table(
+            ["Symptom", "Severity"],
+            [[s, e.severity or "-"] for s in e.symptoms],
+            (70, 30),
+        )
+
+    doc.heading("Risk scores at the time")
+    if e.risk_lines:
+        rows = [r.split(": ", 1) if ": " in r else [r, "-"] for r in e.risk_lines]
+        doc.table(["Condition", "Level"], rows, (60, 40))
+    else:
+        doc.para("No risk score yet.")
+
+    doc.heading("Who was notified")
+    doc.table(
+        ["Notified"],
+        [[n] for n in (e.notified or ["The patient (in the app)."])],
+        (100,),
     )
-    return bytes(pdf.output())
+
+    doc.heading("Actions taken")
+    actions = ([f"Emergency appointment booked: {e.appointment}"] if e.appointment else []) + list(
+        e.actions
+    )
+    if actions:
+        doc.table(["Action"], [[a] for a in actions], (100,))
+    else:
+        doc.para("No further action recorded.")
+
+    doc.footnote(
+        "If you feel unwell, call 999. This summary was generated automatically by Harvey "
+        "and is not a diagnosis."
+    )
+    return doc.output()
 
 
 def store_emergency_summary(records: RecordRepository, files: FileStore, e: EmergencyEvent) -> str:

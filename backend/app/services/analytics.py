@@ -429,35 +429,33 @@ def bar_chart(pdf: Any, title: str, bars: list[tuple[str, float, tuple[int, int,
 
 
 def report_pdf(data: dict[str, Any], period: str, generated: str) -> bytes:
-    from fpdf import FPDF
-
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.add_page()
-    width = pdf.epw
-
-    def line(text: object, size: int = 10, style: str = "") -> None:
-        pdf.set_font("Helvetica", style, size)
-        pdf.multi_cell(width, 6 if size <= 10 else 8, _latin1(text), new_x="LMARGIN", new_y="NEXT")
+    """D-108: Harvey logo header and tables (same look as the receipt and health reports),
+    with the D-77 bar charts under each section."""
+    from app.services.pdf_layout import HarveyDoc
 
     def pct(v: float | None) -> str:
         return "-" if v is None else f"{v:.1f}%"
 
-    line("Harvey hospital-wide report", 16, "B")
-    line(f"Period: {period} (Malaysia time)")
-    line(f"Generated {generated}")
+    doc = HarveyDoc(
+        "Hospital-wide report", [f"Period: {period} (Malaysia time)", f"Generated {generated}"]
+    )
+    pdf = doc.pdf
     p, a, c, u = data["patients"], data["appointments"], data["care"], data["usage"]
+    num = ("LEFT", "RIGHT")
 
-    pdf.ln(3)
-    line("1. Patients and risk", 13, "B")
-    line(f"Active patients: {p['active']}")
-    line(f"New registrations: {p['newRegistrations']}")
-    line(f"Blood pressure readings logged: {p['readingsLogged']}")
-    line(f"Patients with a risk assessment: {p['patientsScored']}")
+    doc.heading("1. Patients and risk")
     risk = p["risk"]
-    line(
-        "Risk distribution (latest in period): "
-        + ", ".join(f"{lvl.title()} {risk.get(lvl, 0)}" for lvl in LEVELS)
+    doc.table(
+        ["Measure", "Count"],
+        [
+            ["Active patients", p["active"]],
+            ["New registrations", p["newRegistrations"]],
+            ["Blood pressure readings logged", p["readingsLogged"]],
+            ["Patients with a risk assessment", p["patientsScored"]],
+            *[[f"Overall risk: {lvl.title()}", risk.get(lvl, 0)] for lvl in LEVELS],
+        ],
+        (75, 25),
+        num,
     )
     bar_chart(
         pdf,
@@ -465,11 +463,18 @@ def report_pdf(data: dict[str, Any], period: str, generated: str) -> bytes:
         [(lvl.title(), float(risk.get(lvl, 0)), _RISK_RGB.get(lvl, _BLUE)) for lvl in LEVELS],
     )
 
-    pdf.ln(2)
-    line("2. Appointments", 13, "B")
-    line(
-        f"Total {a['total']}: completed {a['completed']}, no-show {a['noShow']}, "
-        f"cancelled {a['cancelled']}, still upcoming {a['upcoming']}"
+    doc.heading("2. Appointments")
+    doc.table(
+        ["Outcome", "Count"],
+        [
+            ["Total", a["total"]],
+            ["Completed", a["completed"]],
+            ["Still upcoming", a["upcoming"]],
+            ["No-show", a["noShow"]],
+            ["Cancelled", a["cancelled"]],
+        ],
+        (75, 25),
+        num,
     )
     bar_chart(
         pdf,
@@ -482,42 +487,54 @@ def report_pdf(data: dict[str, Any], period: str, generated: str) -> bytes:
         ],
     )
     reasons = a["topCancellationReasons"]
-    line(
-        "Top cancellation reasons: "
-        + (", ".join(f"{r} ({n})" for r, n in reasons) if reasons else "none recorded")
-    )
+    if reasons:
+        doc.table(["Top cancellation reason", "Count"], [[r, n] for r, n in reasons], (75, 25), num)
+    else:
+        doc.para("Top cancellation reasons: none recorded.")
 
-    pdf.ln(2)
-    line("3. Adherence and alerts", 13, "B")
-    line(f"Medication adherence: {pct(c['adherence'])}; missed doses: {c['missedDoses']}")
+    doc.heading("3. Adherence and alerts")
     sev = c["alertsBySeverity"]
-    line(
-        f"Clinical alerts raised: {c['alertsRaised']} ("
-        + ", ".join(f"{k} {v}" for k, v in sorted(sev.items()))
-        + f"); resolved: {c['alertsResolved']}"
+    tri = c["triage"]
+    doc.table(
+        ["Measure", "Value"],
+        [
+            ["Medication adherence", pct(c["adherence"])],
+            ["Missed doses", c["missedDoses"]],
+            ["Clinical alerts raised", c["alertsRaised"]],
+            *[[f"Alerts: {str(k).title()}", v] for k, v in sorted(sev.items())],
+            ["Alerts resolved", c["alertsResolved"]],
+            *[[f"Symptom checker: {str(k).replace('_', ' ')}", v] for k, v in tri.items()],
+        ],
+        (75, 25),
+        num,
     )
     bar_chart(
         pdf,
         "Clinical alerts by severity",
         [(str(k).title(), float(v), _RISK_RGB.get(str(k), _BLUE)) for k, v in sorted(sev.items())],
     )
-    tri = c["triage"]
-    line(
-        "Symptom checker outcomes: "
-        + (", ".join(f"{str(k).replace('_', ' ')} {v}" for k, v in tri.items()) or "none")
-    )
 
     d = data.get("delivery")
     if d:
-        pdf.ln(2)
-        line("4. Medication orders and delivery", 13, "B")
-        line(
-            f"Orders: {d['orders']} (home delivery {d['homeDelivery']}, self-collection "
-            f"{d['selfCollection']}); paid {d['paid']}"
-        )
-        line(
-            f"Delivered {d['delivered']}, collected {d['collected']}, in progress "
-            f"{d['inProgress']}, failed {d['failed']}, out of stock {d['outOfStock']}"
+        fee = d["averageCourierFee"]
+        doc.heading("4. Medication orders and delivery")
+        doc.table(
+            ["Measure", "Value"],
+            [
+                ["Orders", d["orders"]],
+                ["Home delivery", d["homeDelivery"]],
+                ["Self-collection", d["selfCollection"]],
+                ["Paid", d["paid"]],
+                ["Delivered", d["delivered"]],
+                ["Collected", d["collected"]],
+                ["In progress", d["inProgress"]],
+                ["Failed", d["failed"]],
+                ["Out of stock", d["outOfStock"]],
+                ["Paid revenue", f"RM{d['revenue']:.2f}"],
+                ["Average courier fee", "-" if fee is None else f"RM{fee:.2f}"],
+            ],
+            (75, 25),
+            num,
         )
         bar_chart(
             pdf,
@@ -530,18 +547,19 @@ def report_pdf(data: dict[str, Any], period: str, generated: str) -> bytes:
                 ("Out of stock", float(d["outOfStock"]), (239, 108, 0)),
             ],
         )
-        fee = d["averageCourierFee"]
-        line(
-            f"Paid revenue: RM{d['revenue']:.2f}; average courier fee: "
-            + ("-" if fee is None else f"RM{fee:.2f}")
-        )
 
-    pdf.ln(2)
-    line(f"{5 if d else 4}. Platform usage", 13, "B")
-    line(f"Active clinicians: {u['activeClinicians']}")
-    line(f"Messages sent: {u['messagesSent']} (contents are end-to-end encrypted)")
-    line(f"Health records shared with doctors: {u['recordsShared']}")
-    line(f"Sign-ins: {u['logins']}")
+    doc.heading(f"{5 if d else 4}. Platform usage")
+    doc.table(
+        ["Measure", "Count"],
+        [
+            ["Active clinicians", u["activeClinicians"]],
+            ["Messages sent (end-to-end encrypted)", u["messagesSent"]],
+            ["Health records shared with doctors", u["recordsShared"]],
+            ["Sign-ins", u["logins"]],
+        ],
+        (75, 25),
+        num,
+    )
     bar_chart(
         pdf,
         "Platform activity",
@@ -553,11 +571,8 @@ def report_pdf(data: dict[str, Any], period: str, generated: str) -> bytes:
         ],
     )
 
-    pdf.ln(4)
-    line(
+    doc.footnote(
         "Aggregated figures only; no individual patient is identified. Risk levels come from "
-        "the Harvey prediction models and are not a diagnosis.",
-        9,
-        "I",
+        "the Harvey prediction models and are not a diagnosis."
     )
-    return bytes(pdf.output())
+    return doc.output()
