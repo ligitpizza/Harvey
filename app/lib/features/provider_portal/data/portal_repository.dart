@@ -60,6 +60,9 @@ abstract interface class PortalRepository {
   /// D-72 (M8): how the patient gets their medicines ({method, latestStatus, orders}).
   Future<Map<String, dynamic>> deliveryPreference(String patientId);
 
+  /// D-104: the doctor skips this month's unpaid order with a reason.
+  Future<void> skipOrder(String orderId, String reason);
+
   /// D-50: the issuing doctor deletes their own prescription.
   Future<void> deletePrescription(String patientId, String prescriptionId);
 
@@ -195,6 +198,9 @@ class FirestorePortalRepository implements PortalRepository {
   @override
   Future<Map<String, dynamic>> deliveryPreference(String patientId) =>
       _api.deliveryPreference(patientId);
+
+  @override
+  Future<void> skipOrder(String orderId, String reason) => _api.doctorSkipOrder(orderId, reason);
 
   @override
   Future<MedicationEffect> medicationEffect(String patientId) async =>

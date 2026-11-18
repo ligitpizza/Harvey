@@ -568,7 +568,9 @@ class ApiClient {
   }) => _post('/orders/$id/delivery-quote', {'deliveryAddress': address, 'lat': lat, 'lng': lng});
 
   /// UC13.2 A1.
-  Future<void> skipOrder(String id) => _send('POST', '/orders/$id/skip', null);
+  /// D-104: the doctor skips this month's unpaid order.
+  Future<void> doctorSkipOrder(String id, String reason) =>
+      _send('POST', '/doctor/orders/$id/skip', {'reason': reason});
 
   /// UC13.3: a PaymentIntent (mode stripe) or the simulated card form (mode fake).
   Future<Map<String, dynamic>> startPayment(String id) => _send('POST', '/orders/$id/pay', null);

@@ -236,16 +236,43 @@ def test_monthly_cycle_and_48h_reminder(
     assert order_id_for("rx9", feb) in order_repo.orders
 
 
-def test_uc13_2_a1_skip_then_change_of_mind(
-    client: TestClient, order_repo: InMemoryOrderRepository
+def test_d104_only_the_doctor_skips_a_month_with_a_reason(
+    client: TestClient, order_repo: InMemoryOrderRepository, push: LogPushClient
 ) -> None:
     oid = priced_order(client, order_repo)
-    assert client.post(f"/api/v1/orders/{oid}/skip", headers=PATIENT).status_code == 204
-    assert order_repo.orders[oid]["fulfilmentStatus"] == "skipped"
+    # The patient can no longer skip (the route is gone).
+    assert client.post(f"/api/v1/orders/{oid}/skip", headers=PATIENT).status_code in (404, 405)
+    bad = client.post(f"/api/v1/doctor/orders/{oid}/skip", json={"reason": ""}, headers=DOCTOR)
+    assert bad.status_code == 422
+    res = client.post(
+        f"/api/v1/doctor/orders/{oid}/skip",
+        json={"reason": "Bought at another pharmacy"},
+        headers=DOCTOR,
+    )
+    assert res.status_code == 204, res.text
+    o = order_repo.orders[oid]
+    assert o["fulfilmentStatus"] == "skipped" and o["skipReason"] == "Bought at another pharmacy"
+    assert "This month's order is skipped" in titles(push, P)
+    # The patient can't overrule the doctor.
     res = client.post(
         f"/api/v1/orders/{oid}/confirm", json={"method": "self_collection"}, headers=PATIENT
     )
-    assert res.json()["fulfilmentStatus"] == "awaiting_payment"
+    assert res.json()["error"]["code"] == "ORDER_SKIPPED"
+    # Already skipped: refused.
+    again = client.post(
+        f"/api/v1/doctor/orders/{oid}/skip", json={"reason": "again"}, headers=DOCTOR
+    )
+    assert again.json()["error"]["code"] == "ORDER_NOT_OPEN"
+
+
+def test_d104_other_staff_cannot_skip(
+    client: TestClient, order_repo: InMemoryOrderRepository
+) -> None:
+    oid = priced_order(client, order_repo)
+    for h in (PATIENT, PHARM, ADMIN):
+        res = client.post(f"/api/v1/doctor/orders/{oid}/skip", json={"reason": "no"}, headers=h)
+        assert res.status_code == 403
+    assert order_repo.orders[oid]["fulfilmentStatus"] != "skipped"
 
 
 def test_dev_next_cycle_is_off_by_default(

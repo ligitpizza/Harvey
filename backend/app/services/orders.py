@@ -3,7 +3,7 @@ UC13.1-UC13.6; docs/06 §J; Fig 4.1.1.13; D-66).
 
 Life of an order (`fulfilmentStatus`):
 
-    awaiting_confirmation --skip--> skipped (until next cycle; can still be confirmed)
+    awaiting_confirmation --doctor skips (D-104)--> skipped (until the next cycle)
         --confirm(method)--> awaiting_payment --paid--> preparing
     preparing / out_of_stock --pharmacist--> ready_for_collection --> collected
                              --pharmacist--> ready_for_delivery --courier--> delivered | failed
@@ -163,6 +163,8 @@ def order_view(
         "cancelReason": o.get("cancelReason"),
         "cancelledBy": o.get("cancelledBy"),
         "cancelledAt": _iso(o.get("cancelledAt")),
+        "skipReason": o.get("skipReason"),
+        "skippedAt": _iso(o.get("skippedAt")),
         "stockItemId": o.get("stockItemId"),
         "cycleDate": _iso(o.get("cycleDate")),
         "createdAt": _iso(o.get("createdAt")),
@@ -603,21 +605,46 @@ class OrderService:
             moved += self.advance(order_id, o, now)
         return {"ordersCreated": created, "orderReminders": reminded, "deliveryUpdates": moved}
 
-    # ----- UC13.2 A1 skip / UC13.3 confirm -----
+    # ----- D-104 doctor skips a month (replaces UC13.2 A1) / UC13.3 confirm -----
 
-    def skip(self, order_id: str, uid: str) -> None:
+    def skip(self, order_id: str, uid: str, reason: str, now: datetime | None = None) -> None:
+        """D-104: only the doctor skips a month of a recurring prescription, with a reason
+        (e.g. the patient bought it elsewhere). Paid orders are fulfilled instead."""
         o = self._order(order_id)
-        if o.get("fulfilmentStatus") not in (AWAITING_CONFIRMATION, AWAITING_PAYMENT):
-            raise OrderError("ORDER_NOT_OPEN", "This order can no longer be skipped.")
+        if o.get("paymentStatus") == "paid" or o.get("fulfilmentStatus") not in (
+            AWAITING_CONFIRMATION,
+            AWAITING_PAYMENT,
+        ):
+            raise OrderError("ORDER_NOT_OPEN", "Only an unpaid order can be skipped.")
         self.repo.update_order(
-            order_id, {"fulfilmentStatus": SKIPPED, "method": None, "deliveryFee": 0.0}
+            order_id,
+            {
+                "fulfilmentStatus": SKIPPED,
+                "method": None,
+                "deliveryFee": 0.0,
+                "skipReason": reason,
+                "skippedBy": uid,
+                "skippedAt": now or datetime.now(UTC),
+            },
         )
         self.audit.log(
             user_id=uid,
             action="ORDER_SKIPPED",
-            details="Patient skipped this month's order.",
+            details=f"Doctor skipped this month's order: {reason}",
             target_type=Collection.MEDICATION_ORDERS.value,
             target_id=order_id,
+        )
+        self._push(
+            str(o["patientId"]),
+            "This month's order is skipped",
+            f"Your doctor skipped this month's refill: {reason}",
+            order_id,
+        )
+        self._push_role(
+            UserRole.PHARMACIST,
+            "Order skipped",
+            f"The doctor skipped {o.get('medicationDetails')} this month.",
+            order_id,
         )
 
     def confirm(
@@ -631,7 +658,9 @@ class OrderService:
         phone: str | None = None,
     ) -> dict[str, Any]:
         o = self._order(order_id)
-        if o.get("fulfilmentStatus") not in (AWAITING_CONFIRMATION, SKIPPED, AWAITING_PAYMENT):
+        if o.get("fulfilmentStatus") == SKIPPED:  # D-104: the doctor's decision
+            raise OrderError("ORDER_SKIPPED", "Your doctor skipped this month's order.")
+        if o.get("fulfilmentStatus") not in (AWAITING_CONFIRMATION, AWAITING_PAYMENT):
             raise OrderError("ORDER_NOT_OPEN", "This order has already been paid.")
         if o.get("amount") is None:
             raise OrderError(

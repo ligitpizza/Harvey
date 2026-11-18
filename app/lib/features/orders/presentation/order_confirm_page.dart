@@ -188,44 +188,6 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
     }
   }
 
-  Future<void> _skip() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('Skip this month?'),
-        content: const Text(
-          "We won't prepare this month's refill. Your next order arrives next month.",
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-          FilledButton(
-            key: const Key('confirm-skip'),
-            onPressed: () => Navigator.pop(c, true),
-            child: const Text('Skip'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    setState(() => _busy = true);
-    try {
-      await ref.read(ordersRepositoryProvider).skip(widget.orderId);
-      ref
-        ..invalidate(myOrdersProvider)
-        ..invalidate(orderProvider(widget.orderId));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Skipped. You can still confirm it this month.')),
-        );
-        context.pop();
-      }
-    } on ApiException catch (e) {
-      setState(() => _error = e.message);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final order = ref.watch(orderProvider(widget.orderId));
@@ -251,9 +213,7 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
   Widget _body(BuildContext context, MedicationOrder o) {
     final theme = Theme.of(context);
     final open =
-        o.status == Fulfilment.awaitingConfirmation ||
-        o.status == Fulfilment.skipped ||
-        o.status == Fulfilment.awaitingPayment;
+        o.status == Fulfilment.awaitingConfirmation || o.status == Fulfilment.awaitingPayment;
     // D-71: the courier's quote once the drop-off is known; the flat fee until then.
     final fee = _method == homeDelivery ? (_quotedFee ?? deliveryFeeRm) : 0.0;
     final amount = o.amount;
@@ -455,17 +415,27 @@ class _OrderConfirmPageState extends ConsumerState<OrderConfirmPage> {
           onPressed: !open || _busy || _method == null || amount == null ? null : _confirm,
           child: Text(_busy ? 'Please wait…' : 'Confirm order'),
         ),
-        if (o.status == Fulfilment.awaitingConfirmation || o.status == Fulfilment.awaitingPayment)
-          TextButton(
-            key: const Key('skip-order'),
-            onPressed: _busy ? null : _skip,
-            child: const Text('Skip this month'),
-          ),
+        // D-104: only the doctor skips a month; the patient sees why.
         if (o.status == Fulfilment.skipped)
+          Card(
+            key: const Key('skipped-note'),
+            margin: const EdgeInsets.only(top: 12),
+            child: ListTile(
+              leading: const Icon(Icons.event_busy_outlined),
+              title: const Text('Your doctor skipped this month'),
+              subtitle: Text(
+                '${o.skipReason ?? 'No reason given.'}\nYour next order arrives next month. '
+                'Message your doctor if this is a mistake.',
+              ),
+            ),
+          )
+        else
           const Padding(
             padding: EdgeInsets.only(top: 8),
             child: Text(
-              'You skipped this month. You can still confirm it if you change your mind.',
+              "Can't take this month's refill (e.g. you bought it elsewhere)? Message your "
+              'doctor; only they can skip a month.',
+              key: Key('skip-ask-doctor'),
               textAlign: TextAlign.center,
             ),
           ),

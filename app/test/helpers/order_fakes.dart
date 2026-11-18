@@ -59,9 +59,6 @@ class FakeOrdersRepository implements OrdersRepository {
     return orders[id]!;
   }
 
-  @override
-  Future<void> skip(String id) async => calls.add('skip:$id');
-
   /// D-71: the courier's quote returned to checkout.
   double quotedFee = 13.8;
 

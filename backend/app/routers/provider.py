@@ -351,14 +351,23 @@ def delivery_preference(
         v = o.get("cycleDate")
         return v if isinstance(v, datetime) else datetime.min.replace(tzinfo=UTC)
 
-    mine = sorted((o for _, o in orders.orders_for_patient(patient_id)), key=when, reverse=True)
+    pairs = sorted(orders.orders_for_patient(patient_id), key=lambda p: when(p[1]), reverse=True)
+    mine = [o for _, o in pairs]
     chosen = next((o for o in mine if o.get("method")), None)
-    latest = mine[0] if mine else None
+    latest_id, latest = pairs[0] if pairs else (None, None)
     return {
         "method": chosen.get("method") if chosen else None,
         "latestStatus": latest.get("fulfilmentStatus") if latest else None,
         "latestMedication": latest.get("medicationDetails") if latest else None,
         "orders": len(mine),
+        # D-104: the doctor may skip this month while it is still unpaid.
+        "latestOrderId": latest_id,
+        "latestSkippable": bool(
+            latest
+            and latest.get("paymentStatus") != "paid"
+            and latest.get("fulfilmentStatus") in ("awaiting_confirmation", "awaiting_payment")
+        ),
+        "latestSkipReason": latest.get("skipReason") if latest else None,
     }
 
 

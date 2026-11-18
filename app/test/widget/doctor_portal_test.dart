@@ -131,6 +131,11 @@ class FakePortalRepository implements PortalRepository {
   @override
   Future<Map<String, dynamic>> deliveryPreference(String patientId) async => delivery;
 
+  final skips = <String>[];
+
+  @override
+  Future<void> skipOrder(String orderId, String reason) async => skips.add('$orderId:$reason');
+
   final consolidated = <List<Map<String, dynamic>>>[];
 
   /// D-69: same interaction behaviour as [issuePrescription] (records rxCalls too).
@@ -661,6 +666,43 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('Medication delivery: Home delivery'), findsOneWidget);
       expect(find.text('2 order(s) · latest ready for delivery'), findsOneWidget);
+    });
+
+    tallTest('D-104 the doctor skips an unpaid month with a reason', (t) async {
+      repo.delivery = const {
+        'method': null,
+        'latestStatus': 'awaiting_confirmation',
+        'orders': 1,
+        'latestOrderId': 'o1',
+        'latestSkippable': true,
+      };
+      addTearDown(() => repo.delivery = const {'method': null, 'orders': 0});
+      await t.pumpWidget(portal(repo, data, '/doctor/patient/p1'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Medications'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('doctor-skip-month')));
+      await t.pumpAndSettle();
+      await t.enterText(find.byKey(const Key('skip-reason')), 'Bought at another pharmacy');
+      await t.tap(find.byKey(const Key('skip-confirm')));
+      await t.pumpAndSettle();
+      expect(repo.skips, ['o1:Bought at another pharmacy']);
+    });
+
+    tallTest('D-104 no skip button once the month is paid', (t) async {
+      repo.delivery = const {
+        'method': 'home_delivery',
+        'latestStatus': 'preparing',
+        'orders': 1,
+        'latestOrderId': 'o1',
+        'latestSkippable': false,
+      };
+      addTearDown(() => repo.delivery = const {'method': null, 'orders': 0});
+      await t.pumpWidget(portal(repo, data, '/doctor/patient/p1'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Medications'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('doctor-skip-month')), findsNothing);
     });
 
     tallTest('D-72 the prescription page shows the delivery preference too', (t) async {

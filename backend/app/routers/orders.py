@@ -1,6 +1,6 @@
 """Module 13 API (FR-13.1-13.5; UC13.1-UC13.6; docs/05; D-66).
 
-Patient   GET  /orders, GET /orders/{id}; POST /orders/{id}/confirm | skip | pay |
+Patient   GET  /orders, GET /orders/{id}; POST /orders/{id}/confirm | pay |
           pay/fake | pay/refresh | reschedule | switch-to-collection; POST /orders/dev/next-cycle
 Doctor    POST /prescriptions/{id}/recurring
 Pharmacy  GET  /pharmacy/queue, /pharmacy/stock, /pharmacy/patients;
@@ -55,6 +55,7 @@ from app.schemas.orders import (
     ReadyRequest,
     ReceiveStockRequest,
     RecurringRequest,
+    SkipOrderRequest,
     StockEditRequest,
     StockRequest,
 )
@@ -243,19 +244,6 @@ def delivery_quote(
     return {"deliveryFee": fee, "courier": svc.courier.brand}
 
 
-@router.post("/orders/{order_id}/skip", status_code=status.HTTP_204_NO_CONTENT)
-def skip_order(
-    order_id: str,
-    user: CurrentUser = Depends(patient_only),
-    svc: OrderService = Depends(get_order_service),
-) -> None:
-    _own_order(svc, order_id, user.uid)
-    try:
-        svc.skip(order_id, user.uid)
-    except OrderError as e:
-        raise _api(e) from e
-
-
 @router.post("/orders/{order_id}/pay")
 def start_payment(
     order_id: str,
@@ -414,6 +402,24 @@ def dev_next_cycle(
 
 
 # ---------------- doctor: UC13.1 ----------------
+
+
+@router.post("/doctor/orders/{order_id}/skip", status_code=status.HTTP_204_NO_CONTENT)
+def doctor_skip_order(
+    order_id: str,
+    body: SkipOrderRequest,
+    doctor: CurrentUser = Depends(doctor_only),
+    svc: OrderService = Depends(get_order_service),
+) -> None:
+    """D-104: the assigned doctor skips this month's unpaid order, with a reason."""
+    o = svc.repo.order(order_id)
+    patient = svc.repo.user(str(o.get("patientId"))) if o else None
+    if o is None or patient is None or patient.get("assignedDoctorId") != doctor.uid:
+        raise _not_found()
+    try:
+        svc.skip(order_id, doctor.uid, body.reason.strip())
+    except OrderError as e:
+        raise _api(e) from e
 
 
 @router.post("/prescriptions/{rx_id}/recurring")

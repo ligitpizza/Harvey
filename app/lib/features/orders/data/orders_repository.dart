@@ -14,7 +14,6 @@ abstract interface class OrdersRepository {
     double? lng,
     String? phone,
   });
-  Future<void> skip(String id);
 
   /// D-71: the courier's fee in RM for this drop-off.
   Future<double> deliveryQuote(
@@ -126,9 +125,6 @@ class ApiOrdersRepository implements OrdersRepository {
   }) async => MedicationOrder.fromJson(
     await _api.confirmOrder(id, method, address: address, lat: lat, lng: lng, phone: phone),
   );
-
-  @override
-  Future<void> skip(String id) => _api.skipOrder(id);
 
   @override
   Future<double> deliveryQuote(

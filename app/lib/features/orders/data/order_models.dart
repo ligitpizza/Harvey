@@ -153,6 +153,7 @@ class MedicationOrder {
     this.trackingUrl,
     this.failureReason,
     this.cancelReason,
+    this.skipReason,
     this.cancelledBy,
     this.cycleDate,
     this.paidAt,
@@ -216,6 +217,9 @@ class MedicationOrder {
 
   /// D-74: why the order was cancelled, and by whom (doctor / pharmacist / admin).
   final String? cancelReason;
+
+  /// D-104: why the doctor skipped this month.
+  final String? skipReason;
   final String? cancelledBy;
 
   /// D-74: only orders the patient hasn't paid yet can be cancelled.
@@ -308,6 +312,7 @@ class MedicationOrder {
     trackingUrl: d['trackingUrl'] as String?,
     failureReason: d['failureReason'] as String?,
     cancelReason: d['cancelReason'] as String?,
+    skipReason: d['skipReason'] as String?,
     cancelledBy: d['cancelledBy'] as String?,
     cycleDate: _time(d['cycleDate']),
     paidAt: _time(d['paidAt']),

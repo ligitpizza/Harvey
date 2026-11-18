@@ -248,17 +248,31 @@ void main() {
       expect(t.widget<FilledButton>(find.byKey(const Key('confirm-order'))).onPressed, isNull);
     });
 
-    tallTest('UC13.2 A1 skip this month', (t) async {
+    tallTest('D-104 the patient has no skip button; a skipped month shows why', (t) async {
       repo.orders = {id: anOrder()};
-      await t.pumpWidget(host('/orders'));
+      await t.pumpWidget(host('/orders/$id/confirm'));
       await t.pumpAndSettle();
-      await t.tap(find.byKey(const Key('order-$id')));
+      expect(find.byKey(const Key('skip-order')), findsNothing);
+      expect(find.byKey(const Key('skip-ask-doctor')), findsOneWidget);
+      repo.orders = {
+        id: MedicationOrder.fromJson({
+          'id': id,
+          'ref': 'CF-ABC123',
+          'patientId': 'u-patient',
+          'prescriptionId': 'rx1',
+          'medicationDetails': 'Amlodipine 5mg',
+          'fulfilmentStatus': 'skipped',
+          'paymentStatus': 'pending',
+          'amount': 15,
+          'skipReason': 'Bought at another pharmacy',
+        }),
+      };
+      await t.pumpWidget(Container());
+      await t.pumpWidget(host('/orders/$id/confirm'));
       await t.pumpAndSettle();
-      await t.tap(find.byKey(const Key('skip-order')));
-      await t.pumpAndSettle();
-      await t.tap(find.byKey(const Key('confirm-skip')));
-      await t.pumpAndSettle();
-      expect(repo.calls, contains('skip:$id'));
+      expect(find.byKey(const Key('skipped-note')), findsOneWidget);
+      expect(find.textContaining('Bought at another pharmacy'), findsOneWidget);
+      expect(t.widget<FilledButton>(find.byKey(const Key('confirm-order'))).onPressed, isNull);
     });
   });
 

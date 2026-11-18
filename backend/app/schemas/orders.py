@@ -116,6 +116,12 @@ class FailDeliveryRequest(_Body):
     reason: str = Field(default="The courier could not reach the address.", max_length=300)
 
 
+class SkipOrderRequest(_Body):
+    """D-104: why the doctor skipped this month (e.g. bought at another pharmacy)."""
+
+    reason: str = Field(min_length=3, max_length=300)
+
+
 class CancelCourierRequest(_Body):
     """D-89: why the pharmacist gave up on the courier booking."""
 
