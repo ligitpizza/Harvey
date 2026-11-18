@@ -24,6 +24,10 @@ class UserRepository(Protocol):
 
     def link_code_exists(self, code: str) -> bool: ...
 
+    def passport_owner(self, passport: str) -> str | None:
+        """D-103: who already registered this passport number."""
+        ...
+
     def ic_owner(self, ic_number: str) -> str | None:
         """The uid already using this IC number (D-51), if any."""
         ...
@@ -74,6 +78,10 @@ class FirestoreUserRepository:
 
     def ic_owner(self, ic_number: str) -> str | None:
         query = self._users().where(filter=firestore.FieldFilter("icNumber", "==", ic_number))
+        return next((d.id for d in query.limit(1).stream()), None)
+
+    def passport_owner(self, passport: str) -> str | None:
+        query = self._users().where(filter=firestore.FieldFilter("passportNumber", "==", passport))
         return next((d.id for d in query.limit(1).stream()), None)
 
     def complete_onboarding(

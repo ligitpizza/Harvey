@@ -77,8 +77,9 @@ def _check_phone(value: str) -> str:
 class RegisterProfileRequest(_Strict):
     name: str = Field(min_length=2, max_length=100)
     role: Literal[UserRole.PATIENT, UserRole.FAMILY_MEMBER]
-    # D-51: required for patients (checked in the router, which knows the role).
+    # D-51/D-103: MyKad or passport, required for patients (checked in the router).
     icNumber: str | None = Field(default=None, max_length=20)
+    nationality: str | None = Field(default=None, max_length=60)  # D-103: passports
 
 
 class RegisterProfileResponse(BaseModel):
@@ -207,7 +208,8 @@ class CreatePatientRequest(_Strict):
 
     name: str = Field(min_length=2, max_length=100)
     email: str = Field(max_length=254)
-    icNumber: str = Field(min_length=12, max_length=14)
+    icNumber: str = Field(min_length=5, max_length=20)  # D-103: MyKad or passport
+    nationality: str | None = Field(default=None, max_length=60)
 
     _email = field_validator("email")(_check_email)
 

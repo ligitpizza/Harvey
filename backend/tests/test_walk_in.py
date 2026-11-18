@@ -83,6 +83,23 @@ def test_register_walk_in_opens_an_account_and_emails_the_setup_link(
     assert emails.sent[-1].to_email == "mei@x.my"
 
 
+def test_d103_walk_in_with_a_passport_and_find_by_it(
+    client: TestClient, repo: InMemoryUserRepository
+) -> None:
+    body = {"name": "Budi Santoso", "email": "budi@x.id", "icNumber": "B9876543"}
+    res = client.post("/api/v1/walk-in/patients", json=body, headers=PHARM)
+    assert res.json()["error"]["code"] == "NATIONALITY_REQUIRED"
+    res = client.post(
+        "/api/v1/walk-in/patients", json={**body, "nationality": "Indonesia"}, headers=PHARM
+    )
+    assert res.status_code == 201, res.text
+    uid = res.json()["uid"]
+    assert repo.users[uid]["passportNumber"] == "B9876543"
+    rows = client.get("/api/v1/walk-in/patients?q=b9876", headers=PHARM).json()["patients"]
+    assert [r["id"] for r in rows] == [uid]
+    assert rows[0]["idKind"] == "passport" and rows[0]["icLast4"] == "6543"
+
+
 def test_doctors_today_lists_free_slots_from_now(
     client: TestClient, appointment_repo: InMemoryAppointmentRepository
 ) -> None:

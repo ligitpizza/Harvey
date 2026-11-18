@@ -706,7 +706,10 @@ def lookup_patients(
         orders.setdefault(str(o.get("patientId")), []).append((i, o))
     out = []
     for uid, u in svc.repo.patients():
-        hay = f"{u.get('name') or ''} {u.get('email') or ''} {u.get('icNumber') or ''} {uid}"
+        hay = (
+            f"{u.get('name') or ''} {u.get('email') or ''} {u.get('icNumber') or ''} "
+            f"{u.get('passportNumber') or ''} {uid}"
+        )
         if term and term not in hay.lower():
             continue
         mine = _newest_first(orders.get(uid, []))

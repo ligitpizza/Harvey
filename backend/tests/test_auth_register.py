@@ -161,3 +161,48 @@ def test_d51_ic_parsing() -> None:
     assert parse_ic("650315 10 1235", today).date_of_birth == date(1965, 3, 15)
     assert parse_ic("650315-10-1235", today).gender == "male"
     assert mask_ic("900101-14-5677") == "900101-**-**77"
+
+
+# ---------------- D-103: MyKad or passport ----------------
+
+
+def test_d103_parse_identity_tells_mykad_from_passport() -> None:
+    from app.services.ic import IcError, identity_label, parse_identity
+
+    k = parse_identity("900101 14 5677")
+    assert (k.kind, k.value, k.gender) == ("mykad", "900101-14-5677", "male")
+    p = parse_identity("a1234 5678")
+    assert (p.kind, p.value, p.date_of_birth, p.gender) == ("passport", "A12345678", None, None)
+    for bad in ("1234", "12345678901", "AB!12345", "A1"):
+        with pytest.raises(IcError):
+            parse_identity(bad)
+    user = {"passportNumber": "A12345678", "nationality": "Indonesia"}
+    assert identity_label(user) == "Passport A1*****78 (Indonesia)"
+    assert identity_label({"icNumber": "900101-14-5677"}) == "MyKad 900101-**-**77"
+
+
+def test_d103_a_foreign_patient_registers_with_a_passport(
+    client: TestClient, repo: InMemoryUserRepository
+) -> None:
+    body = {"name": "Budi", "role": "patient", "icNumber": "A12345678"}
+    res = client.post(URL, json=body, headers=bearer("norole-token"))
+    assert res.json()["error"]["code"] == "NATIONALITY_REQUIRED"
+    res = client.post(
+        URL, json={**body, "nationality": "Indonesia"}, headers=bearer("norole-token")
+    )
+    assert res.status_code == 200, res.text
+    doc = repo.users["u-new"]
+    assert doc["passportNumber"] == "A12345678" and doc["nationality"] == "Indonesia"
+    assert "icNumber" not in doc
+
+
+def test_d103_a_passport_can_be_registered_only_once(
+    client: TestClient, repo: InMemoryUserRepository
+) -> None:
+    repo.users["someone"] = {"role": "patient", "passportNumber": "A12345678"}
+    res = client.post(
+        URL,
+        json={"name": "Budi", "role": "patient", "icNumber": "a12345678", "nationality": "ID"},
+        headers=bearer("norole-token"),
+    )
+    assert res.status_code == 409 and res.json()["error"]["code"] == "IC_IN_USE"

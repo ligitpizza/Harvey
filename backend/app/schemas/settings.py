@@ -22,7 +22,8 @@ class PersonalInfoUpdate(_Strict):
     dateOfBirth: date
     gender: Gender
     # D-51: existing patients add or correct their IC here; omitted = unchanged.
-    icNumber: str | None = Field(default=None, max_length=20)
+    icNumber: str | None = Field(default=None, max_length=20)  # D-103: or a passport
+    nationality: str | None = Field(default=None, max_length=60)
 
     # Same age rules as onboarding (UC1.4).
     _dob = field_validator("dateOfBirth")(check_dob)

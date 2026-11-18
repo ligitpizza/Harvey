@@ -30,7 +30,7 @@ from app.schemas.settings import (
     PersonalInfoUpdate,
     StaffProfileUpdate,
 )
-from app.services.ic import IcError, parse_ic
+from app.services.ic import IcError, parse_identity
 from app.services.identity import IdentityProvider, get_identity_provider
 from app.services.notifications import TokenRepository, get_token_repository
 from app.services.risk import (
@@ -95,17 +95,30 @@ def update_profile(
     old_dob = old_dob.date() if isinstance(old_dob, datetime) else None
     changed_inputs = old_dob != body.dateOfBirth or current.get("gender") != body.gender.value
     updates: dict[str, Any] = {"name": body.name, "dateOfBirth": dob, "gender": body.gender.value}
-    if body.icNumber:  # D-51
+    if body.icNumber:  # D-51 / D-103: MyKad or passport
         try:
-            ic = parse_ic(body.icNumber).value
+            ident = parse_identity(body.icNumber)
         except IcError as exc:
             raise ApiError("INVALID_IC", str(exc), status.HTTP_422_UNPROCESSABLE_CONTENT) from exc
-        owner = users.ic_owner(ic)
+        if ident.kind == "mykad":
+            owner = users.ic_owner(ident.value)
+            updates |= {"icNumber": ident.value, "passportNumber": None, "nationality": None}
+        else:
+            nation = (body.nationality or current.get("nationality") or "").strip()
+            if not nation:
+                raise ApiError(
+                    "NATIONALITY_REQUIRED",
+                    "Enter the nationality shown on the passport.",
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                )
+            owner = users.passport_owner(ident.value)
+            updates |= {"passportNumber": ident.value, "nationality": nation, "icNumber": None}
         if owner is not None and owner != user.uid:
             raise ApiError(
-                "IC_IN_USE", "This IC number is already registered.", status.HTTP_409_CONFLICT
+                "IC_IN_USE",
+                "This MyKad or passport number is already registered.",
+                status.HTTP_409_CONFLICT,
             )
-        updates["icNumber"] = ic
     repo.update_user(user.uid, updates)
     rescored = changed_inputs and _rescore(user.uid, risk_repo, model)
     audit.log(

@@ -39,7 +39,7 @@ from app.services.appointments import (
     get_appointment_repository,
 )
 from app.services.audit_view import AuditReader, get_audit_reader
-from app.services.ic import mask_ic
+from app.services.ic import mask_ic, mask_passport
 from app.services.identity import (
     EmailAlreadyRegisteredError,
     IdentityProvider,
@@ -314,9 +314,9 @@ def open_patient_account(
     """D-60 / D-80: a clinic-opened patient account (admin or walk-in). Same shape as
     self-registration (D-51 IC check, D-06 link code); the patient sets a password from
     the emailed link and completes onboarding later. Returns (uid, emailSent, link)."""
-    from app.routers.auth import _patient_ic, _unique_link_code
+    from app.routers.auth import _unique_link_code, patient_identity
 
-    ic = _patient_ic(body.icNumber, UserRole.PATIENT, repo, "")
+    ident = patient_identity(body.icNumber, body.nationality, repo, "")
     try:
         uid = identity.create_user(email=body.email, display_name=body.name)
     except EmailAlreadyRegisteredError as exc:
@@ -333,7 +333,7 @@ def open_patient_account(
             "name": body.name,
             "role": UserRole.PATIENT.value,
             "isActive": True,
-            "icNumber": ic,
+            **ident,  # D-51 / D-103
             "onboardingComplete": False,
             "assignedDoctorId": None,
             "linkCode": _unique_link_code(repo),
@@ -472,6 +472,9 @@ def user_detail(
     profile: dict[str, Any] = {}
     if target.get("icNumber"):
         profile["icNumber"] = mask_ic(str(target["icNumber"]))
+    if target.get("passportNumber"):  # D-103
+        profile["passportNumber"] = mask_passport(str(target["passportNumber"]))
+        profile["nationality"] = target.get("nationality")
     for field in ("gender", "phone", "onboardingComplete"):
         if target.get(field) is not None:
             profile[field] = target[field]

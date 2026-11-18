@@ -42,7 +42,7 @@ from app.schemas.auth import (
     SessionEventRequest,
 )
 from app.services.assignments import AssignmentRepository, get_assignment_repository
-from app.services.ic import IcError, parse_ic
+from app.services.ic import IcError, parse_identity
 from app.services.identity import IdentityProvider, get_identity_provider
 from app.services.users import UserRepository, get_user_repository, new_link_code
 
@@ -72,26 +72,57 @@ def _unique_link_code(repo: UserRepository) -> str:
     )
 
 
-def _patient_ic(raw: str | None, role: UserRole, repo: UserRepository, uid: str) -> str | None:
-    """D-51: patients must give a valid IC number that nobody else uses."""
-    if role is not UserRole.PATIENT:
-        return None
+def patient_identity(
+    raw: str | None,
+    nationality: str | None,
+    repo: UserRepository,
+    uid: str,
+) -> dict[str, Any]:
+    """D-51/D-103: a valid MyKad or passport number that nobody else uses. Returns the
+    `users` fields to store (icNumber, or passportNumber + nationality)."""
     if not raw:
         raise ApiError(
-            "IC_REQUIRED", "Enter your IC number.", status.HTTP_422_UNPROCESSABLE_CONTENT
+            "IC_REQUIRED",
+            "Enter your MyKad or passport number.",
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
         )
     try:
-        ic = parse_ic(raw).value
+        ident = parse_identity(raw)
     except IcError as exc:
         raise ApiError("INVALID_IC", str(exc), status.HTTP_422_UNPROCESSABLE_CONTENT) from exc
-    owner = repo.ic_owner(ic)
+    if ident.kind == "mykad":
+        owner = repo.ic_owner(ident.value)
+        fields: dict[str, Any] = {"icNumber": ident.value}
+    else:
+        if not (nationality or "").strip():
+            raise ApiError(
+                "NATIONALITY_REQUIRED",
+                "Enter the nationality shown on the passport.",
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+            )
+        owner = repo.passport_owner(ident.value)
+        fields = {"passportNumber": ident.value, "nationality": str(nationality).strip()}
     if owner is not None and owner != uid:
         raise ApiError(
             "IC_IN_USE",
-            "This IC number is already registered. Sign in instead, or contact support.",
+            "This MyKad or passport number is already registered. Sign in instead, or "
+            "contact support.",
             status.HTTP_409_CONFLICT,
         )
-    return ic
+    return fields
+
+
+def _patient_ic(
+    raw: str | None,
+    role: UserRole,
+    repo: UserRepository,
+    uid: str,
+    nationality: str | None = None,
+) -> dict[str, Any]:
+    """Patients only; family members give no ID."""
+    if role is not UserRole.PATIENT:
+        return {}
+    return patient_identity(raw, nationality, repo, uid)
 
 
 @router.post("/register-profile", response_model=RegisterProfileResponse)
@@ -124,7 +155,7 @@ def register_profile(
         )
     if not user.email:
         raise ApiError("EMAIL_REQUIRED", "The account has no email address.")
-    ic = _patient_ic(body.icNumber, role, repo, user.uid)
+    ident = _patient_ic(body.icNumber, role, repo, user.uid, body.nationality)
 
     doc: dict[str, Any] = {
         "email": user.email,
@@ -134,7 +165,7 @@ def register_profile(
     }
     if role is UserRole.PATIENT:
         doc |= {
-            "icNumber": ic,  # D-51
+            **ident,  # D-51 / D-103
             "onboardingComplete": False,
             "assignedDoctorId": None,
             "linkCode": _unique_link_code(repo),  # D-06

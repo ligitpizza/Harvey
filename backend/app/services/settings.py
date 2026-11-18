@@ -199,7 +199,16 @@ def build_export(
     care_plan: dict[str, Any] | None,
     now: datetime,
 ) -> dict[str, Any]:
-    keep = ("name", "email", "icNumber", "dateOfBirth", "gender", "createdAt")
+    keep = (
+        "name",
+        "email",
+        "icNumber",
+        "passportNumber",
+        "nationality",
+        "dateOfBirth",
+        "gender",
+        "createdAt",
+    )
     data: dict[str, Any] = _plain(
         {
             "exportedAt": now,
@@ -325,7 +334,10 @@ def export_pdf(data: dict[str, Any]) -> bytes:
     line("Profile", 13, "B")
     line(f"Name: {_words(profile.get('name'))}")
     line(f"Email: {_words(profile.get('email'))}")
-    line(f"IC number: {profile.get('icNumber') or '-'}")
+    if profile.get("passportNumber"):  # D-103
+        line(f"Passport: {profile.get('passportNumber')} ({profile.get('nationality') or '-'})")
+    else:
+        line(f"IC number: {profile.get('icNumber') or '-'}")
     dob = profile.get("dateOfBirth")
     line(f"Date of birth: {_when(dob, False) if dob else '-'}")
     line(f"Gender: {_words(profile.get('gender'))}")

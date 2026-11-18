@@ -166,6 +166,11 @@ class InMemoryUserRepository:
     def ic_owner(self, ic_number: str) -> str | None:
         return next((uid for uid, u in self.users.items() if u.get("icNumber") == ic_number), None)
 
+    def passport_owner(self, passport: str) -> str | None:
+        return next(
+            (uid for uid, u in self.users.items() if u.get("passportNumber") == passport), None
+        )
+
     def link_code_exists(self, code: str) -> bool:
         return code in self.taken_link_codes or any(
             u.get("linkCode") == code for u in self.users.values()

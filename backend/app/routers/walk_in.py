@@ -60,14 +60,15 @@ def walk_in_slots(day: date, taken: set[datetime], now: datetime) -> list[dateti
 
 
 def _patient_row(uid: str, u: dict[str, Any], doctors: dict[str, str]) -> dict[str, Any]:
-    ic = str(u.get("icNumber") or "")
+    ic = str(u.get("icNumber") or u.get("passportNumber") or "")
     doctor = str(u.get("assignedDoctorId") or "")
     return {
         "id": uid,
         "name": u.get("name"),
         "email": u.get("email"),
-        # Only the last 4 digits: enough to tell people apart at the counter.
+        # Only the last 4 characters: enough to tell people apart at the counter.
         "icLast4": ic[-4:] if ic else None,
+        "idKind": "passport" if u.get("passportNumber") else "mykad",  # D-103
         "doctorId": doctor or None,
         "doctorName": doctors.get(doctor),
         "isActive": u.get("isActive") is not False,
@@ -95,7 +96,13 @@ def find_patients(
         name = str(u.get("name") or "").lower()
         email = str(u.get("email") or "").lower()
         ic = str(u.get("icNumber") or "")
-        if needle in name or needle in email or (len(digits) >= 4 and digits in ic):
+        passport = str(u.get("passportNumber") or "").lower()
+        if (
+            needle in name
+            or needle in email
+            or (len(digits) >= 4 and digits in ic)
+            or (len(needle) >= 4 and needle.replace(" ", "") in passport)  # D-103
+        ):
             out.append(_patient_row(uid, u, doctors))
     out.sort(key=lambda r: str(r["name"] or "").lower())
     return {"patients": out[:20]}
