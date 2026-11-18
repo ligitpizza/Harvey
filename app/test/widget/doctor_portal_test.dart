@@ -449,14 +449,20 @@ void main() {
       expect(find.text('Female'), findsOneWidget);
       expect(find.text('185/112'), findsWidgets);
       expect(find.text('Critical Risk'), findsOneWidget);
-      expect(find.text('31%'), findsOneWidget);
-      expect(find.text('<1%'), findsNWidgets(4));
+      expect(find.textContaining('31%'), findsOneWidget);
+      expect(find.textContaining('<1%'), findsNWidgets(4));
       expect(find.text('Clinical notes'), findsOneWidget);
-      // D-40 contributing factors (Fig 4.3.12.4).
-      expect(find.text('Raised by: Systolic BP, Age, Smoking'), findsOneWidget);
-      expect(find.byKey(const Key('factors-cad')), findsNothing);
+      // D-40 contributing factors (Fig 4.3.12.4) as chips; highest risk listed first.
+      final factors = find.byKey(const Key('factors-stroke'));
+      for (final f in ['Systolic BP', 'Age', 'Smoking']) {
+        expect(find.descendant(of: factors, matching: find.text(f)), findsOneWidget);
+      }
+      expect(
+        t.getTopLeft(find.byKey(const Key('risk-row-stroke'))).dy,
+        lessThan(t.getTopLeft(find.byKey(const Key('risk-row-cad'))).dy),
+      );
       // A Low complication is not explained even if old data carries factors.
-      expect(find.textContaining('not proven causes'), findsOneWidget);
+      expect(find.byKey(const Key('factors-cad')), findsNothing);
     });
 
     tallTest('D-100 the doctor writes a report into the patient records', (t) async {

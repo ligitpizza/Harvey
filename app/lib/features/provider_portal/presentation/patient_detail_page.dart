@@ -276,54 +276,7 @@ class _VitalsAndRisk extends ConsumerWidget {
               value: risk,
               isEmpty: (s) => s == null,
               emptyText: 'No risk score yet (needs three readings).',
-              builder: (s) => Column(
-                children: [
-                  for (final c in Complication.values)
-                    if (s!.scores[c] != null)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(child: Text(complicationNames[c]!)),
-                                Text(riskPercent(s.scores[c]!.value)),
-                                const SizedBox(width: 8),
-                                CircleAvatar(
-                                  radius: 5,
-                                  backgroundColor: riskColor(s.scores[c]!.level),
-                                ),
-                              ],
-                            ),
-                            // D-40 contributing factors (Fig 4.3.12.4).
-                            // Only Moderate and above are explained (D-40, Ping 2026-10-14).
-                            if (s.scores[c]!.factors.isNotEmpty &&
-                                s.scores[c]!.level != RiskLevel.low)
-                              Text(
-                                'Raised by: ${s.scores[c]!.factors.map(factorLabel).join(', ')}',
-                                key: Key('factors-${c.value}'),
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                          ],
-                        ),
-                      ),
-                  const SizedBox(height: 4),
-                  if (s!.scores.values.any((x) => x.factors.isNotEmpty))
-                    Text(
-                      '"Raised by" lists the inputs that most increased each estimate for this '
-                      'patient (model associations, not proven causes).',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Scored ${formatDate(s.generatedAt)} · ${modelLabel(s.modelUsed)}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                ],
-              ),
+              builder: (s) => _RiskList(score: s!),
             ),
           ],
         ),
@@ -618,4 +571,112 @@ class AppointmentHistoryList extends StatelessWidget {
         ),
     ],
   );
+}
+
+/// Risk assessment, highest first: a coloured level pill and bar per condition. What
+/// raised a Moderate-or-higher estimate (D-40) shows as chips under that condition; the
+/// explanation sits behind the info icon instead of a paragraph.
+class _RiskList extends StatelessWidget {
+  const _RiskList({required this.score});
+
+  final RiskScore score;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final rows = [
+      for (final c in Complication.values)
+        if (score.scores[c] case final v?) (c, v),
+    ]..sort((a, b) => b.$2.value.compareTo(a.$2.value));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 8),
+        for (final (c, v) in rows)
+          Padding(
+            key: Key('risk-row-${c.value}'),
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        complicationNames[c]!,
+                        style: v.level == RiskLevel.low
+                            ? theme.textTheme.bodyMedium
+                            : theme.textTheme.titleSmall,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: riskColor(v.level).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${riskLabel(v.level)} · ${riskPercent(v.value)}',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: riskColor(v.level),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: v.value.clamp(0.0, 1.0),
+                    minHeight: 5,
+                    color: riskColor(v.level),
+                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                  ),
+                ),
+                // D-40 contributing factors, Moderate and above only (Ping 2026-10-14).
+                if (v.factors.isNotEmpty && v.level != RiskLevel.low)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Wrap(
+                      key: Key('factors-${c.value}'),
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        for (final f in v.factors.take(3))
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: theme.colorScheme.outlineVariant),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(factorLabel(f), style: theme.textTheme.labelSmall),
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Scored ${formatDate(score.generatedAt)} · ${modelLabel(score.modelUsed)}',
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+            const Tooltip(
+              message:
+                  'Chips list the inputs that most raised each estimate for this patient '
+                  '(model associations, not proven causes).',
+              child: Icon(Icons.info_outline, size: 18),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
