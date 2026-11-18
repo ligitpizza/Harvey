@@ -50,9 +50,12 @@ String _lateBy(DoseLog l) {
 }
 
 class DoseHistory extends ConsumerWidget {
-  const DoseHistory({super.key, required this.medication});
+  const DoseHistory({super.key, required this.medication, this.showNotable = true});
 
   final Medication medication;
+
+  /// The missed / late list under the dots (the card folds it away).
+  final bool showNotable;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -60,7 +63,7 @@ class DoseHistory extends ConsumerWidget {
     final small = Theme.of(context).textTheme.bodySmall;
     return Padding(
       key: Key('history-${medication.id}'),
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: EdgeInsets.zero,
       child: logs.when(
         loading: () => const LinearProgressIndicator(),
         error: (_, _) => Text('Dose history unavailable.', style: small),
@@ -98,12 +101,13 @@ class DoseHistory extends ConsumerWidget {
                 runSpacing: 3,
                 children: [for (final l in oldestFirst) _Dot(log: l)],
               ),
-              for (final l in notable)
-                Text(
-                  '${_when(l.scheduledTime)}: '
-                  '${l.status == 'missed' ? 'missed' : 'taken ${_lateBy(l)}'}',
-                  style: small,
-                ),
+              if (showNotable)
+                for (final l in notable)
+                  Text(
+                    '${_when(l.scheduledTime)}: '
+                    '${l.status == 'missed' ? 'missed' : 'taken ${_lateBy(l)}'}',
+                    style: small,
+                  ),
             ],
           );
         },
@@ -132,6 +136,80 @@ class _Dot extends StatelessWidget {
         height: 10,
         decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       ),
+    );
+  }
+}
+
+/// The dot colours, explained once under the list.
+class DoseLegend extends StatelessWidget {
+  const DoseLegend({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget item(Color c, String t) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(t, style: Theme.of(context).textTheme.bodySmall),
+      ],
+    );
+    return Wrap(
+      spacing: 12,
+      children: [
+        item(Colors.green.shade600, 'Taken'),
+        item(Colors.amber.shade700, 'Taken late'),
+        item(Theme.of(context).colorScheme.error, 'Missed'),
+      ],
+    );
+  }
+}
+
+/// Missed or late doses only, newest first, for the card's expanded part.
+class DoseNotableList extends ConsumerWidget {
+  const DoseNotableList({super.key, required this.medication});
+
+  final Medication medication;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final all = ref.watch(patientDoseLogsProvider(medication.id)).value ?? const <DoseLog>[];
+    final small = Theme.of(context).textTheme.bodySmall;
+    final sorted = [...all]..sort((a, b) => b.scheduledTime.compareTo(a.scheduledTime));
+    final notable = [
+      for (final l in sorted)
+        if (l.status == 'missed' || takenLate(l.scheduledTime, l.confirmedAt)) l,
+    ];
+    if (notable.isEmpty) return Text('No missed or late doses in 14 days.', style: small);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final l in notable.take(10))
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 1),
+            child: Row(
+              children: [
+                Icon(
+                  l.status == 'missed' ? Icons.close : Icons.schedule,
+                  size: 14,
+                  color: l.status == 'missed'
+                      ? Theme.of(context).colorScheme.error
+                      : Colors.amber.shade700,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '${_when(l.scheduledTime)}: '
+                  '${l.status == 'missed' ? 'missed' : 'taken ${_lateBy(l)}'}',
+                  style: small,
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

@@ -366,18 +366,16 @@ class _HistoryTabs extends ConsumerWidget {
                           isEmpty: (m) => m.isEmpty,
                           emptyText: 'The patient has not added any medications.',
                           builder: (m) => Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              for (final x in m) ...[
-                                ListTile(
-                                  dense: true,
-                                  title: Text('${x.name} ${x.dosage}'),
-                                  subtitle: Text(describeSchedule(x.schedule)),
-                                  trailing: x.adherenceRate == null
-                                      ? null
-                                      : Text('Adherence ${x.adherenceRate!.round()}%'),
-                                ),
-                                DoseHistory(medication: x),
-                              ],
+                              // Lowest adherence first, so problems are at the top.
+                              for (final x
+                                  in [...m]..sort(
+                                    (a, b) =>
+                                        (a.adherenceRate ?? 101).compareTo(b.adherenceRate ?? 101),
+                                  ))
+                                _MedicineCard(medication: x),
+                              const Padding(padding: EdgeInsets.only(top: 4), child: DoseLegend()),
                             ],
                           ),
                         ),
@@ -693,6 +691,95 @@ class _RiskList extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// One medicine on the doctor's Medications tab: name, dose and times, who added it,
+/// adherence as a coloured badge and bar, the 14-day dots; missed/late doses fold away.
+class _MedicineCard extends StatelessWidget {
+  const _MedicineCard({required this.medication});
+
+  final Medication medication;
+
+  static Color _rateColor(double r) => r >= 80
+      ? Colors.green.shade600
+      : r >= 50
+      ? Colors.amber.shade800
+      : Colors.red.shade600;
+
+  @override
+  Widget build(BuildContext context) {
+    final m = medication;
+    final theme = Theme.of(context);
+    final rate = m.adherenceRate;
+    final times = describeSchedule(m.schedule);
+    return Card(
+      key: Key('doctor-med-${m.id}'),
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        shape: const Border(),
+        collapsedShape: const Border(),
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        expandedCrossAxisAlignment: CrossAxisAlignment.start,
+        leading: CircleAvatar(
+          radius: 18,
+          backgroundColor: theme.colorScheme.primaryContainer,
+          child: Icon(Icons.medication_outlined, color: theme.colorScheme.primary, size: 20),
+        ),
+        title: Row(
+          children: [
+            Expanded(child: Text('${m.name} ${m.dosage}', style: theme.textTheme.titleSmall)),
+            if (rate != null)
+              Container(
+                key: Key('doctor-med-rate-${m.id}'),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _rateColor(rate).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${rate.round()}% taken',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: _rateColor(rate),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 2),
+            Text(
+              '$times · ${m.fromDoctor ? 'prescribed' : 'added by the patient'}',
+              style: theme.textTheme.bodySmall,
+            ),
+            if (rate != null) ...[
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(3),
+                child: LinearProgressIndicator(
+                  value: (rate / 100).clamp(0.0, 1.0),
+                  minHeight: 5,
+                  color: _rateColor(rate),
+                  backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                ),
+              ),
+            ],
+            const SizedBox(height: 6),
+            DoseHistory(medication: m, showNotable: false),
+          ],
+        ),
+        children: [
+          Text('Missed and late doses', style: theme.textTheme.labelLarge),
+          const SizedBox(height: 4),
+          DoseNotableList(medication: m),
+        ],
+      ),
     );
   }
 }

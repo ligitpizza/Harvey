@@ -591,6 +591,10 @@ void main() {
       });
       await openMeds(t);
       expect(find.text('Last 14 days: 2 taken (1 late) · 1 missed'), findsOneWidget);
+      // Missed and late doses fold away in the medicine's card.
+      expect(find.textContaining('taken 3 h late'), findsNothing);
+      await t.tap(find.byKey(const Key('doctor-med-m1')));
+      await t.pumpAndSettle();
       expect(find.textContaining('taken 3 h late'), findsOneWidget);
       expect(find.textContaining(': missed'), findsOneWidget);
       expect(find.textContaining('As needed: taken 4× in the last 7 days'), findsOneWidget);
