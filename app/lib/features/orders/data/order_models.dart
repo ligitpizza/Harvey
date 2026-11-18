@@ -154,6 +154,8 @@ class MedicationOrder {
     this.failureReason,
     this.cancelReason,
     this.skipReason,
+    this.cancelledAt,
+    this.skippedAt,
     this.cancelledBy,
     this.cycleDate,
     this.paidAt,
@@ -229,6 +231,10 @@ class MedicationOrder {
           status == Fulfilment.skipped ||
           status == Fulfilment.awaitingPayment);
   final DateTime? cycleDate;
+
+  /// D-112: when it was cancelled / skipped (shown on the order page).
+  final DateTime? cancelledAt;
+  final DateTime? skippedAt;
   final DateTime? paidAt;
   final DateTime? readyAt;
 
@@ -315,6 +321,8 @@ class MedicationOrder {
     skipReason: d['skipReason'] as String?,
     cancelledBy: d['cancelledBy'] as String?,
     cycleDate: _time(d['cycleDate']),
+    cancelledAt: _time(d['cancelledAt']),
+    skippedAt: _time(d['skippedAt']),
     paidAt: _time(d['paidAt']),
     readyAt: _time(d['readyAt']),
     estimatedReadyAt: _time(d['estimatedReadyAt']),

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../shared/services/api/api_client.dart';
 import '../../appointments/domain/appointment_text.dart';
@@ -126,6 +127,11 @@ class _OrderTrackPageState extends ConsumerState<OrderTrackPage> {
         Icons.cancel_outlined,
         'Order cancelled',
         o.cancelReason ?? 'This order was cancelled.',
+      ),
+      Fulfilment.skipped => (
+        Icons.event_busy_outlined,
+        'Skipped this month',
+        o.skipReason ?? 'Your doctor skipped this month.',
       ),
       Fulfilment.failed => (
         Icons.report_problem_outlined,
@@ -273,48 +279,42 @@ class _OrderTrackPageState extends ConsumerState<OrderTrackPage> {
             icon: const Icon(Icons.open_in_new),
             label: Text('Open ${o.courierBrand} tracking page'),
           ),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (delivery && o.etaAt != null && o.status == Fulfilment.readyForDelivery) ...[
-                  Text('ESTIMATED ARRIVAL', style: theme.textTheme.labelSmall),
-                  Text(
-                    timeLabel(o.etaAt!),
-                    key: const Key('eta'),
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      color: theme.colorScheme.primary,
+        // D-112: a cancelled or skipped order says who, when and why; no timeline.
+        if (o.status == Fulfilment.cancelled || o.status == Fulfilment.skipped)
+          _StoppedCard(order: o)
+        else
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (delivery && o.etaAt != null && o.status == Fulfilment.readyForDelivery) ...[
+                    Text('ESTIMATED ARRIVAL', style: theme.textTheme.labelSmall),
+                    Text(
+                      timeLabel(o.etaAt!),
+                      key: const Key('eta'),
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        color: theme.colorScheme.primary,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
+                    const SizedBox(height: 12),
+                  ],
+                  OrderTimeline(steps: steps, current: current),
                 ],
-                OrderTimeline(steps: steps, current: current),
-              ],
+              ),
             ),
           ),
-        ),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.medication_outlined),
-            title: const Text('Prescription order'),
-            subtitle: Text(
-              '${o.items.isEmpty ? o.medicationDetails : o.items.map((i) => '${i.label} ×${i.quantity}').join('\n')}'
-              '\nOrder ${o.ref}'
-              '${o.total == null ? '' : ' · ${rm(o.total!)}${o.isPaid ? ' paid' : ''}'}',
-            ),
-            isThreeLine: true,
-          ),
-        ),
+        // D-112: how it reaches the patient, then what was ordered and paid.
+        if (o.status != Fulfilment.cancelled && o.status != Fulfilment.skipped && o.method != null)
+          delivery ? _DeliveryCard(order: o) : _CollectionCard(order: o),
+        _ItemsCard(order: o),
         if (o.isPaid)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              'Your receipt is saved in Health records.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall,
-            ),
+          TextButton.icon(
+            key: const Key('open-receipt'),
+            onPressed: () => context.push('/records'),
+            icon: const Icon(Icons.receipt_long_outlined),
+            label: const Text('Receipt saved in Health records'),
           ),
       ],
     );
@@ -351,6 +351,198 @@ class _CollectionSlip extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+Widget _row(BuildContext context, String label, String value, {Key? key, bool bold = false}) {
+  final style = bold ? Theme.of(context).textTheme.titleSmall : null;
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: Text(label, style: style)),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(value, key: key, textAlign: TextAlign.right, style: style),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _section(
+  BuildContext context,
+  String title,
+  IconData icon,
+  List<Widget> children, {
+  Key? key,
+}) {
+  final theme = Theme.of(context);
+  return Card(
+    key: key,
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 20, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(title, style: theme.textTheme.titleMedium),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...children,
+        ],
+      ),
+    ),
+  );
+}
+
+String _at(DateTime t) => '${dateLabel(t)}, ${timeLabel(t)}';
+
+/// D-112: medicines with quantity and price, delivery fee, total and payment.
+class _ItemsCard extends StatelessWidget {
+  const _ItemsCard({required this.order});
+  final MedicationOrder order;
+
+  @override
+  Widget build(BuildContext context) {
+    final o = order;
+    return _section(
+      context,
+      'Order details',
+      Icons.medication_outlined,
+      key: const Key('order-items'),
+      [
+        if (o.items.isEmpty)
+          _row(context, o.medicationDetails, o.amount == null ? '—' : rm(o.amount!))
+        else
+          for (final i in o.items) _row(context, '${i.label} × ${i.quantity}', rm(i.lineTotal)),
+        const Divider(),
+        if (o.amount != null) _row(context, 'Medicines', rm(o.amount!)),
+        if (o.isDelivery && o.deliveryFee > 0)
+          _row(context, 'Delivery (${o.courierBrand})', rm(o.deliveryFee)),
+        if (o.total != null)
+          _row(context, 'Total', rm(o.total!), bold: true, key: const Key('order-detail-total')),
+        const SizedBox(height: 4),
+        _row(context, 'Order', o.ref),
+        _row(context, 'Month', cycleLabel(o.cycleDate)),
+        _row(
+          context,
+          'Payment',
+          o.isPaid
+              ? 'Paid${o.paidAt == null ? '' : ' ${_at(o.paidAt!)}'}'
+              : o.paymentFailed
+              ? 'Failed'
+              : 'Not paid',
+          key: const Key('order-detail-payment'),
+        ),
+      ],
+    );
+  }
+}
+
+/// D-112: where the courier is going and who is bringing it.
+class _DeliveryCard extends StatelessWidget {
+  const _DeliveryCard({required this.order});
+  final MedicationOrder order;
+
+  @override
+  Widget build(BuildContext context) {
+    final o = order;
+    return _section(
+      context,
+      'Home delivery',
+      Icons.local_shipping_outlined,
+      key: const Key('order-delivery'),
+      [
+        if (o.deliveryAddress != null) _row(context, 'Address', o.deliveryAddress!),
+        if (o.deliveryPhone != null) _row(context, 'Contact number', o.deliveryPhone!),
+        _row(context, 'Courier', o.courierBrand),
+        if (o.courierRef != null) _row(context, 'Booking', o.courierRef!),
+        if (o.etaAt != null && o.status == Fulfilment.readyForDelivery)
+          _row(context, 'Estimated arrival', _at(o.etaAt!)),
+        if (o.status == Fulfilment.delivered || o.receivedAt != null)
+          _row(
+            context,
+            'Received by you',
+            o.receivedAt == null ? 'Not confirmed yet' : _at(o.receivedAt!),
+          ),
+      ],
+    );
+  }
+}
+
+/// D-112: where and when to pick it up.
+class _CollectionCard extends StatelessWidget {
+  const _CollectionCard({required this.order});
+  final MedicationOrder order;
+
+  @override
+  Widget build(BuildContext context) {
+    final o = order;
+    return _section(
+      context,
+      'Self-collection',
+      Icons.storefront_outlined,
+      key: const Key('order-collection'),
+      [
+        _row(context, 'Pharmacy', pharmacyName),
+        if (o.readyAt != null) _row(context, 'Ready since', _at(o.readyAt!)),
+        _row(context, 'Status', switch (o.status) {
+          Fulfilment.collected => 'Collected',
+          Fulfilment.readyForCollection => 'Waiting for you at the counter',
+          _ => 'Being prepared',
+        }),
+        if (o.status == Fulfilment.readyForCollection)
+          Text(
+            'Bring your MyKad or passport and show the collection slip above.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+      ],
+    );
+  }
+}
+
+/// D-112: cancelled (D-74) or skipped by the doctor (D-104).
+class _StoppedCard extends StatelessWidget {
+  const _StoppedCard({required this.order});
+  final MedicationOrder order;
+
+  @override
+  Widget build(BuildContext context) {
+    final o = order;
+    final skipped = o.status == Fulfilment.skipped;
+    final when = skipped ? o.skippedAt : o.cancelledAt;
+    final by = skipped
+        ? 'Your doctor'
+        : switch (o.cancelledBy) {
+            'doctor' => 'Your doctor',
+            'pharmacist' => 'The pharmacy',
+            'patient' => 'You',
+            _ => 'The clinic',
+          };
+    return _section(
+      context,
+      skipped ? 'Skipped' : 'Cancelled',
+      skipped ? Icons.event_busy_outlined : Icons.cancel_outlined,
+      key: const Key('order-stopped'),
+      [
+        _row(context, 'By', by),
+        if (when != null) _row(context, 'When', _at(when)),
+        _row(context, 'Reason', (skipped ? o.skipReason : o.cancelReason) ?? 'No reason given'),
+        const SizedBox(height: 4),
+        Text(
+          skipped
+              ? 'Your next monthly order comes as usual.'
+              : 'Nothing was charged for this order.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
     );
   }
 }

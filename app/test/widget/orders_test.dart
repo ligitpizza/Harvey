@@ -276,6 +276,75 @@ void main() {
     });
   });
 
+  group('D-112 order detail pages', () {
+    tallTest('delivery: address, courier and an itemised total', (t) async {
+      repo.orders = {
+        id: MedicationOrder.fromJson({
+          'id': id,
+          'ref': 'CF-ABC123',
+          'patientId': 'u-patient',
+          'prescriptionId': 'rx1',
+          'medicationDetails': 'Amlodipine 5mg',
+          'fulfilmentStatus': 'ready_for_delivery',
+          'paymentStatus': 'paid',
+          'method': 'home_delivery',
+          'amount': 15,
+          'deliveryFee': 13.2,
+          'total': 28.2,
+          'deliveryAddress': '12 Jalan Ampang',
+          'deliveryPhone': '012-345 6789',
+          'courierRef': 'LL-1',
+          'paidAt': '2026-10-16T05:15:00Z',
+        }),
+      };
+      await t.pumpWidget(host('/orders/$id/track'));
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(find.byKey(const Key('order-items')), 200);
+      expect(find.byKey(const Key('order-delivery')), findsOneWidget);
+      expect(find.text('12 Jalan Ampang'), findsOneWidget);
+      expect(find.text('LL-1'), findsOneWidget);
+      expect(t.widget<Text>(find.byKey(const Key('order-detail-total'))).data, 'RM28.20');
+      expect(
+        t.widget<Text>(find.byKey(const Key('order-detail-payment'))).data,
+        startsWith('Paid'),
+      );
+    });
+
+    tallTest('self-collection shows the pharmacy and status', (t) async {
+      repo.orders = {
+        id: anOrder(status: Fulfilment.collected, paymentStatus: 'paid', method: selfCollection),
+      };
+      await t.pumpWidget(host('/orders/$id/track'));
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(find.byKey(const Key('order-collection')), 200);
+      expect(find.text('Collected'), findsWidgets);
+    });
+
+    tallTest('cancelled: who, why and no timeline', (t) async {
+      repo.orders = {
+        id: MedicationOrder.fromJson({
+          'id': id,
+          'ref': 'CF-ABC123',
+          'patientId': 'u-patient',
+          'prescriptionId': 'rx1',
+          'medicationDetails': 'Amlodipine 5mg',
+          'fulfilmentStatus': 'cancelled',
+          'paymentStatus': 'pending',
+          'amount': 15,
+          'cancelReason': 'Prescription stopped by your doctor.',
+          'cancelledBy': 'doctor',
+          'cancelledAt': '2026-10-17T02:00:00Z',
+        }),
+      };
+      await t.pumpWidget(host('/orders/$id/track'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('order-stopped')), findsOneWidget);
+      expect(find.text('Your doctor'), findsOneWidget);
+      expect(find.text('Prescription stopped by your doctor.'), findsWidgets);
+      expect(find.byType(OrderTimeline), findsNothing);
+    });
+  });
+
   group('Fig 4.3.10.2 payment (UC13.3; NFR-2.3)', () {
     tallTest('simulated card pays and opens tracking', (t) async {
       repo.orders = {id: anOrder(status: Fulfilment.awaitingPayment, method: selfCollection)};
