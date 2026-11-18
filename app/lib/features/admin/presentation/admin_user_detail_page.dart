@@ -166,7 +166,12 @@ class _Body extends ConsumerWidget {
                   'Joined': user.createdAt == null
                       ? '-'
                       : formatDate(user.createdAt!).split(',').first,
-                  if (profile['icNumber'] != null) 'IC number': '${profile['icNumber']}',
+                  if (profile['icNumber'] != null) 'MyKad': '${profile['icNumber']}',
+                  // D-103
+                  if (profile['passportNumber'] != null)
+                    'Passport':
+                        '${profile['passportNumber']}'
+                        '${profile['nationality'] == null ? '' : ' (${profile['nationality']})'}',
                   if (profile['dateOfBirth'] != null) 'Date of birth': '${profile['dateOfBirth']}',
                   if (profile['gender'] != null) 'Gender': '${profile['gender']}',
                   if (profile['phone'] != null) 'Phone': '${profile['phone']}',

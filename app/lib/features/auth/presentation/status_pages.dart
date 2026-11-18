@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/identity_fields.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'widgets/role_toggle.dart';
@@ -100,6 +101,7 @@ class _FinishRegistrationPageState extends ConsumerState<FinishRegistrationPage>
   bool _working = false;
   String? _error;
   final _ic = TextEditingController(); // D-51: patients must give it to finish
+  final _nationality = TextEditingController(); // D-103
 
   /// D-63: the Harvey app may finish a patient or a family-member account.
   late UserRole _role = ref.read(clientAppProvider) == ClientApp.family
@@ -109,6 +111,7 @@ class _FinishRegistrationPageState extends ConsumerState<FinishRegistrationPage>
   @override
   void dispose() {
     _ic.dispose();
+    _nationality.dispose();
     super.dispose();
   }
 
@@ -119,7 +122,13 @@ class _FinishRegistrationPageState extends ConsumerState<FinishRegistrationPage>
     });
     final user = FirebaseAuth.instance.currentUser;
     final patient = _role == UserRole.patient;
-    final icError = patient ? validateIc(_ic.text) : null;
+    var icError = patient ? validateIdentity(_ic.text) : null;
+    if (icError == null &&
+        patient &&
+        looksLikePassport(_ic.text) &&
+        _nationality.text.trim().isEmpty) {
+      icError = 'Enter the nationality shown on the passport.';
+    }
     if (icError != null) {
       setState(() {
         _working = false;
@@ -133,7 +142,8 @@ class _FinishRegistrationPageState extends ConsumerState<FinishRegistrationPage>
           .registerProfile(
             name: (user?.displayName?.trim().length ?? 0) >= 2 ? user!.displayName! : 'Harvey user',
             role: _role.value,
-            icNumber: patient ? parseIc(_ic.text).value : null,
+            icNumber: patient ? parseIdentity(_ic.text).value : null,
+            nationality: patient && looksLikePassport(_ic.text) ? _nationality.text.trim() : null,
           );
       await user?.getIdToken(true);
     } on ApiException catch (e) {
@@ -175,12 +185,11 @@ class _FinishRegistrationPageState extends ConsumerState<FinishRegistrationPage>
           if (_role == UserRole.patient) ...[
             SizedBox(
               width: 280,
-              child: TextField(
-                key: const Key('finish-ic'),
-                controller: _ic,
-                keyboardType: TextInputType.number,
-                inputFormatters: [IcInputFormatter()],
-                decoration: const InputDecoration(labelText: 'IC number (MyKad)'),
+              child: IdentityFields(
+                id: _ic,
+                nationality: _nationality,
+                idKey: const Key('finish-ic'),
+                nationalityKey: const Key('finish-nationality'),
               ),
             ),
             const SizedBox(height: 12),

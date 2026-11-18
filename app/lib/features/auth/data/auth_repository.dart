@@ -44,6 +44,7 @@ abstract interface class AuthRepository {
     required String password,
     required UserRole role,
     String? icNumber,
+    String? nationality,
   });
 
   /// UC1.2 A1 (D-65): Firebase's reset link (staff Settings still uses this).
@@ -166,6 +167,7 @@ class FirebaseAuthRepository implements AuthRepository {
     required String password,
     required UserRole role,
     String? icNumber,
+    String? nationality,
   }) async {
     UserCredential? created;
     try {
@@ -175,7 +177,12 @@ class FirebaseAuthRepository implements AuthRepository {
       );
       created = cred;
       await cred.user!.updateDisplayName(name.trim());
-      await _api.registerProfile(name: name.trim(), role: role.value, icNumber: icNumber);
+      await _api.registerProfile(
+        name: name.trim(),
+        role: role.value,
+        icNumber: icNumber,
+        nationality: nationality,
+      );
       // Pick up the new role claim set by the server.
       await cred.user!.getIdToken(true);
     } on FirebaseAuthException catch (e) {

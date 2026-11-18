@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/identity_fields.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -31,11 +32,12 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   final _password = TextEditingController();
   final _confirm = TextEditingController();
   final _ic = TextEditingController();
+  final _nationality = TextEditingController(); // D-103
 
-  /// "Born 1 Jan 1990 · Male" once the IC is complete and valid.
-  String? _icPreview() {
+  /// "Born 1 Jan 1990 · Male" once a MyKad is complete and valid.
+  String? _icPreview(IdInfo info) {
     try {
-      final ic = parseIc(_ic.text);
+      final ic = parseIc(info.value);
       const months = [
         'Jan',
         'Feb',
@@ -87,7 +89,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
             email: _email.text,
             password: _password.text,
             role: role,
-            icNumber: role == UserRole.patient ? parseIc(_ic.text).value : null,
+            icNumber: role == UserRole.patient ? parseIdentity(_ic.text).value : null,
+            nationality: role == UserRole.patient && parseIdentity(_ic.text).isPassport
+                ? _nationality.text.trim()
+                : null,
           );
     } on AuthFailure catch (f) {
       if (mounted) setState(() => _error = f.message);
@@ -151,21 +156,14 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                       ),
                       const SizedBox(height: 12),
                       if (!isFamily) ...[
-                        // D-51: MyKad number; date of birth and gender come from it later.
-                        TextFormField(
-                          key: const Key('register-ic'),
-                          controller: _ic,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [IcInputFormatter()],
-                          decoration: InputDecoration(
-                            labelText: 'IC number (MyKad)',
-                            hintText: '900101-14-5678',
-                            helperText: _icPreview(),
-                          ),
-                          onChanged: (_) => setState(() {}),
-                          // Clear the error as soon as the number is corrected.
-                          autovalidateMode: AutovalidateMode.onUserInteraction,
-                          validator: validateIc,
+                        // D-51/D-103: MyKad (birthday and gender come from it) or a
+                        // passport with nationality.
+                        IdentityFields(
+                          id: _ic,
+                          nationality: _nationality,
+                          idKey: const Key('register-ic'),
+                          nationalityKey: const Key('register-nationality'),
+                          preview: _icPreview,
                         ),
                         const SizedBox(height: 12),
                       ],

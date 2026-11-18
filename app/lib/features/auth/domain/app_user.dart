@@ -39,6 +39,8 @@ class AppUser {
     this.gender,
     this.notificationPrefs = const NotificationPrefs(),
     this.icNumber,
+    this.passportNumber,
+    this.nationality,
     this.address,
     this.addressLat,
     this.addressLng,
@@ -68,6 +70,10 @@ class AppUser {
   /// Patients only (D-51), "YYMMDD-PB-####"; null for accounts made before it existed.
   final String? icNumber;
 
+  /// D-103: a foreign patient's passport (instead of [icNumber]).
+  final String? passportNumber;
+  final String? nationality;
+
   /// Patients only (D-69): delivery address and its map point.
   final String? address;
   final double? addressLat;
@@ -88,6 +94,8 @@ class AppUser {
     gender: data['gender'] is String ? Gender.fromValue(data['gender'] as String) : null,
     notificationPrefs: NotificationPrefs.fromMap(data['notificationPrefs']),
     icNumber: data['icNumber'] as String?,
+    passportNumber: data['passportNumber'] as String?,
+    nationality: data['nationality'] as String?,
     address: data['address'] as String?,
     addressLat: (data['addressLat'] as num?)?.toDouble(),
     addressLng: (data['addressLng'] as num?)?.toDouble(),

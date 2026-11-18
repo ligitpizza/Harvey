@@ -153,7 +153,7 @@ void main() {
     await t.pumpAndSettle();
     await t.tap(find.byKey(const Key('patient-save')));
     await t.pumpAndSettle();
-    expect(find.text('Enter a 12-digit IC number.'), findsOneWidget);
+    expect(find.text('Enter your MyKad or passport number.'), findsOneWidget);
     await t.enterText(find.byKey(const Key('patient-name')), 'Mei Ling');
     await t.enterText(find.byKey(const Key('patient-email')), 'mei@example.com');
     await t.enterText(find.byKey(const Key('patient-ic')), '900101-14-5677');

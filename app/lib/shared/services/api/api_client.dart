@@ -89,7 +89,13 @@ class ApiClient {
     required String name,
     required String role,
     String? icNumber,
-  }) => _post('/auth/register-profile', {'name': name, 'role': role, 'icNumber': ?icNumber});
+    String? nationality,
+  }) => _post('/auth/register-profile', {
+    'name': name,
+    'role': role,
+    'icNumber': ?icNumber,
+    'nationality': ?nationality, // D-103
+  });
 
   /// UC1.4: submit the onboarding health profile (D-25 shape).
   Future<Map<String, dynamic>> completeOnboarding(Map<String, dynamic> body) =>
@@ -413,7 +419,13 @@ class ApiClient {
     required String name,
     required String email,
     required String icNumber,
-  }) => _post('/admin/patients', {'name': name, 'email': email, 'icNumber': icNumber});
+    String? nationality,
+  }) => _post('/admin/patients', {
+    'name': name,
+    'email': email,
+    'icNumber': icNumber,
+    'nationality': ?nationality, // D-103
+  });
 
   /// D-61: one user with role-specific details.
   Future<Map<String, dynamic>> adminUserDetail(String uid) =>
@@ -729,8 +741,17 @@ class ApiClient {
   Future<Map<String, dynamic>> findWalkInPatients(String q) =>
       _getQuery('/walk-in/patients', {'q': q});
 
-  Future<Map<String, dynamic>> registerWalkIn(String name, String email, String icNumber) =>
-      _post('/walk-in/patients', {'name': name, 'email': email, 'icNumber': icNumber});
+  Future<Map<String, dynamic>> registerWalkIn(
+    String name,
+    String email,
+    String icNumber, {
+    String? nationality,
+  }) => _post('/walk-in/patients', {
+    'name': name,
+    'email': email,
+    'icNumber': icNumber,
+    'nationality': ?nationality, // D-103
+  });
 
   Future<Map<String, dynamic>> walkInDoctors() => _get('/walk-in/doctors');
 

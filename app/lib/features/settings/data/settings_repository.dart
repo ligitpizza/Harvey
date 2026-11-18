@@ -31,6 +31,7 @@ abstract interface class SettingsRepository {
     required DateTime dateOfBirth,
     required Gender gender,
     String? icNumber,
+    String? nationality,
   });
 
   Future<void> updateContact(OnboardingData data);
@@ -90,12 +91,14 @@ class ApiSettingsRepository implements SettingsRepository {
     required DateTime dateOfBirth,
     required Gender gender,
     String? icNumber,
+    String? nationality,
   }) async {
     final res = await _api.updateProfile({
       'name': name.trim(),
       'dateOfBirth': _isoDate(dateOfBirth),
       'gender': gender.value,
       'icNumber': ?icNumber,
+      'nationality': ?nationality, // D-103
     });
     return res['rescored'] == true;
   }

@@ -16,6 +16,8 @@ class PortalPatient {
     this.dateOfBirth,
     this.gender,
     this.icNumber,
+    this.passportNumber,
+    this.nationality,
   });
 
   final String uid;
@@ -26,12 +28,18 @@ class PortalPatient {
   /// D-51; shown masked in the portal.
   final String? icNumber;
 
+  /// D-103: a foreign patient's passport.
+  final String? passportNumber;
+  final String? nationality;
+
   factory PortalPatient.fromFirestore(String uid, Map<String, dynamic> d) => PortalPatient(
     uid: uid,
     name: d['name'] as String? ?? 'Unnamed patient',
     dateOfBirth: d['dateOfBirth'] == null ? null : _time(d['dateOfBirth']),
     gender: d['gender'] as String?,
     icNumber: d['icNumber'] as String?,
+    passportNumber: d['passportNumber'] as String?,
+    nationality: d['nationality'] as String?,
   );
 }
 

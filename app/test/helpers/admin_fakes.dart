@@ -98,9 +98,10 @@ class FakeAdminRepository implements AdminRepository {
     required String name,
     required String email,
     required String icNumber,
+    String? nationality,
   }) async {
     if (error != null) throw error!;
-    calls.add('createPatient:$name:$email:$icNumber');
+    calls.add('createPatient:$name:$email:$icNumber${nationality == null ? '' : ':$nationality'}');
     return 'https://example.test/setup';
   }
 

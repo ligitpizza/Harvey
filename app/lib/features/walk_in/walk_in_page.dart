@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../core/utils/ic_number.dart';
+import '../../shared/widgets/identity_fields.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/enums.dart';
@@ -456,6 +458,7 @@ class _RegisterDialogState extends ConsumerState<_RegisterDialog> {
   final _name = TextEditingController();
   final _email = TextEditingController();
   final _ic = TextEditingController();
+  final _nationality = TextEditingController(); // D-103
   bool _busy = false;
   String? _error;
 
@@ -464,6 +467,7 @@ class _RegisterDialogState extends ConsumerState<_RegisterDialog> {
     _name.dispose();
     _email.dispose();
     _ic.dispose();
+    _nationality.dispose();
     super.dispose();
   }
 
@@ -476,7 +480,12 @@ class _RegisterDialogState extends ConsumerState<_RegisterDialog> {
     try {
       final res = await ref
           .read(apiClientProvider)
-          .registerWalkIn(_name.text.trim(), _email.text.trim(), _ic.text.trim());
+          .registerWalkIn(
+            _name.text.trim(),
+            _email.text.trim(),
+            parseIdentity(_ic.text).value,
+            nationality: looksLikePassport(_ic.text) ? _nationality.text.trim() : null,
+          );
       if (!mounted) return;
       Navigator.pop(
         context,
@@ -484,9 +493,10 @@ class _RegisterDialogState extends ConsumerState<_RegisterDialog> {
           id: res['uid'] as String,
           name: _name.text.trim(),
           email: _email.text.trim(),
-          icLast4: _ic.text
-              .replaceAll(RegExp(r'\D'), '')
-              .substring((_ic.text.replaceAll(RegExp(r'\D'), '').length - 4).clamp(0, 99)),
+          icLast4: () {
+            final v = parseIdentity(_ic.text).value.replaceAll('-', '');
+            return v.substring((v.length - 4).clamp(0, 99));
+          }(),
         ),
       );
     } on ApiException catch (e) {
@@ -509,7 +519,7 @@ class _RegisterDialogState extends ConsumerState<_RegisterDialog> {
             TextFormField(
               key: const Key('walk-in-name'),
               controller: _name,
-              decoration: const InputDecoration(labelText: 'Full name (as on IC)'),
+              decoration: const InputDecoration(labelText: 'Full name (as on MyKad or passport)'),
               validator: (v) => (v ?? '').trim().length < 2 ? 'Enter the name.' : null,
             ),
             TextFormField(
@@ -519,13 +529,12 @@ class _RegisterDialogState extends ConsumerState<_RegisterDialog> {
               decoration: const InputDecoration(labelText: 'Email (for their Harvey login)'),
               validator: Validators.email,
             ),
-            TextFormField(
-              key: const Key('walk-in-ic'),
-              controller: _ic,
-              decoration: const InputDecoration(labelText: 'IC number', hintText: '900101-14-5678'),
-              validator: (v) => (v ?? '').replaceAll(RegExp(r'\D'), '').length == 12
-                  ? null
-                  : 'Enter the 12-digit IC number.',
+            // D-103: MyKad or passport (with nationality).
+            IdentityFields(
+              id: _ic,
+              nationality: _nationality,
+              idKey: const Key('walk-in-ic'),
+              nationalityKey: const Key('walk-in-nationality'),
             ),
             if (_error != null)
               Padding(

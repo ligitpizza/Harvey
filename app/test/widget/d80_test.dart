@@ -231,7 +231,7 @@ void main() {
       await t.enterText(find.byKey(const Key('walk-in-ic')), '1234');
       await t.tap(find.byKey(const Key('walk-in-save')));
       await t.pumpAndSettle();
-      expect(find.text('Enter the 12-digit IC number.'), findsOneWidget);
+      expect(find.textContaining('Enter a 12-digit IC number'), findsOneWidget);
     });
   });
 

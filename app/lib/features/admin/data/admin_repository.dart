@@ -234,6 +234,7 @@ abstract interface class AdminRepository {
     required String name,
     required String email,
     required String icNumber,
+    String? nationality,
   });
 
   Future<void> deleteUser(String uid);
@@ -320,8 +321,14 @@ class ApiAdminRepository implements AdminRepository {
     required String name,
     required String email,
     required String icNumber,
+    String? nationality,
   }) async {
-    final res = await _api.adminCreatePatient(name: name, email: email, icNumber: icNumber);
+    final res = await _api.adminCreatePatient(
+      name: name,
+      email: email,
+      icNumber: icNumber,
+      nationality: nationality,
+    );
     return res['emailSent'] == true ? null : res['setupLink'] as String?;
   }
 

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../core/utils/ic_number.dart';
+import '../../../shared/widgets/identity_fields.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -330,12 +332,13 @@ class _PatientDialogState extends ConsumerState<_PatientDialog> {
   final _name = TextEditingController();
   final _email = TextEditingController();
   final _ic = TextEditingController();
+  final _nationality = TextEditingController(); // D-103
   bool _busy = false;
   String? _error;
 
   @override
   void dispose() {
-    for (final c in [_name, _email, _ic]) {
+    for (final c in [_name, _email, _ic, _nationality]) {
       c.dispose();
     }
     super.dispose();
@@ -353,7 +356,8 @@ class _PatientDialogState extends ConsumerState<_PatientDialog> {
           .createPatient(
             name: _name.text.trim(),
             email: _email.text.trim(),
-            icNumber: _ic.text.trim(),
+            icNumber: parseIdentity(_ic.text).value,
+            nationality: looksLikePassport(_ic.text) ? _nationality.text.trim() : null,
           );
       if (mounted) Navigator.of(context).pop((_name.text.trim(), link));
     } on ApiException catch (e) {
@@ -391,13 +395,12 @@ class _PatientDialogState extends ConsumerState<_PatientDialog> {
                   ? null
                   : 'Enter a valid email.',
             ),
-            TextFormField(
-              key: const Key('patient-ic'),
-              controller: _ic,
-              decoration: const InputDecoration(labelText: 'IC number', hintText: '900101-14-5677'),
-              validator: (v) => RegExp(r'^\d{6}-?\d{2}-?\d{4}$').hasMatch((v ?? '').trim())
-                  ? null
-                  : 'Enter a 12-digit IC number.',
+            // D-103: MyKad or passport (with nationality).
+            IdentityFields(
+              id: _ic,
+              nationality: _nationality,
+              idKey: const Key('patient-ic'),
+              nationalityKey: const Key('patient-nationality'),
             ),
             const SizedBox(height: 8),
             Text(

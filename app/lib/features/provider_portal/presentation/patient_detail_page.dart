@@ -146,7 +146,10 @@ class _Header extends StatelessWidget {
     final facts = [
       if (age != null) '$age years',
       if (patient.gender != null) patient.gender![0].toUpperCase() + patient.gender!.substring(1),
-      if (patient.icNumber != null) 'IC ${maskIc(patient.icNumber)}',
+      if (patient.icNumber != null) 'MyKad ${maskIc(patient.icNumber)}',
+      if (patient.passportNumber != null) // D-103
+        'Passport ${maskPassport(patient.passportNumber)}'
+            '${patient.nationality == null ? '' : ' (${patient.nationality})'}',
     ].join(' · ');
     return Card(
       child: Padding(

@@ -47,6 +47,7 @@ class FakeSettingsRepository implements SettingsRepository {
     required DateTime dateOfBirth,
     required Gender gender,
     String? icNumber,
+    String? nationality,
   }) async {
     if (saveError != null) throw saveError!;
     calls.add(

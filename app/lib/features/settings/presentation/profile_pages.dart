@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/identity_fields.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -65,17 +66,27 @@ class PersonalInfoPage extends ConsumerWidget {
               name: user.name,
               dateOfBirth: user.dateOfBirth,
               gender: user.gender,
-              icNumber: user.icNumber,
+              icNumber: user.icNumber ?? user.passportNumber,
+              nationality: user.nationality,
             ),
     );
   }
 }
 
 class _PersonalForm extends ConsumerStatefulWidget {
-  const _PersonalForm({required this.name, this.dateOfBirth, this.gender, this.icNumber});
+  const _PersonalForm({
+    required this.name,
+    this.dateOfBirth,
+    this.gender,
+    this.icNumber,
+    this.nationality,
+  });
 
   final String name;
+
+  /// D-103: the MyKad or passport number.
   final String? icNumber;
+  final String? nationality;
   final DateTime? dateOfBirth;
   final Gender? gender;
 
@@ -86,6 +97,7 @@ class _PersonalForm extends ConsumerStatefulWidget {
 class _PersonalInfoPageState extends ConsumerState<_PersonalForm> with _SaveFlow<_PersonalForm> {
   late final _name = TextEditingController(text: widget.name);
   late final _ic = TextEditingController(text: widget.icNumber);
+  late final _nationality = TextEditingController(text: widget.nationality);
   late DateTime? _dob = widget.dateOfBirth;
   late Gender? _gender = widget.gender;
 
@@ -93,6 +105,7 @@ class _PersonalInfoPageState extends ConsumerState<_PersonalForm> with _SaveFlow
   void dispose() {
     _name.dispose();
     _ic.dispose();
+    _nationality.dispose();
     super.dispose();
   }
 
@@ -123,28 +136,24 @@ class _PersonalInfoPageState extends ConsumerState<_PersonalForm> with _SaveFlow
             textCapitalization: TextCapitalization.words,
             validator: (v) => (v ?? '').trim().length < 2 ? 'Enter your full name.' : null,
           ),
-          TextFormField(
-            key: const Key('settings-ic'),
-            controller: _ic,
-            keyboardType: TextInputType.number,
-            inputFormatters: [IcInputFormatter()],
-            decoration: InputDecoration(
-              labelText: 'IC number (MyKad)',
-              helperText: widget.icNumber == null ? 'Add your IC number for your records.' : null,
-            ),
-            // Required once set; accounts made before D-51 may leave it empty.
-            validator: (v) => validateIc(v, required: widget.icNumber != null),
-            onChanged: (v) {
-              // Fill date of birth and gender from a newly entered IC.
-              try {
-                final info = parseIc(v);
-                setState(() {
-                  _dob = info.dateOfBirth;
-                  _gender = info.gender;
-                });
-              } on FormatException {
-                // Not complete yet.
-              }
+          // D-51/D-103: MyKad (fills birthday and gender) or passport with nationality.
+          // Required once set; accounts made before D-51 may leave it empty.
+          IdentityFields(
+            id: _ic,
+            nationality: _nationality,
+            required: widget.icNumber != null,
+            idKey: const Key('settings-ic'),
+            nationalityKey: const Key('settings-nationality'),
+            helperText: widget.icNumber == null
+                ? 'Add your MyKad or passport number for your records.'
+                : null,
+            // Fill date of birth and gender from a newly entered MyKad.
+            onParsed: (info) {
+              if (info.dateOfBirth == null) return;
+              setState(() {
+                _dob = info.dateOfBirth;
+                _gender = info.gender;
+              });
             },
           ),
           const SectionLabel('Date of birth'),
@@ -176,7 +185,8 @@ class _PersonalInfoPageState extends ConsumerState<_PersonalForm> with _SaveFlow
                       name: _name.text,
                       dateOfBirth: _dob!,
                       gender: _gender!,
-                      icNumber: _ic.text.trim().isEmpty ? null : parseIc(_ic.text).value,
+                      icNumber: _ic.text.trim().isEmpty ? null : parseIdentity(_ic.text).value,
+                      nationality: looksLikePassport(_ic.text) ? _nationality.text.trim() : null,
                     ),
               );
             },

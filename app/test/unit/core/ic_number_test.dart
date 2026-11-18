@@ -36,4 +36,33 @@ void main() {
     expect(type('9001011'), '900101-1');
     expect(type('9001011456789999'), '900101-14-5678');
   });
+
+  group('D-103 MyKad or passport', () {
+    test('digits are a MyKad with birthday and gender', () {
+      final i = parseIdentity('900101 14 5677');
+      expect(i.kind, IdKind.mykad);
+      expect(i.value, '900101-14-5677');
+      expect(i.dateOfBirth, DateTime(1990, 1, 1));
+      expect(i.gender, Gender.male);
+    });
+
+    test('letters make it a passport, upper-case, no birthday', () {
+      final i = parseIdentity('a1234 5678');
+      expect(i.kind, IdKind.passport);
+      expect(i.value, 'A12345678');
+      expect(i.dateOfBirth, isNull);
+      expect(validateIdentity('A1'), isNotNull);
+      expect(validateIdentity('AB!12345'), isNotNull);
+      expect(validateIdentity(''), 'Enter your MyKad or passport number.');
+    });
+
+    test('masking and typing', () {
+      expect(maskPassport('A12345678'), 'A1*****78');
+      final f = IdInputFormatter();
+      TextEditingValue type(String s) =>
+          f.formatEditUpdate(TextEditingValue.empty, TextEditingValue(text: s));
+      expect(type('900101145677').text, '900101-14-5677');
+      expect(type('a12-345 678').text, 'A12345678');
+    });
+  });
 }
