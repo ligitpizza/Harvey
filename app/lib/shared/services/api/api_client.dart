@@ -260,6 +260,9 @@ class ApiClient {
 
   /// UC14.1/UC14.3: symptom ids from symptom_catalog, severity, the heart rate and the id
   /// of the BP reading just logged in the checker (both compulsory, D-38).
+  /// D-111: one saved symptom check, to reopen its result.
+  Future<Map<String, dynamic>> triageResult(String id) => _get('/triage/$id');
+
   Future<Map<String, dynamic>> submitTriage({
     required List<String> symptoms,
     required String severity,

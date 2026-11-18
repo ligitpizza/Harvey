@@ -1285,8 +1285,12 @@ class InMemoryTriageRepository:
         return [RiskLevel(v["level"]) for v in mine[-1]["scores"].values()]
 
     def save_outcome(self, data: dict[str, Any]) -> str:
-        self.saved.append(data)
+        self.saved.append({**data, "generatedAt": datetime.now(UTC)})
         return f"triage{len(self.saved)}"
+
+    def outcome(self, outcome_id: str) -> dict[str, Any] | None:
+        i = int(outcome_id.removeprefix("triage") or 0) - 1
+        return self.saved[i] if 0 <= i < len(self.saved) else None
 
 
 class InMemoryMessageRepository:

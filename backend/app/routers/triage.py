@@ -1,4 +1,5 @@
 """POST /triage: symptom checker submission (FR-14.3; UC14.1, UC14.3, UC14.4; D-36).
+GET /triage/{id}: reopen a saved result (D-111).
 
 The app sends the selected symptom ids and severity, the heart rate (camera or typed
 pulse) and the id of the BP reading the patient just entered in the checker (D-38). The server
@@ -122,6 +123,9 @@ def submit(
         "symptoms": ids,  # references to symptom_catalog ids (docs/04 rule 3)
         "severity": body.severity.value,
         "outcome": decision.outcome.value,
+        # D-111: kept so the result can be reopened later.
+        "reason": decision.reason,
+        "heartRate": inputs.heart_rate,
     }
     if inputs.reading_id:
         data["vitalReadingId"] = inputs.reading_id
@@ -248,4 +252,62 @@ def submit(
         "heartRate": inputs.heart_rate,
         "missingInputs": inputs.missing,
         "doctorNotified": decision.outcome in _ALERT_SEVERITY,
+    }
+
+
+# D-111: reopen a saved result (from the reading it used, or the checker's history).
+_REASON_FALLBACK = {
+    TriageOutcome.SEEK_EMERGENCY_CARE.value: "Your symptoms and readings need emergency care.",
+    TriageOutcome.CONTACT_DOCTOR.value: "Your symptoms should be checked by your doctor.",
+    TriageOutcome.MONITOR_AT_HOME.value: "Your symptoms can be looked after at home for now.",
+}
+
+
+@router.get("/{outcome_id}")
+def get_outcome(
+    outcome_id: str,
+    user: CurrentUser = Depends(require_roles(UserRole.PATIENT, UserRole.DOCTOR)),
+    repo: TriageRepository = Depends(get_triage_repository),
+    users: UserRepository = Depends(get_user_repository),
+) -> dict[str, Any]:
+    """The same shape as the submission's result. The patient's own, or their doctor's."""
+    o = repo.outcome(outcome_id)
+    owner = str((o or {}).get("patientId") or "")
+    allowed = o is not None and (
+        owner == user.uid
+        or (
+            user.role is UserRole.DOCTOR
+            and (users.get_user(owner) or {}).get("assignedDoctorId") == user.uid
+        )
+    )
+    if o is None or not allowed:
+        raise ApiError(
+            "TRIAGE_NOT_FOUND", "That symptom check was not found.", status.HTTP_404_NOT_FOUND
+        )
+    ids = [str(i) for i in o.get("symptoms") or []]
+    catalog = repo.symptoms(ids)
+    reading = repo.reading(str(o["vitalReadingId"])) if o.get("vitalReadingId") else None
+    outcome = str(o.get("outcome"))
+    generated = o.get("generatedAt")
+    return {
+        "id": outcome_id,
+        "outcome": outcome,
+        "reason": o.get("reason") or _REASON_FALLBACK.get(outcome, ""),
+        "severity": o.get("severity"),
+        "symptoms": [
+            {
+                "id": i,
+                "name": catalog[i].name if i in catalog else i,
+                "isRedFlag": catalog[i].is_red_flag if i in catalog else False,
+            }
+            for i in ids
+        ],
+        "systolic": (reading or {}).get("systolic"),
+        "diastolic": (reading or {}).get("diastolic"),
+        "heartRate": o.get("heartRate") or (reading or {}).get("heartRate"),
+        "vitalReadingId": o.get("vitalReadingId"),
+        "missingInputs": [],
+        "doctorNotified": outcome
+        in (TriageOutcome.CONTACT_DOCTOR.value, TriageOutcome.SEEK_EMERGENCY_CARE.value),
+        "generatedAt": generated.isoformat() if isinstance(generated, datetime) else None,
     }

@@ -37,6 +37,25 @@ class FakeSymptomRepository implements SymptomRepository {
   Stream<List<TriageRecord>> outcomes(String patientId, {int limit = 20}) =>
       Stream.value(records.take(limit).toList());
 
+  final opened = <String>[];
+
+  @override
+  Future<TriageResult> result(String id) async {
+    opened.add(id);
+    return TriageResult(
+      id: id,
+      outcome: TriageOutcome.contactDoctor,
+      reason: 'Saved reason.',
+      symptoms: [testCatalog.first],
+      systolic: 150,
+      diastolic: 95,
+      heartRate: 80,
+      severity: 'moderate',
+      generatedAt: DateTime(2026, 11, 18, 9, 5),
+      doctorNotified: true,
+    );
+  }
+
   @override
   Future<TriageResult> submit({
     required List<String> symptomIds,
@@ -72,7 +91,9 @@ Widget checkerApp(FakeSymptomRepository repo, FakeVitalsRepository vitals, {List
       GoRoute(path: '/symptom', builder: (_, _) => const SymptomCheckerPage()),
       GoRoute(
         path: '/symptom/result/:id',
-        builder: (_, s) => TriageResultPage(result: s.extra! as TriageResult),
+        builder: (_, s) => s.extra is TriageResult
+            ? TriageResultPage(result: s.extra! as TriageResult)
+            : TriageResultLoader(id: s.pathParameters['id']!),
       ),
       for (final p in ['/dashboard', '/ai-agent'])
         GoRoute(path: p, builder: (_, _) => Text('ROUTE $p')),
@@ -81,6 +102,7 @@ Widget checkerApp(FakeSymptomRepository repo, FakeVitalsRepository vitals, {List
   return ProviderScope(
     overrides: [
       symptomRepositoryProvider.overrideWithValue(repo),
+      myTriageHistoryProvider.overrideWith((ref) => Stream.value(repo.records)),
       vitalsRepositoryProvider.overrideWithValue(vitals),
       ppgCaptureProvider.overrideWithValue(FakePpgCapture()),
       dialerProvider.overrideWithValue((n) async {
@@ -328,7 +350,7 @@ void main() {
     expect(r.missingInputs, ['heart_rate']);
   });
 
-  test('triage quick replies follow the reported symptoms', () {
+  test('D-111 a mild result asks about the first symptom at home', () {
     final r = TriageResult(
       id: 't',
       outcome: TriageOutcome.monitorAtHome,
@@ -339,9 +361,54 @@ void main() {
     );
     expect(TriageResultPage.quickReplies(r), [
       'Explain my symptom check result',
-      'What can I do about blurred vision?',
+      'What can I do at home about blurred vision?',
       'When should I check my blood pressure again?',
-      'What warning signs should I watch for?',
+      'Which changes mean I should see a doctor?',
     ]);
+  });
+
+  group('D-111 saved results and contextual AI questions', () {
+    tallTest('past checks open the saved result with its time and severity', (t) async {
+      final repo = FakeSymptomRepository()
+        ..records = [
+          TriageRecord(
+            id: 'tr9',
+            outcome: TriageOutcome.contactDoctor,
+            severity: TriageSeverity.moderate,
+            symptomIds: const ['chest_pain'],
+            generatedAt: DateTime(2026, 11, 18, 9, 5),
+          ),
+        ];
+      await t.pumpWidget(checkerApp(repo, FakeVitalsRepository()));
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(
+        find.byKey(const Key('sc-history-tr9')),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await t.tap(find.byKey(const Key('sc-history-tr9')));
+      await t.pumpAndSettle();
+      expect(repo.opened, ['tr9']);
+      expect(find.text('Saved reason.'), findsOneWidget);
+      expect(find.textContaining('18 Nov 2026, 9:05 AM'), findsOneWidget);
+      expect(find.textContaining('severity moderate'), findsOneWidget);
+    });
+
+    test('questions follow the outcome', () {
+      TriageResult r(TriageOutcome o) =>
+          TriageResult(id: 'x', outcome: o, reason: '', symptoms: [testCatalog.first]);
+      expect(
+        TriageResultPage.quickReplies(r(TriageOutcome.monitorAtHome)),
+        contains('Which changes mean I should see a doctor?'),
+      );
+      expect(
+        TriageResultPage.quickReplies(r(TriageOutcome.contactDoctor)),
+        contains('What should I tell my doctor?'),
+      );
+      expect(
+        TriageResultPage.quickReplies(r(TriageOutcome.seekEmergencyCare)),
+        contains('What should I tell the 999 operator?'),
+      );
+    });
   });
 }

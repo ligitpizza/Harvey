@@ -87,6 +87,8 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | severity | String | mild / moderate / severe | Required |
 | outcome | String | monitor_at_home / contact_doctor / seek_emergency_care | Required |
 | generatedAt | Timestamp | Submission timestamp | Required |
+| reason | String | The rule's plain-language reason shown on the result (D-111) | Optional (older outcomes fall back to a generic line) |
+| heartRate | Number | Heart rate used for this check (D-111) | Optional; PPG estimate or typed pulse |
 
 ### `medications`  (Table 4.2.3.6)
 

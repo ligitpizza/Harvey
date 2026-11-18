@@ -38,6 +38,9 @@ class TriageResult {
     this.heartRate,
     this.missingInputs = const [],
     this.doctorNotified = false,
+    this.severity,
+    this.generatedAt,
+    this.vitalReadingId,
   });
 
   final String id;
@@ -51,6 +54,11 @@ class TriageResult {
   /// UC14.1 E1: e.g. heart_rate, recent_blood_pressure, risk_score.
   final List<String> missingInputs;
   final bool doctorNotified;
+
+  /// D-111: shown when a saved result is reopened.
+  final String? severity;
+  final DateTime? generatedAt;
+  final String? vitalReadingId;
 
   factory TriageResult.fromApi(Map<String, dynamic> j) => TriageResult(
     id: j['id'] as String,
@@ -70,6 +78,9 @@ class TriageResult {
     heartRate: j['heartRate'] as int?,
     missingInputs: [for (final m in j['missingInputs'] as List<dynamic>? ?? const []) m as String],
     doctorNotified: j['doctorNotified'] as bool? ?? false,
+    severity: j['severity'] as String?,
+    generatedAt: DateTime.tryParse(j['generatedAt'] as String? ?? '')?.toLocal(),
+    vitalReadingId: j['vitalReadingId'] as String?,
   );
 }
 
@@ -113,6 +124,9 @@ abstract interface class SymptomRepository {
     required int heartRate,
     required String vitalReadingId,
   });
+
+  /// D-111: reopen a saved result.
+  Future<TriageResult> result(String id);
 }
 
 class ApiSymptomRepository implements SymptomRepository {
@@ -154,4 +168,7 @@ class ApiSymptomRepository implements SymptomRepository {
       location: await _location.current(),
     ),
   );
+
+  @override
+  Future<TriageResult> result(String id) async => TriageResult.fromApi(await _api.triageResult(id));
 }

@@ -108,6 +108,10 @@ class TriageRepository(Protocol):
 
     def save_outcome(self, data: dict[str, Any]) -> str: ...
 
+    def outcome(self, outcome_id: str) -> dict[str, Any] | None:
+        """D-111: one saved symptom check, to reopen its result."""
+        ...
+
 
 class FirestoreTriageRepository:
     def __init__(self, db: Any) -> None:
@@ -142,6 +146,10 @@ class FirestoreTriageRepository:
             {**data, "generatedAt": firestore.SERVER_TIMESTAMP}
         )
         return str(ref.id)
+
+    def outcome(self, outcome_id: str) -> dict[str, Any] | None:
+        snap = self._db.collection(Collection.TRIAGE_OUTCOMES.value).document(outcome_id).get()
+        return dict(snap.to_dict()) if snap.exists else None
 
 
 def get_triage_repository() -> TriageRepository:

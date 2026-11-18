@@ -204,6 +204,7 @@ class _SymptomCheckerPageState extends ConsumerState<SymptomCheckerPage> {
           ),
         ),
       ),
+      const _PastChecks(),
     ],
   );
 
@@ -305,6 +306,68 @@ class _SymptomCheckerPageState extends ConsumerState<SymptomCheckerPage> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// D-111: the patient's recent checks; each opens its saved result.
+class _PastChecks extends ConsumerWidget {
+  const _PastChecks();
+
+  static (String, IconData, Color) _style(TriageOutcome o) => switch (o) {
+    TriageOutcome.seekEmergencyCare => (
+      'Seek emergency care',
+      Icons.emergency,
+      BpClassifier.color(BpCategory.crisis),
+    ),
+    TriageOutcome.contactDoctor => (
+      'Contact your doctor',
+      Icons.medical_services_outlined,
+      BpClassifier.color(BpCategory.stage1),
+    ),
+    TriageOutcome.monitorAtHome => (
+      'Monitor at home',
+      Icons.home_outlined,
+      BpClassifier.color(BpCategory.normal),
+    ),
+  };
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final past = ref.watch(myTriageHistoryProvider).value ?? const [];
+    if (past.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Column(
+        key: const Key('sc-history'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Your past checks', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          for (final r in past.take(5))
+            Builder(
+              builder: (context) {
+                final (label, icon, color) = _style(r.outcome);
+                final t = r.generatedAt.toLocal();
+                return Card(
+                  child: ListTile(
+                    key: Key('sc-history-${r.id}'),
+                    leading: Icon(icon, color: color),
+                    title: Text(label),
+                    subtitle: Text(
+                      '${t.day}/${t.month}/${t.year} '
+                      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}'
+                      ' · ${r.severity.value} · ${r.symptomIds.length} symptom'
+                      '${r.symptomIds.length == 1 ? '' : 's'}',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/symptom/result/${r.id}'),
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
     );
   }
 }

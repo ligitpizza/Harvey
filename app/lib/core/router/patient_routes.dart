@@ -88,9 +88,11 @@ final List<RouteBase> patientFeatureRoutes = [
   GoRoute(path: '/symptom', builder: (_, _) => const SymptomCheckerPage()),
   GoRoute(
     path: '/symptom/result/:id',
-    // The result comes from the submission; a stale link goes back to the checker.
-    redirect: (_, state) => state.extra is TriageResult ? null : '/symptom',
-    builder: (_, state) => TriageResultPage(result: state.extra! as TriageResult),
+    // Straight after a check the result comes with the route; otherwise (history, a
+    // BP reading's link) it is loaded by id (D-111).
+    builder: (_, state) => state.extra is TriageResult
+        ? TriageResultPage(result: state.extra! as TriageResult)
+        : TriageResultLoader(id: state.pathParameters['id']!),
   ),
   GoRoute(
     path: '/chat',

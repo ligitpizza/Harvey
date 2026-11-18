@@ -31,6 +31,19 @@ final latestTriageProvider = StreamProvider<TriageRecord?>((ref) {
       .map((list) => list.firstOrNull);
 }, retry: (_, _) => null);
 
+/// D-111: one saved result, reopened from history or from its BP reading.
+final triageResultProvider = FutureProvider.autoDispose.family<TriageResult, String>(
+  (ref, id) => ref.watch(symptomRepositoryProvider).result(id),
+  retry: (_, _) => null,
+);
+
+/// D-111: the patient's own past checks (newest first) on the checker page.
+final myTriageHistoryProvider = StreamProvider<List<TriageRecord>>((ref) {
+  final uid = ref.watch(authUidProvider).value;
+  if (uid == null) return Stream.value(const []);
+  return ref.watch(symptomRepositoryProvider).outcomes(uid, limit: 10);
+}, retry: (_, _) => null);
+
 /// One patient's triage history for the doctor portal (D-37).
 final patientTriageProvider = StreamProvider.family<List<TriageRecord>, String>(
   (ref, patientId) => ref.watch(symptomRepositoryProvider).outcomes(patientId),

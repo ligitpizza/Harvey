@@ -59,13 +59,30 @@ class TriageResultPage extends ConsumerWidget {
     ],
   };
 
-  /// Quick replies for the AI chat, tailored to this result.
-  static List<String> quickReplies(TriageResult r) => [
-    'Explain my symptom check result',
-    for (final s in r.symptoms.take(2)) 'What can I do about ${s.name.toLowerCase()}?',
-    'When should I check my blood pressure again?',
-    'What warning signs should I watch for?',
-  ];
+  /// D-111: questions for the AI chat that fit the outcome (mild / moderate / critical),
+  /// plus one about the first symptom. Tapping one sends it.
+  static List<String> quickReplies(TriageResult r) {
+    final symptom = r.symptoms.firstOrNull?.name.toLowerCase();
+    return switch (r.outcome) {
+      TriageOutcome.monitorAtHome => [
+        'Explain my symptom check result',
+        if (symptom != null) 'What can I do at home about $symptom?',
+        'When should I check my blood pressure again?',
+        'Which changes mean I should see a doctor?',
+      ],
+      TriageOutcome.contactDoctor => [
+        'Why should I contact my doctor about this?',
+        'What should I tell my doctor?',
+        if (symptom != null) 'How do I ease $symptom while I wait?',
+        'Which warning signs mean I should call 999?',
+      ],
+      TriageOutcome.seekEmergencyCare => [
+        'What should I do while waiting for help?',
+        'What should I tell the 999 operator?',
+        'Explain my symptom check result',
+      ],
+    };
+  }
 
   static const _missingLabels = {
     'heart_rate': 'heart rate',
@@ -83,7 +100,9 @@ class TriageResultPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        leading: BackButton(onPressed: () => context.go('/dashboard')),
+        leading: BackButton(
+          onPressed: () => context.canPop() ? context.pop() : context.go('/dashboard'),
+        ),
         title: const Text('Triage result'),
       ),
       body: ListView(
@@ -139,6 +158,18 @@ class TriageResultPage extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(result.reason, key: const Key('triage-reason')),
+                  if (result.generatedAt != null || result.severity != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      [
+                        if (result.generatedAt != null) _when(result.generatedAt!),
+                        if (result.severity != null)
+                          'severity ${result.severity!.replaceAll('_', ' ')}',
+                      ].join(' · '),
+                      key: const Key('triage-when'),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   Text(
                     [
@@ -198,14 +229,14 @@ class TriageResultPage extends ConsumerWidget {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
-          if (!emergency) ...[
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: () => context.push('/ai-agent', extra: quickReplies(result)),
-              icon: const Icon(Icons.smart_toy_outlined),
-              label: const Text('Ask the AI Health Agent'),
-            ),
-          ],
+          // D-111: opens the assistant with questions that fit this outcome.
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            key: const Key('triage-ask-ai'),
+            onPressed: () => context.push('/ai-agent', extra: quickReplies(result)),
+            icon: const Icon(Icons.smart_toy_outlined),
+            label: const Text('Ask the AI Health Agent'),
+          ),
           const SizedBox(height: 16),
           Text(
             'This checker gives general guidance. It is not a substitute for a doctor. '
@@ -218,4 +249,52 @@ class TriageResultPage extends ConsumerWidget {
       ),
     );
   }
+}
+
+String _when(DateTime t) {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
+  final m = t.minute.toString().padLeft(2, '0');
+  return '${t.day} ${months[t.month - 1]} ${t.year}, $h:$m ${t.hour < 12 ? 'AM' : 'PM'}';
+}
+
+/// D-111: a saved result opened by id (history, or the BP reading it used).
+class TriageResultLoader extends ConsumerWidget {
+  const TriageResultLoader({super.key, required this.id});
+
+  final String id;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => ref
+      .watch(triageResultProvider(id))
+      .when(
+        data: (r) => TriageResultPage(result: r),
+        loading: () => Scaffold(
+          appBar: AppBar(title: const Text('Triage result')),
+          body: const Center(child: CircularProgressIndicator()),
+        ),
+        error: (_, _) => Scaffold(
+          appBar: AppBar(title: const Text('Triage result')),
+          body: Center(
+            child: TextButton(
+              key: const Key('triage-retry'),
+              onPressed: () => ref.invalidate(triageResultProvider(id)),
+              child: const Text('Could not load this result. Retry'),
+            ),
+          ),
+        ),
+      );
 }

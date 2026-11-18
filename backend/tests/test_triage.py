@@ -215,15 +215,17 @@ def test_uc14_3_saves_outcome_and_returns_result(
     assert body["systolic"] == 118 and body["heartRate"] == 74
     assert body["missingInputs"] == ["risk_score"]
     assert body["doctorNotified"] is False
-    assert triage_repo.saved == [
-        {
-            "patientId": P,
-            "symptoms": ["headache", "nausea"],
-            "severity": "mild",
-            "outcome": "monitor_at_home",
-            "vitalReadingId": "r1",
-        }
-    ]
+    saved = dict(triage_repo.saved[0])
+    saved.pop("generatedAt")
+    assert saved == {
+        "patientId": P,
+        "symptoms": ["headache", "nausea"],
+        "severity": "mild",
+        "outcome": "monitor_at_home",
+        "vitalReadingId": "r1",
+        "reason": body["reason"],
+        "heartRate": 74,
+    }
     assert alerts_repo.alerts == []
     assert "TRIAGE" in audit.actions()
 
@@ -335,3 +337,35 @@ def test_only_patients_submit(client: TestClient, token: str) -> None:
         headers=bearer(token),
     )
     assert res.status_code == 403
+
+
+# ---------------- D-111: reopen a saved result ----------------
+
+
+def test_d111_reopen_a_symptom_check(
+    client: TestClient,
+    vitals_repo: InMemoryVitalsRepository,
+) -> None:
+    first = post(client, vitals_repo, bp=(150, 95), hr=80, symptoms=["headache"]).json()
+    res = client.get(f"/api/v1/triage/{first['id']}", headers=PATIENT)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["outcome"] == first["outcome"] and body["reason"] == first["reason"]
+    assert (body["systolic"], body["diastolic"], body["heartRate"]) == (150, 95, 80)
+    assert body["symptoms"][0]["name"] == first["symptoms"][0]["name"]
+    assert body["vitalReadingId"] == "r1" and body["generatedAt"]
+    assert client.get("/api/v1/triage/triage9", headers=PATIENT).status_code == 404
+
+
+def test_d111_only_the_patient_and_their_doctor_can_reopen(
+    client: TestClient,
+    vitals_repo: InMemoryVitalsRepository,
+    repo: Any,
+) -> None:
+    oid = post(client, vitals_repo, symptoms=["fatigue"]).json()["id"]
+    url = f"/api/v1/triage/{oid}"
+    repo.users[P] = {**repo.users.get(P, {}), "role": "patient", "assignedDoctorId": "u-doctor"}
+    assert client.get(url, headers=bearer("doctor-token")).status_code == 200
+    repo.users[P]["assignedDoctorId"] = "someone-else"
+    assert client.get(url, headers=bearer("doctor-token")).status_code == 404
+    assert client.get(url, headers=bearer("pharmacist-token")).status_code == 403
