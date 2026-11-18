@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../shared/widgets/fill_grid.dart';
+import '../../shared/widgets/reorderable_card_grid.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -259,12 +260,14 @@ class _RecentNotifications extends ConsumerWidget {
   }
 }
 
-Widget _layout(List<Widget> stats, List<Widget> cards) => Column(
+/// Stat tiles, then the cards. D-115: cards can be dragged into the user's own order,
+/// kept per role and user on this device.
+Widget _layout(List<Widget> stats, List<Widget> cards, {required String storageKey}) => Column(
   crossAxisAlignment: CrossAxisAlignment.stretch,
   children: [
     FillGrid(minItemWidth: 200, spacing: 12, equalHeight: true, children: stats),
     const SizedBox(height: 16),
-    FillGrid(minItemWidth: 380, children: cards),
+    ReorderableCardGrid(storageKey: storageKey, children: cards),
   ],
 );
 
@@ -300,6 +303,7 @@ class DoctorHomeDashboard extends ConsumerWidget {
       children: [
         const _DashHeader(subtitle: "Here's what needs you today."),
         _layout(
+          storageKey: 'doctor:$me',
           [
             StatTile(
               icon: Icons.people_outline,
@@ -434,6 +438,7 @@ class PharmacyDashboardPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final me = ref.watch(authUidProvider).value;
     final queue = ref.watch(pharmacyQueueProvider);
     final stock = ref.watch(stockProvider);
     final chats = ref.watch(pharmacyConversationsProvider);
@@ -466,6 +471,7 @@ class PharmacyDashboardPage extends ConsumerWidget {
       children: [
         const _DashHeader(subtitle: 'Orders, stock and messages at a glance.'),
         _layout(
+          storageKey: 'pharmacist:$me',
           [
             StatTile(
               icon: Icons.medication_outlined,
@@ -603,6 +609,7 @@ class AdminDashboardPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final me = ref.watch(authUidProvider).value;
     final now = DateTime.now();
     final today = _startOfDay(now);
     final requests = ref.watch(pendingAssignmentRequestsProvider);
@@ -635,6 +642,7 @@ class AdminDashboardPage extends ConsumerWidget {
       children: [
         const _DashHeader(subtitle: 'Requests, deliveries and system activity.'),
         _layout(
+          storageKey: 'admin:$me',
           [
             StatTile(
               icon: Icons.assignment_ind_outlined,
