@@ -320,6 +320,30 @@ void main() {
       expect(find.text('Collected'), findsWidgets);
     });
 
+    tallTest('D-113 a paid delivery switched to collection still lists its fee', (t) async {
+      repo.orders = {
+        id: MedicationOrder.fromJson({
+          'id': id,
+          'ref': 'CF-ABC123',
+          'patientId': 'u-patient',
+          'prescriptionId': 'rx1',
+          'medicationDetails': 'Amlodipine 5mg',
+          'fulfilmentStatus': 'collected',
+          'paymentStatus': 'paid',
+          'method': 'self_collection',
+          'amount': 64.5,
+          'deliveryFee': 13.2,
+          'total': 77.7,
+        }),
+      };
+      await t.pumpWidget(host('/orders/$id/track'));
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(find.byKey(const Key('order-items')), 200);
+      expect(find.text('Delivery fee (paid before switching to collection)'), findsOneWidget);
+      expect(find.text('RM13.20'), findsOneWidget);
+      expect(t.widget<Text>(find.byKey(const Key('order-detail-total'))).data, 'RM77.70');
+    });
+
     tallTest('cancelled: who, why and no timeline', (t) async {
       repo.orders = {
         id: MedicationOrder.fromJson({
@@ -653,8 +677,9 @@ void main() {
         );
       await t.pumpWidget(host('/pharmacy/inventory'));
       await t.pumpAndSettle();
-      expect(find.text('Low (< 50)'), findsOneWidget);
-      expect(find.text('2027-01-31'), findsOneWidget);
+      // D-114: status and expiry as pills, dates as day/month/year.
+      expect(find.text('Low'), findsOneWidget);
+      expect(find.textContaining('31/01/2027'), findsOneWidget);
       await t.pumpWidget(host('/pharmacy'));
       await t.pumpAndSettle();
       await t.tap(find.byKey(const Key('orders-tab-collection')));
