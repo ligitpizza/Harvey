@@ -23,6 +23,7 @@ class AgentPage extends ConsumerStatefulWidget {
     'What was my last blood pressure?',
     'Explain my risk score',
     'How can I lower my blood pressure?',
+    'Make my weekly summary',
   ];
 
   @override
@@ -57,6 +58,29 @@ class _AgentPageState extends ConsumerState<AgentPage> {
       );
     } finally {
       if (mounted) setState(() => _saving.remove(messageId));
+    }
+  }
+
+  bool _creating = false;
+
+  /// D-105: this week's summary now; the server also saves it to Records.
+  Future<void> _createSummary() async {
+    setState(() => _creating = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(agentRepositoryProvider).createSummary();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Summary made and saved to your Records.')),
+      );
+      _scrollToEnd();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not make the summary. Please try again.')),
+      );
+    } finally {
+      if (mounted) setState(() => _creating = false);
     }
   }
 
@@ -146,6 +170,19 @@ class _AgentPageState extends ConsumerState<AgentPage> {
         title: const Row(
           children: [Icon(Icons.smart_toy_outlined), SizedBox(width: 8), Text('AI Health Agent')],
         ),
+        actions: [
+          IconButton(
+            key: const Key('create-summary'),
+            tooltip: "Create this week's summary",
+            onPressed: _creating ? null : _createSummary,
+            icon: _creating
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.summarize_outlined),
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -183,7 +220,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                                 key: Key('summary-saved-${m.id}'),
                                 onPressed: () => context.push('/records'),
                                 icon: const Icon(Icons.check_circle_outline, size: 18),
-                                label: const Text('Saved in Records'),
+                                label: const Text('Open in Records'),
                               )
                             : OutlinedButton.icon(
                                 key: Key('summary-save-${m.id}'),

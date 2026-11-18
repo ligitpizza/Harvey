@@ -109,6 +109,9 @@ abstract interface class AgentRepository {
 
   /// D-100: save a weekly summary to Records as a PDF.
   Future<void> saveSummaryPdf(String messageId);
+
+  /// D-105: make this week's summary now; it is also saved to Records.
+  Future<void> createSummary();
 }
 
 class ApiAgentRepository implements AgentRepository {
@@ -135,4 +138,7 @@ class ApiAgentRepository implements AgentRepository {
 
   @override
   Future<void> saveSummaryPdf(String messageId) => _api.saveSummaryPdf(messageId);
+
+  @override
+  Future<void> createSummary() async => _api.createWeeklySummary();
 }

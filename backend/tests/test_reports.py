@@ -130,3 +130,56 @@ def test_doctor_report_is_shared_and_read_only_for_the_patient(
     # Only the assigned doctor writes reports.
     repo.users[P]["assignedDoctorId"] = "someone-else"
     assert client.post(url, json=body, headers=DOCTOR).status_code == 403
+
+
+# ---------------- D-105: summary on request, always kept in Records ----------------
+
+
+def test_d105_create_summary_now_saves_it_to_records_once_a_day(
+    client: TestClient,
+    agent_repo: InMemoryAgentDataRepository,
+    record_repo: InMemoryRecordRepository,
+) -> None:
+    url = "/api/v1/agent/weekly-summary/create"
+    res = client.post(url, headers=PATIENT)
+    assert res.status_code == 201, res.text
+    summary = agent_repo.messages[-1]
+    assert summary["kind"] == "weekly_summary"
+    rid = summary["savedRecordId"]
+    assert record_repo.records[rid]["category"] == "health_summary"
+    again = client.post(url, headers=PATIENT)
+    assert again.status_code == 409
+    assert again.json()["error"]["code"] == "SUMMARY_ALREADY_TODAY"
+    assert client.post(url, headers=DOCTOR).status_code == 403
+
+
+def test_d105_the_automatic_weekly_summary_is_saved_too(
+    client: TestClient,
+    agent_repo: InMemoryAgentDataRepository,
+    record_repo: InMemoryRecordRepository,
+) -> None:
+    res = client.post("/api/v1/agent/weekly-summary", headers=PATIENT)
+    assert res.json()["created"] is True
+    assert agent_repo.messages[-1]["savedRecordId"] in record_repo.records
+
+
+def test_d105_asking_the_assistant_makes_the_summary(
+    client: TestClient,
+    agent_repo: InMemoryAgentDataRepository,
+    record_repo: InMemoryRecordRepository,
+) -> None:
+    res = client.post(
+        "/api/v1/agent/chat", json={"message": "generate weekly summary"}, headers=PATIENT
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["summary"] is True
+    kinds = [m.get("kind") for m in agent_repo.messages]
+    assert "weekly_summary" in kinds
+    assert agent_repo.messages[0]["role"] == "patient"
+    assert len(record_repo.records) == 1
+    # Asking again the same day points to it instead of making another.
+    res = client.post(
+        "/api/v1/agent/chat", json={"message": "my health summary please"}, headers=PATIENT
+    )
+    assert "already" in res.json()["reply"]
+    assert len(record_repo.records) == 1

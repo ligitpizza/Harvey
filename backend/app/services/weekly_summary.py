@@ -5,22 +5,34 @@ patient's last 7 days into their Harvey Assistant chat (`agent_messages`, kind
 "weekly_summary"): readings and average BP, medicine adherence and the change in risk.
 A fixed template, not Gemini, so it costs nothing and never invents numbers. The patient
 app also asks for one when the inbox opens, so a new patient doesn't wait for Monday.
+D-105: the patient can also make one on request (a button, or by asking the assistant),
+and every summary is saved to Records as a PDF.
 """
 
 from __future__ import annotations
 
+import logging
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import Depends
 
-from app.core.enums import RiskLevel
+from app.core.enums import RecordCategory, RiskLevel
 from app.integrations.push import PushMessage
 from app.services.agent_context import MYT, AgentDataRepository, get_agent_data_repository
 from app.services.bp import classify
 from app.services.deterioration import DeteriorationRepository, get_deterioration_repository
 from app.services.notifications import Notifier, get_notifier
+from app.services.records import (
+    FileStore,
+    RecordRepository,
+    get_file_store,
+    get_record_repository,
+)
+
+log = logging.getLogger("careflow.weekly_summary")
 
 KIND = "weekly_summary"
 WEEK = timedelta(days=7)
@@ -81,13 +93,93 @@ def summary_text(repo: AgentDataRepository, uid: str, now: datetime) -> str:
     return "\n".join(lines)
 
 
-def ensure_summary(repo: AgentDataRepository, uid: str, now: datetime) -> bool:
+# D-105: "make my weekly summary", "health summary please", "summarise my week" ...
+_ASK = re.compile(
+    r"(summar\w*\W+(?:\w+\W+){0,3}?(?:week|health))|((?:week\w*|health)\W+(?:\w+\W+){0,2}?summar)",
+    re.IGNORECASE,
+)
+
+
+def wants_summary(text: str) -> bool:
+    """D-105: the patient asked the assistant for their weekly summary."""
+    return bool(_ASK.search(text))
+
+
+def save_summary_pdf(
+    repo: AgentDataRepository,
+    records: RecordRepository,
+    files: FileStore,
+    uid: str,
+    message_id: str,
+    text: str,
+    sent: datetime,
+    now: datetime,
+) -> tuple[str, dict[str, Any]]:
+    """D-100/D-105: the summary as a PDF in the patient's Records (not shared)."""
+    from app.services.health_report import report_pdf, save_report, snapshot
+
+    pdf = report_pdf(
+        "Weekly health summary",
+        snapshot(repo, uid, now),
+        now,
+        text_heading=f"From the Harvey Assistant ({sent.astimezone(MYT):%d %b %Y})",
+        text=text,
+        footer="Written by the Harvey Assistant from your own records. It is not medical "
+        "advice or a diagnosis; in an emergency call 999.",
+    )
+    record_id, record = save_report(
+        records,
+        files,
+        uid,
+        prefix="weekly",
+        file_name=f"Weekly health summary {sent.astimezone(MYT):%d %b %Y}.pdf",
+        data=pdf,
+        category=RecordCategory.HEALTH_SUMMARY,
+        shared=False,
+        now=now,
+    )
+    repo.mark_saved(uid, message_id, record_id)
+    return record_id, record
+
+
+def post_summary(
+    repo: AgentDataRepository,
+    uid: str,
+    now: datetime,
+    records: RecordRepository | None = None,
+    files: FileStore | None = None,
+) -> str:
+    """Posts this week's summary in the assistant chat and (D-105) keeps it in Records.
+    Saving is best effort: the summary is still posted if the PDF fails."""
+    text = summary_text(repo, uid, now)
+    message_id = repo.add_message(uid, "agent", text, {"kind": KIND})
+    if records is not None and files is not None:
+        try:
+            save_summary_pdf(repo, records, files, uid, message_id, text, now, now)
+        except Exception:
+            log.exception("Weekly summary PDF not saved for %s", uid)
+    return message_id
+
+
+def ensure_summary(
+    repo: AgentDataRepository,
+    uid: str,
+    now: datetime,
+    records: RecordRepository | None = None,
+    files: FileStore | None = None,
+) -> bool:
     """Posts a summary unless one was posted in the last 7 days; True when posted."""
     last = repo.latest_of_kind(uid, KIND)
     if last is not None and now - last < WEEK - timedelta(hours=1):
         return False
-    repo.add_message(uid, "agent", summary_text(repo, uid, now), {"kind": KIND})
+    post_summary(repo, uid, now, records, files)
     return True
+
+
+def made_today(repo: AgentDataRepository, uid: str, now: datetime) -> bool:
+    """D-105: one on-request summary a day (each one is also a PDF in Records)."""
+    last = repo.latest_of_kind(uid, KIND)
+    return last is not None and last.astimezone(MYT).date() == now.astimezone(MYT).date()
 
 
 @dataclass
@@ -95,6 +187,8 @@ class WeeklySummaryJob:
     repo: AgentDataRepository
     patients: DeteriorationRepository
     notifier: Notifier
+    records: RecordRepository | None = None
+    files: FileStore | None = None
 
     def run(self, now: datetime | None = None, force: bool = False) -> dict[str, Any]:
         now = now or datetime.now(UTC)
@@ -102,7 +196,7 @@ class WeeklySummaryJob:
             return {"weeklySummaries": 0}
         posted = 0
         for uid, _ in self.patients.active_patients():
-            if ensure_summary(self.repo, uid, now):
+            if ensure_summary(self.repo, uid, now, self.records, self.files):
                 posted += 1
                 self.notifier.notify(
                     uid,
@@ -119,5 +213,7 @@ def get_weekly_summary_job(
     repo: AgentDataRepository = Depends(get_agent_data_repository),
     patients: DeteriorationRepository = Depends(get_deterioration_repository),
     notifier: Notifier = Depends(get_notifier),
+    records: RecordRepository = Depends(get_record_repository),
+    files: FileStore = Depends(get_file_store),
 ) -> WeeklySummaryJob:
-    return WeeklySummaryJob(repo, patients, notifier)
+    return WeeklySummaryJob(repo, patients, notifier, records, files)

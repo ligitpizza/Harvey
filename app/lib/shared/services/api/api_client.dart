@@ -832,6 +832,10 @@ class ApiClient {
   /// D-76: posts this week's summary to the Harvey Assistant if none yet.
   Future<Map<String, dynamic>> ensureWeeklySummary() => _post('/agent/weekly-summary', const {});
 
+  /// D-105: make this week's summary now (saved to Records as a PDF).
+  Future<Map<String, dynamic>> createWeeklySummary() =>
+      _post('/agent/weekly-summary/create', const {});
+
   Future<Map<String, dynamic>> updateAddress(String address, {double? lat, double? lng}) =>
       _send('PUT', '/settings/address', {'address': address, 'lat': lat, 'lng': lng});
 

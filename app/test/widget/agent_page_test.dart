@@ -57,6 +57,25 @@ class FakeAgentRepository implements AgentRepository {
 
   @override
   Future<void> saveSummaryPdf(String messageId) async => savedPdfs.add(messageId);
+
+  int created = 0;
+  Object? createError;
+
+  @override
+  Future<void> createSummary() async {
+    if (createError != null) throw createError!;
+    created++;
+    emit([
+      ...current,
+      AgentMessage(
+        id: 'w${current.length}',
+        fromPatient: false,
+        text: 'Your weekly health summary',
+        kind: 'weekly_summary',
+        savedRecordId: 'weekly_x',
+      ),
+    ]);
+  }
 }
 
 Widget agentApp(FakeAgentRepository repo, {Widget home = const AgentPage()}) {
@@ -129,6 +148,29 @@ void main() {
       expect(repo.savedPdfs, ['w1']);
       expect(find.byKey(const Key('summary-saved-w1')), findsOneWidget);
       expect(find.text('Saved to your Records as a PDF.'), findsOneWidget);
+    });
+
+    tallTest('D-105 Create summary makes one, already saved in Records', (t) async {
+      await t.pumpWidget(agentApp(repo));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('create-summary')));
+      await t.pumpAndSettle();
+      expect(repo.created, 1);
+      expect(find.text('Summary made and saved to your Records.'), findsOneWidget);
+      expect(find.byKey(const Key('summary-saved-w0')), findsOneWidget);
+      expect(find.text('Open in Records'), findsOneWidget);
+    });
+
+    tallTest('D-105 a second summary the same day explains why', (t) async {
+      repo.createError = ApiException(
+        'SUMMARY_ALREADY_TODAY',
+        "You already have today's summary. It's in the chat and in your Records.",
+      );
+      await t.pumpWidget(agentApp(repo));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('create-summary')));
+      await t.pumpAndSettle();
+      expect(find.textContaining("already have today's summary"), findsOneWidget);
     });
 
     tallTest('a suggestion chip asks that question', (t) async {
