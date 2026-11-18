@@ -13,6 +13,7 @@ import 'package:hypertension/features/orders/presentation/order_track_page.dart'
 import 'package:hypertension/features/orders/presentation/order_widgets.dart';
 import 'package:hypertension/features/orders/presentation/orders_page.dart';
 import 'package:hypertension/features/orders/presentation/pharmacy_page.dart';
+import 'package:hypertension/features/orders/presentation/staff_order_page.dart';
 import 'package:hypertension/features/orders/state/orders_providers.dart';
 import 'package:hypertension/shared/services/api/api_client.dart';
 
@@ -62,6 +63,16 @@ Widget host(String initial) {
       GoRoute(
         path: '/pharmacy/patients',
         builder: (_, _) => const Scaffold(body: PharmacyPatientsPage()),
+      ),
+      GoRoute(
+        path: '/pharmacy/order/:id',
+        builder: (_, s) => Scaffold(
+          body: StaffOrderPage(
+            orderId: s.pathParameters['id']!,
+            backPath: s.uri.queryParameters['back'] ?? '/pharmacy/tracking',
+            backLabel: s.uri.queryParameters['backLabel'],
+          ),
+        ),
       ),
       GoRoute(
         path: '/admin/deliveries',
@@ -437,6 +448,24 @@ void main() {
       lowStockAt: 50,
       low: false,
     );
+
+    tallTest('D-109 tapping a queue card opens the order, which links to the patient', (t) async {
+      final o = anOrder(
+        status: Fulfilment.preparing,
+        paymentStatus: 'paid',
+        method: selfCollection,
+      );
+      repo
+        ..queueData = PharmacyQueue(orders: [o], needsPrice: const [])
+        ..orders = {id: o};
+      await t.pumpWidget(host('/pharmacy'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Siti'));
+      await t.pumpAndSettle();
+      expect(find.text('Order CF-ABC123'), findsOneWidget);
+      expect(find.byKey(const Key('order-view-patient')), findsOneWidget);
+      expect(find.text('Orders'), findsOneWidget); // back to the Orders tabs
+    });
 
     tallTest('mark a paid order ready from stock', (t) async {
       repo

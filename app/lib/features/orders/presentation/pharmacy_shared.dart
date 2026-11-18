@@ -32,6 +32,9 @@ Future<void> runPharmacyAction(
   }
 }
 
+/// D-109: one order from the pharmacy Orders tabs; its back button returns there.
+String pharmacyOrderPath(String id) => '/pharmacy/order/$id?back=/pharmacy&backLabel=Orders';
+
 String isoDate(DateTime d) =>
     '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 

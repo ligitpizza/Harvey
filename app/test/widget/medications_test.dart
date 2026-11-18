@@ -65,8 +65,16 @@ class FakeMedicationsRepository implements MedicationsRepository {
   Future<void> delete(String id) async => deleted.add(id);
 }
 
-Medication med(String id, String name, String schedule, {double? qty, double? rate}) => Medication(
+Medication med(
+  String id,
+  String name,
+  String schedule, {
+  double? qty,
+  double? rate,
+  String? source,
+}) => Medication(
   id: id,
+  source: source ?? 'patient',
   patientId: 'p1',
   name: name,
   dosage: '5mg',
@@ -270,7 +278,9 @@ void main() {
 
   testWidgets('UC5.2 refill alert opens a pre-filled request to the doctor', (t) async {
     await t.pumpWidget(
-      app(FakeMedicationsRepository(), [med('m1', 'Lisinopril', '20:00', qty: 3)]),
+      app(FakeMedicationsRepository(), [
+        med('m1', 'Lisinopril', '20:00', qty: 3, source: 'doctor'),
+      ]),
     );
     await t.pumpAndSettle();
     await t.scrollUntilVisible(find.byKey(const Key('request-refill-m1')), 200);
@@ -281,9 +291,20 @@ void main() {
     expect(pushed.single.$2, contains('running low on Lisinopril 5mg'));
   });
 
+  testWidgets('D-107 a self-added medicine says buy more, no doctor request', (t) async {
+    await t.pumpWidget(
+      app(FakeMedicationsRepository(), [med('m1', 'Lisinopril', '20:00', qty: 3)]),
+    );
+    await t.pumpAndSettle();
+    await t.scrollUntilVisible(find.byKey(const Key('buy-more-m1')), 200);
+    expect(find.byKey(const Key('request-refill-m1')), findsNothing);
+  });
+
   testWidgets('refill request without an assigned doctor explains why', (t) async {
     await t.pumpWidget(
-      app(FakeMedicationsRepository(), [med('m1', 'Lisinopril', '20:00', qty: 3)], doctorId: null),
+      app(FakeMedicationsRepository(), [
+        med('m1', 'Lisinopril', '20:00', qty: 3, source: 'doctor'),
+      ], doctorId: null),
     );
     await t.pumpAndSettle();
     await t.scrollUntilVisible(find.byKey(const Key('request-refill-m1')), 200);

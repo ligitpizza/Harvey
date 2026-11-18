@@ -300,8 +300,8 @@ class _QueueCard extends ConsumerWidget {
       color: theme.colorScheme.surfaceContainerLowest,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        // D-69: the patient's dispensing details.
-        onTap: () => context.go('/pharmacy/patients/${o.patientId}'),
+        // D-109: the order itself; it links to the patient.
+        onTap: () => context.go(pharmacyOrderPath(o.id)),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
@@ -413,7 +413,7 @@ class _CompletedList extends StatelessWidget {
           ListTile(
             key: Key('completed-${o.id}'),
             contentPadding: EdgeInsets.zero,
-            onTap: () => context.go('/pharmacy/order/${o.id}'),
+            onTap: () => context.go(pharmacyOrderPath(o.id)),
             leading: Icon(
               o.receivedAt != null
                   ? Icons.verified
@@ -692,7 +692,7 @@ class _WaitingForPatient extends ConsumerWidget {
             ListTile(
               key: Key('incoming-${o.id}'),
               contentPadding: EdgeInsets.zero,
-              onTap: () => context.go('/pharmacy/patients/${o.patientId}'),
+              onTap: () => context.go(pharmacyOrderPath(o.id)),
               leading: const Icon(Icons.hourglass_top_outlined),
               title: Text(
                 '${o.patientName ?? 'Patient'} · '

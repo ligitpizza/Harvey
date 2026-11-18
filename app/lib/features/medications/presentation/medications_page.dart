@@ -1070,27 +1070,36 @@ class _RefillCard extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 12),
-            // Until Module 13 (pharmacy orders), a refill request goes to the doctor (D-43).
-            FilledButton(
-              key: Key('request-refill-${med.id}'),
-              style: FilledButton.styleFrom(backgroundColor: scheme.error),
-              onPressed: doctorId == null || doctorId.trim().isEmpty
-                  ? () => ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'No doctor is assigned to you yet, so a refill '
-                          'cannot be requested in the app.',
+            // D-107: a medicine the patient added themselves isn't the doctor's to renew.
+            if (!med.fromDoctor)
+              Text(
+                'Running low. Buy more before it runs out, or update the quantity '
+                'once you have.',
+                key: Key('buy-more-${med.id}'),
+                style: TextStyle(color: scheme.onErrorContainer),
+              )
+            else
+              // A doctor-prescribed refill request goes to the doctor (D-43).
+              FilledButton(
+                key: Key('request-refill-${med.id}'),
+                style: FilledButton.styleFrom(backgroundColor: scheme.error),
+                onPressed: doctorId == null || doctorId.trim().isEmpty
+                    ? () => ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'No doctor is assigned to you yet, so a refill '
+                            'cannot be requested in the app.',
+                          ),
                         ),
+                      )
+                    : () => context.push(
+                        '/chat/${doctorId.trim()}',
+                        extra:
+                            'Hello doctor, I am running low on ${med.name} ${med.dosage} '
+                            '(about $days days left). Could you please renew my prescription?',
                       ),
-                    )
-                  : () => context.push(
-                      '/chat/${doctorId.trim()}',
-                      extra:
-                          'Hello doctor, I am running low on ${med.name} ${med.dosage} '
-                          '(about $days days left). Could you please renew my prescription?',
-                    ),
-              child: const Text('Request refill from doctor'),
-            ),
+                child: const Text('Request refill from doctor'),
+              ),
           ],
         ),
       ),

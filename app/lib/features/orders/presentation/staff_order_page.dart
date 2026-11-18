@@ -82,7 +82,24 @@ class StaffOrderPage extends ConsumerWidget {
                     OrderStatusChip.of(o),
                   ],
                 ),
-                Text('${o.patientName ?? 'Patient'} · ${cycleLabel(o.cycleDate)}'),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text('${o.patientName ?? 'Patient'} · ${cycleLabel(o.cycleDate)}'),
+                    ),
+                    // D-109: from the order to the patient's page.
+                    TextButton.icon(
+                      key: const Key('order-view-patient'),
+                      onPressed: () => context.go(
+                        backPath.startsWith('/pharmacy')
+                            ? '/pharmacy/patients/${o.patientId}'
+                            : '/admin/users/${o.patientId}',
+                      ),
+                      icon: const Icon(Icons.person_outline, size: 18),
+                      label: const Text('View patient'),
+                    ),
+                  ],
+                ),
                 if (o.status == Fulfilment.cancelled)
                   Card(
                     key: const Key('staff-cancel-reason'),
