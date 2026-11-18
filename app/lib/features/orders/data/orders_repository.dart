@@ -45,6 +45,9 @@ abstract interface class OrdersRepository {
 
   /// D-89: cancel the courier booking; the delivery fails.
   Future<void> cancelCourier(String id, String reason);
+
+  /// D-106: a new courier for a failed delivery, booked by the pharmacist.
+  Future<void> rebookCourier(String id);
   Future<List<StockItem>> stock();
   Future<void> addStock({
     required String name,
@@ -191,6 +194,9 @@ class ApiOrdersRepository implements OrdersRepository {
 
   @override
   Future<void> cancelCourier(String id, String reason) => _api.cancelCourier(id, reason);
+
+  @override
+  Future<void> rebookCourier(String id) => _api.rebookCourier(id);
 
   @override
   Future<List<StockItem>> stock() async => [

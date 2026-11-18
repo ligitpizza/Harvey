@@ -481,6 +481,28 @@ void main() {
       expect(find.text('Orders'), findsOneWidget); // back to the Orders tabs
     });
 
+    tallTest('D-106 the pharmacist rebooks a failed delivery', (t) async {
+      repo.queueData = PharmacyQueue(
+        orders: [
+          anOrder(
+            status: Fulfilment.failed,
+            paymentStatus: 'paid',
+            method: homeDelivery,
+            failureReason: 'Driver rejected it',
+          ),
+        ],
+        needsPrice: const [],
+      );
+      await t.pumpWidget(host('/pharmacy'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('orders-tab-delivery')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('rebook-$id')));
+      await t.pumpAndSettle();
+      expect(repo.calls, contains('rebook:$id'));
+      expect(find.text('New courier booked.'), findsOneWidget);
+    });
+
     tallTest('mark a paid order ready from stock', (t) async {
       repo
         ..queueData = PharmacyQueue(

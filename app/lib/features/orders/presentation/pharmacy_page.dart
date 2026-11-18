@@ -282,6 +282,18 @@ class _QueueCard extends ConsumerWidget {
           onPressed: () => cancelCourierWithReason(context, ref, o),
           child: const Text('Cancel courier'),
         ),
+      // D-106: the pharmacist can book a new courier for a failed delivery.
+      if (o.status == Fulfilment.failed && o.isDelivery)
+        FilledButton(
+          key: Key('rebook-${o.id}'),
+          onPressed: () => runPharmacyAction(
+            context,
+            ref,
+            () => ref.read(ordersRepositoryProvider).rebookCourier(o.id),
+            'New courier booked.',
+          ),
+          child: const Text('Rebook courier'),
+        ),
       if (o.status == Fulfilment.readyForCollection)
         FilledButton.tonal(
           key: Key('collected-${o.id}'),

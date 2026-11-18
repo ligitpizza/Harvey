@@ -446,6 +446,29 @@ def test_d89_pharmacist_cancels_the_courier_booking(
     assert again.status_code == 409
 
 
+def test_d106_pharmacist_rebooks_a_failed_delivery(
+    make_client: Any, order_repo: InMemoryOrderRepository
+) -> None:
+    c, courier = _searching_client(make_client)
+    oid = _home_order(c, order_repo)
+    pharm = bearer("pharmacist-token")
+    url = f"/api/v1/pharmacy/orders/{oid}/rebook"
+    # Not failed yet: nothing to rebook.
+    assert c.post(url, headers=pharm).json()["error"]["code"] == "ORDER_NOT_FAILED"
+    first = order_repo.orders[oid]["courierRef"]
+    c.post(
+        f"/api/v1/pharmacy/orders/{oid}/cancel-courier",
+        json={"reason": "Driver rejected it"},
+        headers=pharm,
+    )
+    assert c.post(url, headers=bearer("patient-token")).status_code == 403
+    res = c.post(url, headers=pharm)
+    assert res.status_code == 200, res.text
+    assert res.json()["fulfilmentStatus"] == "ready_for_delivery"
+    assert order_repo.orders[oid]["paymentStatus"] == "paid"  # no new charge
+    assert order_repo.orders[oid]["courierRef"] != first and courier.cancelled == [first]
+
+
 def test_d89_cannot_cancel_after_pickup(
     make_client: Any, order_repo: InMemoryOrderRepository
 ) -> None:

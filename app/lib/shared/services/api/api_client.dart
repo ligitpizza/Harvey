@@ -616,6 +616,9 @@ class ApiClient {
       _post('/pharmacy/orders/$id/cancel', {'reason': reason});
 
   /// D-89: give up on a courier booking (the delivery fails; the patient rebooks).
+  /// D-106: the pharmacist books a new courier for a failed delivery.
+  Future<void> rebookCourier(String id) => _send('POST', '/pharmacy/orders/$id/rebook', null);
+
   Future<void> cancelCourier(String id, String reason) =>
       _post('/pharmacy/orders/$id/cancel-courier', {'reason': reason});
 

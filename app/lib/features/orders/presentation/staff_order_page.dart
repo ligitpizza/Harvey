@@ -120,6 +120,24 @@ class StaffOrderPage extends ConsumerWidget {
                       label: const Text('Cancel order'),
                     ),
                   ),
+                if (o.status == Fulfilment.failed && o.isDelivery)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilledButton.icon(
+                      key: const Key('staff-rebook-courier'),
+                      onPressed: () async {
+                        await runPharmacyAction(
+                          context,
+                          ref,
+                          () => ref.read(ordersRepositoryProvider).rebookCourier(o.id),
+                          'New courier booked.',
+                        );
+                        ref.invalidate(orderProvider(orderId));
+                      },
+                      icon: const Icon(Icons.local_shipping_outlined),
+                      label: const Text('Rebook courier'),
+                    ),
+                  ),
                 if (o.canCancelCourier)
                   Align(
                     alignment: Alignment.centerLeft,

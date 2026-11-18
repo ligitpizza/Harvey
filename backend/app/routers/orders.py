@@ -2,10 +2,11 @@
 
 Patient   GET  /orders, GET /orders/{id}; POST /orders/{id}/confirm | pay |
           pay/fake | pay/refresh | reschedule | switch-to-collection; POST /orders/dev/next-cycle
-Doctor    POST /prescriptions/{id}/recurring
+Doctor    POST /prescriptions/{id}/recurring; POST /doctor/orders/{id}/skip (D-104)
 Pharmacy  GET  /pharmacy/queue, /pharmacy/stock, /pharmacy/patients;
           PUT  /pharmacy/prescriptions/{id}/price;
-          POST /pharmacy/orders/{id}/ready | out-of-stock | collected; stock add / edit / receive
+          POST /pharmacy/orders/{id}/ready | out-of-stock | collected | rebook;
+          stock add / edit / receive
 Admin     GET  /admin/deliveries; POST /admin/deliveries/{id}/dispatch | simulate-failure
 Webhooks  POST /webhooks/stripe, /webhooks/grab
 
@@ -540,6 +541,20 @@ def cancel_order(
     role = user.role.value if user.role else "staff"
     try:
         svc.cancel(order_id, user.uid, role, body.reason)
+    except OrderError as e:
+        raise _api(e) from e
+
+
+@router.post("/pharmacy/orders/{order_id}/rebook")
+def rebook_courier(
+    order_id: str,
+    user: CurrentUser = Depends(pharmacy_staff),
+    svc: OrderService = Depends(get_order_service),
+) -> dict[str, Any]:
+    """D-106: the pharmacist books a new courier for a failed delivery (the patient already
+    chose and paid for delivery). Same as the patient's reschedule (FR-13.5)."""
+    try:
+        return _view(svc, order_id, svc.reschedule(order_id, user.uid))
     except OrderError as e:
         raise _api(e) from e
 
