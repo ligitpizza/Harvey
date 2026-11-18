@@ -1654,3 +1654,13 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - **D-111:** `GET /triage/{id}`; `reason`, `heartRate` stored on `triage_outcomes`; `TriageResultLoader`; past checks list; outcome-based AI questions.
 - **D-112:** order page cards for delivery, collection, items/payment and cancelled/skipped.
 - Tests: backend `test_orders.py`, `test_lalamove.py`, `test_reports.py`, `test_triage.py`, `test_auth_register.py`, `test_walk_in.py`; app `orders_test.dart`, `doctor_portal_test.dart`, `agent_page_test.dart`, `symptom_checker_test.dart`, `trends_page_test.dart`, `vitals_pages_test.dart`, `medications_test.dart`, `auth_pages_test.dart`, `ic_number_test.dart`.
+
+### 2026-11-19 - UAT round 2 fixes (D-113 to D-117)
+
+- **D-113:** `agent_context.section_symptom_checks` + `AgentDataRepository.recent_symptom_checks` (uses the existing `triage_outcomes` patientId/generatedAt index); emergency regex narrowed to sudden blurred vision; `TriageResultPage.quickReplies` skips red-flag symptoms; `openRecordById` in `record_widgets.dart` used by the weekly summary card and the order page; `MedicationOrder.receiptRecordId`; order detail rows reworked so amounts and long values don't wrap badly.
+- **D-114:** `StockRules`, `CatalogRules`, `StockDialog` (catalogue or typed medicine, warning level, expiry check) and `CatalogFormDialog` (add and edit) in `pharmacy_shared.dart`; `PromptDialog.errorFor`; inventory tabs rebuilt on `WideTable` / `TablePill` / `TableSummaryChip` (`shared/widgets/wide_table.dart`).
+- **D-115:** `shared/widgets/reorderable_card_grid.dart` (`arrange`, `move`, per-user key `dashboard-order:<role>:<uid>`); `dashboards.dart` `_layout` uses it for all three roles.
+- **D-116:** `shared/widgets/profile_header.dart` (`ProfileHeaderCard`, `ProfileBadge`, `InfoSection`); pharmacy patients list and patient page, admin user list (`roleColor`, `_UserHeader`), admin user page and patient dialog restyled; Records filter row scrolls sideways.
+- **D-117:** doctor patient page (risk list, `alert_detail_page.dart`, medicine cards, `StructuredText`, care plan timeline), logged after the fact.
+- Tests: backend `test_agent.py` (D-113 context, blurred-vision question); Flutter `uat_round2_test.dart` (record links, inventory rules and dialogs, dashboard drag and reset), `orders_test.dart` (fee after switching to collection); admin, inventory and stock tests updated for the new UI.
+
