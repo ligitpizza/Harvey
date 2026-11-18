@@ -62,7 +62,10 @@ _EMERGENCY = [
     r"(having|had|think i'?m having) a stroke|stroke symptoms",
     r"\bfainted\b|passed out|unconscious|\bcollapsed?\b",
     r"worst headache|severe headache|sudden (severe )?headache",
-    r"(lost|losing|loss of|sudden) (my )?(vision|sight)|blurred vision|can'?t see properly",
+    # D-113: plain "blurred vision" is a common symptom in the checker's catalogue (not a red
+    # flag), so asking how to manage it is not an emergency; sudden vision change still is.
+    r"(lost|losing|loss of|sudden) (my )?(vision|sight)|sudden(ly)? blurr?(ed|y) vision"
+    r"|can'?t see properly",
     r"\bseizure",
     r"sakit dada|sesak nafas|\bpengsan\b",
 ]

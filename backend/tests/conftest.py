@@ -1194,6 +1194,7 @@ class InMemoryAgentDataRepository:
         self.appointments: dict[str, list[dict[str, Any]]] = {}
         self.plans: dict[str, dict[str, Any]] = {}
         self.prescriptions: dict[str, list[dict[str, Any]]] = {}
+        self.symptom_checks: dict[str, list[dict[str, Any]]] = {}
         self.messages: list[dict[str, Any]] = []
         self.sent_at: list[datetime] = []
 
@@ -1223,6 +1224,9 @@ class InMemoryAgentDataRepository:
 
     def recent_prescriptions(self, uid: str, limit: int) -> list[dict[str, Any]]:
         return self.prescriptions.get(uid, [])[:limit]
+
+    def recent_symptom_checks(self, uid: str, limit: int) -> list[dict[str, Any]]:
+        return self.symptom_checks.get(uid, [])[:limit]
 
     def recent_turns(self, uid: str, limit: int) -> list[Turn]:
         mine = [m for m in self.messages if m["patientId"] == uid][-limit:]

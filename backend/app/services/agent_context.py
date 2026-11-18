@@ -78,6 +78,10 @@ class AgentDataRepository(Protocol):
 
     def recent_prescriptions(self, uid: str, limit: int) -> list[dict[str, Any]]: ...
 
+    def recent_symptom_checks(self, uid: str, limit: int) -> list[dict[str, Any]]:
+        """D-113: the newest symptom checks, symptom ids resolved to names."""
+        ...
+
     def recent_turns(self, uid: str, limit: int) -> list[Turn]:
         """Oldest first."""
         ...
@@ -163,6 +167,24 @@ class FirestoreAgentDataRepository:
             .limit(limit)
         )
         return [dict(d.to_dict()) for d in query.stream()]
+
+    def recent_symptom_checks(self, uid: str, limit: int) -> list[dict[str, Any]]:
+        query = (
+            self._where(Collection.TRIAGE_OUTCOMES, uid)
+            .order_by("generatedAt", direction=firestore.Query.DESCENDING)
+            .limit(limit)
+        )
+        rows = [dict(d.to_dict()) for d in query.stream()]
+        ids = {str(i) for r in rows for i in r.get("symptoms") or []}
+        catalog = self._db.collection(Collection.SYMPTOM_CATALOG.value)
+        names: dict[str, str] = {}
+        if ids:
+            for snap in self._db.get_all([catalog.document(i) for i in ids]):
+                if snap.exists:
+                    names[snap.id] = str(snap.to_dict().get("name"))
+        for r in rows:
+            r["symptomNames"] = [names.get(str(i), str(i)) for i in r.get("symptoms") or []]
+        return rows
 
     def recent_turns(self, uid: str, limit: int) -> list[Turn]:
         query = (
@@ -350,6 +372,37 @@ def section_care_plan(c: Ctx) -> str:
     return f"CARE PLAN FROM DOCTOR (updated {_when(plan.get('updatedAt'))}):\n{plan['content']}"
 
 
+_OUTCOME_TEXT = {
+    "monitor_at_home": "monitor at home",
+    "contact_doctor": "contact your doctor",
+    "seek_emergency_care": "seek emergency care",
+}
+
+
+def section_symptom_checks(c: Ctx) -> str:
+    """D-113: so "explain my symptom check result" has something to explain."""
+    checks = c.repo.recent_symptom_checks(c.uid, 3)
+    if not checks:
+        return "SYMPTOM CHECKS: none done yet."
+    lines = []
+    for t in checks:
+        names = ", ".join(t.get("symptomNames") or []) or "no symptoms listed"
+        outcome = _OUTCOME_TEXT.get(str(t.get("outcome")), str(t.get("outcome")))
+        line = f"- {_when(t.get('generatedAt'))}: {names}"
+        if t.get("severity"):
+            line += f" (patient rated it {t['severity']})"
+        line += f". Result: {outcome}."
+        if t.get("reason"):
+            line += f" Why: {t['reason']}"
+        if t.get("heartRate"):
+            line += f" Heart rate {t['heartRate']} bpm (camera estimate)."
+        lines.append(line)
+    return (
+        "SYMPTOM CHECKS (the patient's own checker results, newest first; rule-based triage, "
+        "not a diagnosis):\n" + "\n".join(lines)
+    )
+
+
 SECTIONS: list[Callable[[Ctx], str]] = [
     section_about,
     section_history,
@@ -359,6 +412,7 @@ SECTIONS: list[Callable[[Ctx], str]] = [
     section_prescriptions,
     section_appointments,
     section_care_plan,
+    section_symptom_checks,
 ]
 
 

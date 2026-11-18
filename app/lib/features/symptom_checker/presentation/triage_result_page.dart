@@ -64,8 +64,10 @@ class TriageResultPage extends ConsumerWidget {
 
   /// D-111: questions for the AI chat that fit the outcome (mild / moderate / critical),
   /// plus one about the first symptom. Tapping one sends it.
+  /// D-113: a red-flag symptom (blurred vision, chest pain) is never put in a question:
+  /// the agent's safety check would rightly answer it with "call 999" instead.
   static List<String> quickReplies(TriageResult r) {
-    final symptom = r.symptoms.firstOrNull?.name.toLowerCase();
+    final symptom = r.symptoms.where((s) => !s.isRedFlag).firstOrNull?.name.toLowerCase();
     return switch (r.outcome) {
       TriageOutcome.monitorAtHome => [
         'Explain my symptom check result',

@@ -104,6 +104,8 @@ def test_self_harm_is_detected(text: str) -> None:
         "I can't see my readings in the app",
         "What was my blood pressure yesterday?",
         "Should I exercise?",
+        # D-113: asking how to manage a common symptom is not reporting an emergency.
+        "What can I do at home about blurred vision?",
     ],
 )
 def test_normal_questions_are_not_flagged(text: str) -> None:
@@ -130,7 +132,8 @@ def test_uc2_6_context_contains_patient_data_and_empty_sections(
     # Modules not built yet say so instead of failing (fill in automatically later).
     assert "MEDICATIONS: none recorded." in ctx
     assert "UPCOMING APPOINTMENTS: none booked." in ctx
-    assert len(SECTIONS) == 8
+    assert "SYMPTOM CHECKS: none done yet." in ctx
+    assert len(SECTIONS) == 9
 
 
 def test_d40_context_names_the_contributing_factors(
@@ -418,3 +421,23 @@ def test_chat_still_answers_when_history_or_a_context_source_fails(
     assert history == []
     assert "RISK: temporarily unavailable." in system
     assert "BLOOD PRESSURE" in system  # other sections still present
+
+
+def test_d113_context_explains_the_latest_symptom_check(
+    agent_repo: InMemoryAgentDataRepository,
+) -> None:
+    agent_repo.symptom_checks[P] = [
+        {
+            "generatedAt": NOW,
+            "symptomNames": ["Blurred Vision", "Headache"],
+            "severity": "mild",
+            "outcome": "monitor_at_home",
+            "reason": "Mild symptoms and a normal reading.",
+            "heartRate": 72,
+        }
+    ]
+    ctx = build_context(agent_repo, P, NOW)
+    assert "SYMPTOM CHECKS" in ctx
+    assert "Blurred Vision, Headache (patient rated it mild). Result: monitor at home." in ctx
+    assert "Why: Mild symptoms and a normal reading." in ctx
+    assert "Heart rate 72 bpm (camera estimate)." in ctx
