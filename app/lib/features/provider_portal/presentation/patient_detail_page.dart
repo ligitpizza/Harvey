@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/structured_text.dart';
 import 'alert_detail_page.dart' show openAlert;
 import '../../symptom_checker/presentation/triage_result_page.dart' show TriageResultLoader;
 import '../../vitals/presentation/reading_detail_page.dart' show openReading;
@@ -404,12 +405,36 @@ class _HistoryTabs extends ConsumerWidget {
                       emptyText: 'No care plan yet. Use "Care plan" above to write one.',
                       builder: (p) => ListView(
                         children: [
-                          Text(
-                            'Updated ${formatDate(p!.updatedAt)}',
-                            style: Theme.of(context).textTheme.bodySmall,
+                          Card(
+                            key: const Key('care-plan-current'),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.assignment_outlined,
+                                        size: 18,
+                                        color: Theme.of(context).colorScheme.primary,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          'Updated ${formatDate(p!.updatedAt)}',
+                                          style: Theme.of(context).textTheme.labelLarge,
+                                        ),
+                                      ),
+                                      const _Tag('Current'),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  StructuredText(p.content),
+                                ],
+                              ),
+                            ),
                           ),
-                          const SizedBox(height: 8),
-                          SelectableText(p.content),
                         ],
                       ),
                     ),
@@ -452,18 +477,47 @@ class NotesList extends StatelessWidget {
     value: notes,
     isEmpty: (n) => n.isEmpty,
     emptyText: 'No clinical notes yet.',
-    builder: (n) => ListView.separated(
+    builder: (n) => ListView.builder(
       shrinkWrap: shrinkWrap,
       physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
       itemCount: n.length,
-      separatorBuilder: (_, _) => const Divider(),
-      itemBuilder: (_, i) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(formatDate(n[i].createdAt), style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 4),
-          SelectableText(n[i].content),
-        ],
+      itemBuilder: (_, i) => Card(
+        key: Key('note-${n[i].id}'),
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        clipBehavior: Clip.antiAlias,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(
+                color: i == 0
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.outlineVariant,
+                width: 4,
+              ),
+            ),
+          ),
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.edit_note, size: 18, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      formatDate(n[i].createdAt),
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                  ),
+                  if (i == 0) const _Tag('Latest'),
+                ],
+              ),
+              const SizedBox(height: 8),
+              StructuredText(n[i].content),
+            ],
+          ),
+        ),
       ),
     ),
   );
@@ -779,6 +833,28 @@ class _MedicineCard extends StatelessWidget {
           const SizedBox(height: 4),
           DoseNotableList(medication: m),
         ],
+      ),
+    );
+  }
+}
+
+/// A small rounded label ("Latest", "Current").
+class _Tag extends StatelessWidget {
+  const _Tag(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: scheme.onPrimaryContainer),
       ),
     );
   }
