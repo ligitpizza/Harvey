@@ -30,6 +30,9 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | gender | String | Patient's gender | Present only when role = patient |
 | onboardingComplete | Boolean | Whether the onboarding health profile is complete | Present only when role = patient; default false |
 | assignedDoctorId | Reference (users) | Currently assigned doctor | Present only when role = patient; null until UC7.3 assignment |
+| icNumber | String | D-51: MyKad number, "YYMMDD-PB-####" | Patients with a MyKad; unique among users |
+| passportNumber | String | D-103: a foreign patient's passport number (instead of icNumber), upper-case | Optional; 5-15 letters and digits; unique among users |
+| nationality | String | D-103: nationality shown on the passport | Required with passportNumber |
 | specialty | String | Medical specialty | Present only when role = doctor |
 | maxPatients | Number | Caseload limit set by the admin (D-59) | Doctor only; optional, default 30 |
 | patientId | Reference (users) | Linked patient | Present only when role = family_member; null while the link is pending (UC15.1) |
