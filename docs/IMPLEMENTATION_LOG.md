@@ -1639,3 +1639,18 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - **D-100 backend:** `services/health_report.py` (`snapshot`, `report_pdf`, `save_report`); `POST /records/health-summary`, `POST /agent/messages/{id}/save-pdf`, `POST /provider/patients/{id}/reports`; `LOCKED_CATEGORIES` blocks recategorise/unshare/delete of doctor reports; `AgentDataRepository.message` and `mark_saved`.
 - **D-100 app:** Records "Health summary - Create" card, doctor reports shown "From Dr X - read-only" with only "Share to other apps"; "Save to Records as PDF" under each weekly summary; portal patient page "Write report" dialog (`write_report_dialog.dart`).
 - Tests: `tests/test_reports.py`; `test/widget/records_test.dart`, `agent_page_test.dart`, `doctor_portal_test.dart`, `medications_test.dart`.
+
+### 2026-11-18 - UAT round 1 fixes (D-101 to D-112)
+
+- **D-101/D-102:** Medicine received only after delivery; payment page refreshes the order (delivery fee shows at once); pharmacy queue reloads after a refused action.
+- **D-103:** `services/ic.py` `parse_identity` / `identity_label` / `mask_passport`; `patient_identity()` in `routers/auth.py` used by sign-up, walk-in and admin; `users.passportNumber`, `users.nationality`; app `IdentityFields` widget and `parseIdentity` / `IdInputFormatter` in `core/utils/ic_number.dart`.
+- **D-104:** patient skip removed; `POST /doctor/orders/{id}/skip` with a reason (`skipReason`, `skippedBy`, `skippedAt`); doctor's "Skip this month" on Medication delivery.
+- **D-105:** `weekly_summary.py` `post_summary` saves every summary to Records; `POST /agent/weekly-summary/create` (one a day); "make my weekly summary" in chat.
+- **D-106:** `POST /pharmacy/orders/{id}/rebook`; Rebook courier on the queue and order page.
+- **D-107:** self-added medicines show "buy more", no doctor request.
+- **D-108:** `services/pdf_layout.py` `HarveyDoc`; emergency event and hospital-wide PDFs use it.
+- **D-109:** pharmacy cards open `StaffOrderPage` (with View patient).
+- **D-110:** `reading_detail_page.dart`; `trend_extras.dart` (heart rate, categories, readings list, per-condition risk with factors); chart label overlap fixed.
+- **D-111:** `GET /triage/{id}`; `reason`, `heartRate` stored on `triage_outcomes`; `TriageResultLoader`; past checks list; outcome-based AI questions.
+- **D-112:** order page cards for delivery, collection, items/payment and cancelled/skipped.
+- Tests: backend `test_orders.py`, `test_lalamove.py`, `test_reports.py`, `test_triage.py`, `test_auth_register.py`, `test_walk_in.py`; app `orders_test.dart`, `doctor_portal_test.dart`, `agent_page_test.dart`, `symptom_checker_test.dart`, `trends_page_test.dart`, `vitals_pages_test.dart`, `medications_test.dart`, `auth_pages_test.dart`, `ic_number_test.dart`.

@@ -361,6 +361,8 @@ class _PatientSummary extends ConsumerWidget {
             if (user['email'] != null) (Icons.mail_outline, '${user['email']}'),
             if (profile['phone'] != null) (Icons.phone_outlined, '${profile['phone']}'),
             if (profile['icNumber'] != null) (Icons.badge_outlined, 'IC ${profile['icNumber']}'),
+            if (profile['passportNumber'] != null) // D-103
+              (Icons.badge_outlined, 'Passport ${profile['passportNumber']}'),
             (
               Icons.monitor_heart_outlined,
               reading == null
