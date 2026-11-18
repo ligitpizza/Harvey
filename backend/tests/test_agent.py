@@ -441,3 +441,61 @@ def test_d113_context_explains_the_latest_symptom_check(
     assert "Blurred Vision, Headache (patient rated it mild). Result: monitor at home." in ctx
     assert "Why: Mild symptoms and a normal reading." in ctx
     assert "Heart rate 72 bpm (camera estimate)." in ctx
+
+
+# ---------- D-118: backup models ----------
+
+
+def test_d118_model_chain_keeps_order_and_drops_repeats() -> None:
+    from app.integrations.gemini import model_chain
+
+    assert model_chain("m1", " m2, m1 ,, m3") == ["m1", "m2", "m3"]
+    assert model_chain("m1", "") == ["m1"]
+
+
+def test_d118_a_failed_model_hands_over_to_the_next(monkeypatch: pytest.MonkeyPatch) -> None:
+    import app.integrations.gemini as g
+
+    urls: list[str] = []
+    responses = [_Resp(503), _Resp(404), _Resp(200, OK)]
+
+    def fake_post(url: str, **kwargs: Any) -> _Resp:
+        urls.append(url)
+        return responses.pop(0)
+
+    monkeypatch.setattr("app.integrations.gemini.httpx.post", fake_post)
+    monkeypatch.setattr(g, "RETRY_DELAY_SECONDS", 0)
+    chain = g.FallbackLlmClient(
+        [
+            g.GeminiClient("key", "main", 5, retries=0),
+            g.GeminiClient("key", "backup-1", 5, retries=0),
+            g.GeminiClient("key", "backup-2", 5),
+        ]
+    )
+    assert chain.generate("sys", [], "hi") == "Hello"
+    assert [u.split("/models/")[1].split(":")[0] for u in urls] == ["main", "backup-1", "backup-2"]
+
+
+def test_d118_every_model_down_raises_for_the_fallback_reply() -> None:
+    from app.integrations.gemini import FallbackLlmClient, LlmError
+
+    chain = FallbackLlmClient([FakeLlmClient(fail=True), FakeLlmClient(fail=True)])
+    with pytest.raises(LlmError):
+        chain.generate("sys", [], "hi")
+
+
+def test_d118_settings_build_the_chain(monkeypatch: pytest.MonkeyPatch) -> None:
+    import app.integrations.gemini as g
+    from app.core.config import get_settings
+
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setenv("GEMINI_MODEL", "main")
+    monkeypatch.setenv("GEMINI_FALLBACK_MODELS", "b1,b2")
+    get_settings.cache_clear()
+    try:
+        client = g.get_llm_client()
+        assert isinstance(client, g.FallbackLlmClient)
+        models = [c.model for c in client.clients if isinstance(c, g.GeminiClient)]
+        assert models == ["main", "b1", "b2"]
+    finally:
+        get_settings.cache_clear()

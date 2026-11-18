@@ -50,10 +50,15 @@ class LlmClient(Protocol):
 
 
 class GeminiClient:
-    def __init__(self, api_key: str, model: str, timeout: float) -> None:
+    def __init__(self, api_key: str, model: str, timeout: float, retries: int = RETRIES) -> None:
         self._key = api_key
         self._model = model
         self._timeout = timeout
+        self._retries = retries
+
+    @property
+    def model(self) -> str:
+        return self._model
 
     def generate(self, system: str, history: list[Turn], message: str) -> str:
         contents = [
@@ -73,7 +78,7 @@ class GeminiClient:
             "generationConfig": config,
         }
         text = ""
-        for attempt in range(1 + RETRIES):
+        for attempt in range(1 + self._retries):
             try:
                 res = httpx.post(
                     API_URL.format(model=self._model),
@@ -87,14 +92,50 @@ class GeminiClient:
                 break
             except (httpx.HTTPError, KeyError, IndexError, ValueError) as exc:
                 # Never log the request: it contains health data.
-                log.warning("Gemini call failed (attempt %d): %s", attempt + 1, _describe(exc))
-                if attempt < RETRIES and _transient(exc):
+                log.warning(
+                    "Gemini %s failed (attempt %d): %s", self._model, attempt + 1, _describe(exc)
+                )
+                if attempt < self._retries and _transient(exc):
                     time.sleep(RETRY_DELAY_SECONDS)
                     continue
                 raise LlmError(_describe(exc)) from exc
         if not text:
             raise LlmError("empty reply")
         return text
+
+
+class FallbackLlmClient:
+    """D-118: asks each model in turn until one answers, so one model being down,
+    overloaded or retired does not stop the assistant. Raises the last error when every
+    model fails (the caller then shows the fallback reply, UC2.6 E1)."""
+
+    def __init__(self, clients: list[LlmClient]) -> None:
+        if not clients:
+            raise ValueError("at least one model is needed")
+        self.clients = clients
+
+    def generate(self, system: str, history: list[Turn], message: str) -> str:
+        error: LlmError | None = None
+        for i, client in enumerate(self.clients):
+            try:
+                return client.generate(system, history, message)
+            except LlmError as exc:
+                error = exc
+                if i + 1 < len(self.clients):
+                    log.warning(
+                        "Model %d of %d failed; trying the next one", i + 1, len(self.clients)
+                    )
+        raise error or LlmError("no model answered")
+
+
+def model_chain(primary: str, fallbacks: str) -> list[str]:
+    """The main model, then each fallback once, in order."""
+    out: list[str] = []
+    for m in [primary, *fallbacks.split(",")]:
+        m = m.strip()
+        if m and m not in out:
+            out.append(m)
+    return out
 
 
 class FakeLlmClient:
@@ -117,6 +158,20 @@ class FakeLlmClient:
 
 def get_llm_client() -> LlmClient:
     s = get_settings()
-    if s.gemini_api_key:
-        return GeminiClient(s.gemini_api_key, s.gemini_model, s.gemini_timeout_seconds)
-    return FakeLlmClient()
+    if not s.gemini_api_key:
+        return FakeLlmClient()
+    models = model_chain(s.gemini_model, s.gemini_fallback_models)
+    if len(models) == 1:
+        return GeminiClient(s.gemini_api_key, models[0], s.gemini_timeout_seconds)
+    # With backups, a busy model hands over at once; only the last model retries.
+    return FallbackLlmClient(
+        [
+            GeminiClient(
+                s.gemini_api_key,
+                m,
+                s.gemini_timeout_seconds,
+                retries=RETRIES if i == len(models) - 1 else 0,
+            )
+            for i, m in enumerate(models)
+        ]
+    )

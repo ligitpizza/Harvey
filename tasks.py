@@ -432,6 +432,9 @@ def task_deploy_backend() -> None:
             "ML_ARTIFACTS_DIR=/srv/ml_artifacts",
             "FCM_ENABLED=true",
             f"GEMINI_MODEL={_local_env('GEMINI_MODEL') or 'gemini-3.1-flash-lite'}",
+            # D-118: backup models, tried in order when the main one fails.
+            "GEMINI_FALLBACK_MODELS="
+            + (_local_env("GEMINI_FALLBACK_MODELS") or "gemini-2.5-flash-lite,gemini-2.5-flash"),
             # D-57 testing aid; set DEV_APPOINTMENT_TIMES=false in backend/.env for real use.
             f"DEV_APPOINTMENT_TIMES={_local_env('DEV_APPOINTMENT_TIMES') or 'false'}",
             # D-66: publishable key is public by design; the secret key goes via Secret Manager.

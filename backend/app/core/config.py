@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     # AI Health Agent (FR-14.1, docs/06 §G). Empty key = offline fake replies.
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.1-flash-lite"
+    # D-118: tried in order when the main model fails (down, overloaded, retired).
+    # Comma-separated; empty turns the fallback off.
+    gemini_fallback_models: str = "gemini-2.5-flash-lite,gemini-2.5-flash"
     gemini_timeout_seconds: float = 12.0
     # Per-patient agent requests per minute (protects the Gemini quota).
     agent_rate_per_minute: int = 10

@@ -1663,4 +1663,5 @@ Raw notes for FYP Chapter 5. Append one entry per completed module.
 - **D-116:** `shared/widgets/profile_header.dart` (`ProfileHeaderCard`, `ProfileBadge`, `InfoSection`); pharmacy patients list and patient page, admin user list (`roleColor`, `_UserHeader`), admin user page and patient dialog restyled; Records filter row scrolls sideways.
 - **D-117:** doctor patient page (risk list, `alert_detail_page.dart`, medicine cards, `StructuredText`, care plan timeline), logged after the fact.
 - Tests: backend `test_agent.py` (D-113 context, blurred-vision question); Flutter `uat_round2_test.dart` (record links, inventory rules and dialogs, dashboard drag and reset), `orders_test.dart` (fee after switching to collection); admin, inventory and stock tests updated for the new UI.
+- **D-118:** `integrations/gemini.py` `FallbackLlmClient` and `model_chain`; `GeminiClient(retries=)`; setting `gemini_fallback_models` (`GEMINI_FALLBACK_MODELS`, passed by `tasks.py` deploy); tests in `test_agent.py`. All three models checked live with the project key.
 
