@@ -668,6 +668,22 @@ void main() {
       expect(find.text('2 order(s) · latest ready for delivery'), findsOneWidget);
     });
 
+    tallTest('D-110 the doctor opens a reading and its symptom check', (t) async {
+      symptoms.byReading = {'r-p1-185': 'tr1'};
+      addTearDown(() => symptoms.byReading = const {});
+      await t.pumpWidget(portal(repo, data, '/doctor/patient/p1'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('doctor-reading-r-p1-185')));
+      await t.pumpAndSettle();
+      expect(find.text('Reading details'), findsOneWidget);
+      await t.tap(find.byKey(const Key('reading-detail-triage')));
+      await t.pumpAndSettle();
+      expect(find.text('Saved reason.'), findsOneWidget);
+      // The doctor's view has no patient call or chat buttons.
+      expect(find.byKey(const Key('triage-ask-ai')), findsNothing);
+      expect(find.byKey(const Key('triage-call-999')), findsNothing);
+    });
+
     tallTest('D-104 the doctor skips an unpaid month with a reason', (t) async {
       repo.delivery = const {
         'method': null,

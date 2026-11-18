@@ -37,6 +37,12 @@ final triageResultProvider = FutureProvider.autoDispose.family<TriageResult, Str
   retry: (_, _) => null,
 );
 
+/// D-110: the symptom check (id) that used a reading: (patientId, readingId).
+final triageForReadingProvider = FutureProvider.autoDispose.family<String?, (String, String)>(
+  (ref, k) => ref.watch(symptomRepositoryProvider).outcomeForReading(k.$1, k.$2),
+  retry: (_, _) => null,
+);
+
 /// D-111: the patient's own past checks (newest first) on the checker page.
 final myTriageHistoryProvider = StreamProvider<List<TriageRecord>>((ref) {
   final uid = ref.watch(authUidProvider).value;

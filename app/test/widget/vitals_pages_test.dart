@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hypertension/features/symptom_checker/state/symptom_providers.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hypertension/core/constants/enums.dart';
 import 'package:hypertension/features/ai_agent/state/agent_providers.dart';
@@ -378,9 +379,34 @@ void main() {
         dashboardRepositoryProvider.overrideWithValue(repo),
         nowProvider.overrideWithValue(() => now),
         authUidProvider.overrideWith((ref) => Stream.value('p1')),
+        triageForReadingProvider.overrideWith((ref, k) async => k.$2 == 'b' ? 'tr1' : null),
       ],
       child: const MaterialApp(home: VitalsPage()),
     );
+
+    tallTest('D-110 a reading opens in full with its symptom check', (t) async {
+      final repo = FakeDashboardRepository()
+        ..readings = Stream.value([
+          VitalReading(
+            id: 'b',
+            patientId: 'p1',
+            systolic: 118,
+            diastolic: 76,
+            heartRate: 70,
+            note: 'morning',
+            timestamp: now,
+          ),
+        ]);
+      await t.pumpWidget(tab(repo));
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(find.byKey(const Key('reading-b')), 200);
+      await t.tap(find.byKey(const Key('reading-b')));
+      await t.pumpAndSettle();
+      expect(find.text('Reading details'), findsOneWidget);
+      expect(find.text('70 bpm'), findsOneWidget);
+      expect(find.byKey(const Key('reading-detail-note')), findsOneWidget);
+      expect(find.byKey(const Key('reading-detail-triage')), findsOneWidget);
+    });
 
     tallTest('empty state prompts the first reading and shows 0/3', (t) async {
       await t.pumpWidget(tab(FakeDashboardRepository()));

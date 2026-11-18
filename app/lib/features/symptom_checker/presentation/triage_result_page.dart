@@ -10,9 +10,12 @@ import '../state/symptom_providers.dart';
 /// Fig 4.3.8.2 Triage Result (FR-14.3; UC14.3, UC14.4). Emergency number is 999
 /// (Malaysia; the mockup's 911 is not used).
 class TriageResultPage extends ConsumerWidget {
-  const TriageResultPage({super.key, required this.result});
+  const TriageResultPage({super.key, required this.result, this.staff = false});
 
   final TriageResult result;
+
+  /// D-110: opened by the doctor; the patient's call and chat buttons are hidden.
+  final bool staff;
 
   static const emergencyNumber = '999';
 
@@ -201,7 +204,7 @@ class TriageResultPage extends ConsumerWidget {
               ),
             ),
           const SizedBox(height: 12),
-          if (emergency)
+          if (emergency && !staff)
             FilledButton.icon(
               key: const Key('triage-call-999'),
               style: FilledButton.styleFrom(
@@ -230,13 +233,15 @@ class TriageResultPage extends ConsumerWidget {
               ),
             ),
           // D-111: opens the assistant with questions that fit this outcome.
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            key: const Key('triage-ask-ai'),
-            onPressed: () => context.push('/ai-agent', extra: quickReplies(result)),
-            icon: const Icon(Icons.smart_toy_outlined),
-            label: const Text('Ask the AI Health Agent'),
-          ),
+          if (!staff) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const Key('triage-ask-ai'),
+              onPressed: () => context.push('/ai-agent', extra: quickReplies(result)),
+              icon: const Icon(Icons.smart_toy_outlined),
+              label: const Text('Ask the AI Health Agent'),
+            ),
+          ],
           const SizedBox(height: 16),
           Text(
             'This checker gives general guidance. It is not a substitute for a doctor. '
@@ -273,15 +278,16 @@ String _when(DateTime t) {
 
 /// D-111: a saved result opened by id (history, or the BP reading it used).
 class TriageResultLoader extends ConsumerWidget {
-  const TriageResultLoader({super.key, required this.id});
+  const TriageResultLoader({super.key, required this.id, this.staff = false});
 
   final String id;
+  final bool staff;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => ref
       .watch(triageResultProvider(id))
       .when(
-        data: (r) => TriageResultPage(result: r),
+        data: (r) => TriageResultPage(result: r, staff: staff),
         loading: () => Scaffold(
           appBar: AppBar(title: const Text('Triage result')),
           body: const Center(child: CircularProgressIndicator()),

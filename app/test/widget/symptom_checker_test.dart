@@ -39,6 +39,13 @@ class FakeSymptomRepository implements SymptomRepository {
 
   final opened = <String>[];
 
+  /// D-110: readingId -> triage id.
+  Map<String, String> byReading = const {};
+
+  @override
+  Future<String?> outcomeForReading(String patientId, String readingId) async =>
+      byReading[readingId];
+
   @override
   Future<TriageResult> result(String id) async {
     opened.add(id);

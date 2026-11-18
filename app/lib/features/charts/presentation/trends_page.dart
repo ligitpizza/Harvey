@@ -12,6 +12,7 @@ import '../domain/trend_logic.dart';
 import '../state/trends_providers.dart';
 import 'bp_trend_chart.dart';
 import 'risk_trend_card.dart';
+import 'trend_extras.dart';
 import '../../../shared/widgets/patient_hero.dart';
 
 /// Fig 4.3.4.1 Health Trends / Fig 4.3.4.2 empty state (FR-4.1-4.3, UC4.1-UC4.4,
@@ -80,9 +81,30 @@ class _TrendsPageState extends ConsumerState<TrendsPage> {
               onCompare: (v) => setState(() => _compareHeartRate = v),
               onRetry: () => ref.invalidate(readingsInRangeProvider((patientId, _range))),
             ),
+            // D-110: heart rate, category split and the readings themselves.
+            ...rangeAsync.maybeWhen(
+              data: (list) {
+                final inRange = readingsIn(list, _range, now);
+                return [
+                  const SizedBox(height: 16),
+                  HeartRateCard(readings: inRange, range: _range, now: now),
+                  const SizedBox(height: 16),
+                  BpCategoryCard(readings: inRange),
+                  const SizedBox(height: 16),
+                  ReadingsListCard(readings: inRange, patientId: patientId),
+                ];
+              },
+              orElse: () => const <Widget>[],
+            ),
             const SizedBox(height: 16),
             riskAsync.when(
-              data: (scores) => RiskTrendCard(scores: scores),
+              data: (scores) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  RiskTrendCard(scores: scores),
+                  RiskConditionCards(scores: scores),
+                ],
+              ),
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (_, _) => _ErrorRetry(
                 message: 'Could not load your risk history.',

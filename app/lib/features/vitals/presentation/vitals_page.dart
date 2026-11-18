@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'reading_detail_page.dart' show openReading;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -418,6 +419,8 @@ class _ReadingTile extends ConsumerWidget {
           border: Border(left: BorderSide(color: color, width: 5)),
         ),
         child: ListTile(
+          // D-110: tap for the reading in full.
+          onTap: () => openReading(context, reading),
           title: Text(
             '${reading.systolic}/${reading.diastolic} mmHg'
             '${reading.heartRate == null ? '' : ' · ${reading.heartRate} bpm'}',

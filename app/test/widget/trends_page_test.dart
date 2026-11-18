@@ -8,6 +8,7 @@ import 'package:hypertension/features/charts/data/trends_repository.dart';
 import 'package:hypertension/features/charts/presentation/trends_page.dart';
 import 'package:hypertension/features/charts/state/trends_providers.dart';
 import 'package:hypertension/features/dashboard/state/dashboard_providers.dart';
+import 'package:hypertension/features/symptom_checker/state/symptom_providers.dart';
 import 'package:hypertension/shared/models/health_models.dart';
 
 import '../helpers/fakes.dart';
@@ -67,6 +68,8 @@ Widget app(FakeTrendsRepository repo) {
       trendsRepositoryProvider.overrideWithValue(repo),
       nowProvider.overrideWithValue(() => now),
       authUidProvider.overrideWith((ref) => Stream.value('p1')),
+      // D-110: the reading detail looks up its symptom check.
+      triageForReadingProvider.overrideWith((ref, k) async => null),
     ],
     child: MaterialApp.router(routerConfig: router),
   );
@@ -165,7 +168,14 @@ void main() {
     );
     await t.pumpAndSettle();
     expect(find.byKey(const Key('risk-trend-chart')), findsOneWidget);
-    expect(find.text('Coronary artery disease'), findsOneWidget);
+    // The legend, and (D-110) the per-condition card below the chart.
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('risk-trend-card')),
+        matching: find.text('Coronary artery disease'),
+      ),
+      findsOneWidget,
+    );
   });
 
   tallTest('error state offers retry', (t) async {
@@ -173,5 +183,55 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('Could not load your readings.'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
+  });
+
+  group('D-110 more on Health Trends', () {
+    tallTest('heart rate, categories and the readings list for the range', (t) async {
+      await t.pumpWidget(app(FakeTrendsRepository(weekReadings)));
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(find.byKey(const Key('trends-hr-summary')), 200);
+      expect(find.text('Average 72 bpm · lowest 70 · highest 74'), findsOneWidget);
+      await t.scrollUntilVisible(find.byKey(const Key('trends-categories')), 200);
+      expect(t.widget<Text>(find.byKey(const Key('trends-cat-normal'))).data, '2 (67%)');
+      expect(t.widget<Text>(find.byKey(const Key('trends-cat-stage1'))).data, '1 (33%)');
+    });
+
+    tallTest('tapping a reading opens its detail page', (t) async {
+      await t.pumpWidget(app(FakeTrendsRepository(weekReadings)));
+      await t.pumpAndSettle();
+      final row = find.byKey(Key('trend-reading-${weekReadings[1].id}'));
+      await t.scrollUntilVisible(row, 200);
+      await t.tap(row);
+      await t.pumpAndSettle();
+      expect(find.text('Reading details'), findsOneWidget);
+      expect(find.byKey(const Key('reading-detail-category')), findsOneWidget);
+      expect(find.textContaining('Systolic 130 to 139'), findsOneWidget);
+      expect(find.byKey(const Key('reading-detail-triage')), findsNothing);
+    });
+
+    tallTest('each condition shows its change and what raised it', (t) async {
+      final older = score(DateTime(2026, 10, 1), 0.2);
+      final newer = RiskScore(
+        id: 'n',
+        patientId: 'p1',
+        generatedAt: DateTime(2026, 10, 12),
+        modelUsed: 'x',
+        scores: {
+          Complication.stroke: const ComplicationScore(
+            value: 0.31,
+            level: RiskLevel.high,
+            factors: ['systolic', 'age'],
+          ),
+        },
+      );
+      await t.pumpWidget(app(FakeTrendsRepository(weekReadings, scores: [newer, older])));
+      await t.pumpAndSettle();
+      await t.scrollUntilVisible(find.byKey(const Key('risk-condition-stroke')), 200);
+      expect(
+        t.widget<Text>(find.byKey(const Key('risk-change-stroke'))).data,
+        'Up 11 points since the last assessment.',
+      );
+      expect(find.byKey(const Key('risk-factors-stroke')), findsOneWidget);
+    });
   });
 }

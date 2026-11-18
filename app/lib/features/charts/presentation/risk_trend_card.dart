@@ -41,7 +41,8 @@ class RiskTrendCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Risk Score Trend', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
+            // D-110: room above the chart so its top "100%" label never meets the title.
+            const SizedBox(height: 16),
             if (scores.isEmpty)
               const Text(
                 key: Key('risk-trend-empty'),
@@ -127,10 +128,17 @@ class _Chart extends StatelessWidget {
                 leftTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    reservedSize: 36,
+                    reservedSize: 44,
                     interval: 25,
-                    getTitlesWidget: (v, meta) =>
-                        SideTitleWidget(meta: meta, child: Text('${v.toInt()}%')),
+                    getTitlesWidget: (v, meta) => SideTitleWidget(
+                      meta: meta,
+                      child: Text(
+                        '${v.toInt()}%',
+                        maxLines: 1,
+                        softWrap: false,
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    ),
                   ),
                 ),
               ),

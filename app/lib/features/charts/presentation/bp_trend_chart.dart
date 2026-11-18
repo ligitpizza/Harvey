@@ -130,6 +130,10 @@ class BpTrendChart extends StatelessWidget {
                 showTitles: true,
                 reservedSize: 28,
                 interval: (maxX - minX) / (range == TrendRange.week ? 6 : 4),
+                // D-110: the forced edge labels sat on top of the first and last
+                // interval labels ("ThuThu"); only the interval labels are shown.
+                minIncluded: false,
+                maxIncluded: false,
                 getTitlesWidget: (v, meta) => SideTitleWidget(
                   meta: meta,
                   child: Text(_label(v), style: const TextStyle(fontSize: 11)),

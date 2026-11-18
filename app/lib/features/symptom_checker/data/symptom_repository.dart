@@ -127,6 +127,9 @@ abstract interface class SymptomRepository {
 
   /// D-111: reopen a saved result.
   Future<TriageResult> result(String id);
+
+  /// D-110: the symptom check that used this BP reading, if any.
+  Future<String?> outcomeForReading(String patientId, String readingId);
 }
 
 class ApiSymptomRepository implements SymptomRepository {
@@ -171,4 +174,15 @@ class ApiSymptomRepository implements SymptomRepository {
 
   @override
   Future<TriageResult> result(String id) async => TriageResult.fromApi(await _api.triageResult(id));
+
+  @override
+  Future<String?> outcomeForReading(String patientId, String readingId) async {
+    final s = await _db
+        .collection(Collections.triageOutcomes)
+        .where('patientId', isEqualTo: patientId)
+        .where('vitalReadingId', isEqualTo: readingId)
+        .limit(1)
+        .get();
+    return s.docs.firstOrNull?.id;
+  }
 }

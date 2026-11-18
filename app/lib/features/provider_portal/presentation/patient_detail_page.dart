@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../vitals/presentation/reading_detail_page.dart' show openReading;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -376,7 +377,11 @@ class _HistoryTabs extends ConsumerWidget {
                         children: [
                           for (final x in r)
                             ListTile(
+                              key: Key('doctor-reading-${x.id}'),
                               dense: true,
+                              // D-110: the reading in full, with its symptom check.
+                              onTap: () => openReading(context, x, staff: true),
+                              trailing: const Icon(Icons.chevron_right),
                               title: BpText(reading: x),
                               subtitle: Text(
                                 [
