@@ -13,6 +13,7 @@ import '../state/admin_providers.dart';
 import 'user_actions.dart';
 import '../../../shared/widgets/import_dialog.dart';
 import '../../../shared/widgets/page_header.dart';
+import '../../../shared/widgets/wide_table.dart' show TablePill;
 
 const _pageSize = 10;
 
@@ -23,6 +24,16 @@ String roleLabel(UserRole? r) => switch (r) {
   UserRole.admin => 'Admin',
   UserRole.familyMember => 'Family',
   null => 'No role',
+};
+
+/// D-116: one colour per role (avatars, role pills, the user's page header).
+Color roleColor(UserRole? r) => switch (r) {
+  UserRole.patient => Colors.teal.shade700,
+  UserRole.doctor => Colors.indigo.shade600,
+  UserRole.pharmacist => Colors.brown.shade500,
+  UserRole.admin => Colors.deepPurple.shade500,
+  UserRole.familyMember => Colors.orange.shade800,
+  null => Colors.grey.shade600,
 };
 
 /// User Management (Fig 4.3.14.1; FR-11.1, UC11.1; D-59): search, filter by role,
@@ -162,23 +173,34 @@ class _AdminUsersPageState extends ConsumerState<AdminUsersPage> {
                 Row(
                   children: [
                     Expanded(child: Text('System users', style: theme.textTheme.titleLarge)),
-                    const Text('Filter by role: '),
-                    DropdownButton<UserRole?>(
-                      key: const Key('role-filter'),
-                      value: _role,
-                      items: [
-                        const DropdownMenuItem(child: Text('All roles')),
-                        for (final r in UserRole.values)
-                          DropdownMenuItem(value: r, child: Text(roleLabel(r))),
-                      ],
-                      onChanged: (r) => setState(() {
-                        _role = r;
-                        _page = 0;
-                      }),
-                    ),
+                    if (users.value != null)
+                      Text('${users.value!.length} shown', style: theme.textTheme.bodySmall),
                   ],
                 ),
-                const Divider(),
+                const SizedBox(height: 12),
+                // D-116: role filter as chips instead of a dropdown.
+                Wrap(
+                  key: const Key('role-filter'),
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final r in <UserRole?>[null, ...UserRole.values])
+                      ChoiceChip(
+                        key: Key('role-filter-${r?.value ?? 'all'}'),
+                        avatar: r == null
+                            ? null
+                            : CircleAvatar(backgroundColor: roleColor(r), radius: 5),
+                        label: Text(r == null ? 'All roles' : roleLabel(r)),
+                        selected: _role == r,
+                        onSelected: (_) => setState(() {
+                          _role = r;
+                          _page = 0;
+                        }),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const _UserHeader(),
                 users.when(
                   loading: () => const Padding(
                     padding: EdgeInsets.all(24),
@@ -248,6 +270,37 @@ class _AdminUsersPageState extends ConsumerState<AdminUsersPage> {
   }
 }
 
+/// Column titles above the user rows (wide pages only).
+class _UserHeader extends StatelessWidget {
+  const _UserHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final style = theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    return LayoutBuilder(
+      builder: (context, box) => box.maxWidth < _UserRow.wide
+          ? const Divider(height: 1)
+          : Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Expanded(flex: 5, child: Text('User', style: style)),
+                  Expanded(flex: 2, child: Text('Role', style: style)),
+                  Expanded(flex: 2, child: Text('Status', style: style)),
+                  Expanded(flex: 2, child: Text('Joined', style: style)),
+                  const SizedBox(width: 48),
+                ],
+              ),
+            ),
+    );
+  }
+}
+
 class _UserRow extends StatelessWidget {
   const _UserRow({
     required this.user,
@@ -256,6 +309,9 @@ class _UserRow extends StatelessWidget {
     required this.onDelete,
     required this.onOpen,
   });
+
+  /// Below this width the row stacks role and status under the name.
+  static const wide = 760.0;
 
   final AdminUser user;
   final VoidCallback onEdit;
@@ -266,54 +322,134 @@ class _UserRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final u = user;
+    final theme = Theme.of(context);
     final status = !u.isActive
         ? (u.deletionRequested ? 'Deletion pending' : 'Deactivated')
         : 'Active';
-    final statusColor = u.isActive ? Colors.green.shade700 : Colors.red.shade700;
+    final statusColor = u.isActive ? Colors.green.shade700 : theme.colorScheme.error;
+    final colour = roleColor(u.role);
     final initials = u.name.trim().isEmpty
         ? '?'
         : u.name.trim().split(RegExp(r'\s+')).take(2).map((w) => w[0].toUpperCase()).join();
-    return ListTile(
-      key: Key('user-${u.uid}'),
-      onTap: onOpen,
-      leading: CircleAvatar(child: Text(initials)),
-      title: Text(u.name.isEmpty ? '(no name)' : u.name),
-      subtitle: Text(
-        [
-          u.email,
-          if (u.isDoctor)
-            '${u.specialty ?? 'Doctor'} · ${u.caseload ?? 0} / ${u.maxPatients} patients',
-        ].join('\n'),
-      ),
-      isThreeLine: u.isDoctor,
-      trailing: Wrap(
-        spacing: 12,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Chip(label: Text(roleLabel(u.role)), visualDensity: VisualDensity.compact),
-          Text(
-            '● $status',
-            key: Key('status-${u.uid}'),
-            style: TextStyle(color: statusColor, fontWeight: FontWeight.w600),
+    final who = Row(
+      children: [
+        CircleAvatar(
+          radius: 20,
+          backgroundColor: colour.withValues(alpha: 0.15),
+          child: Text(
+            initials,
+            style: theme.textTheme.labelLarge?.copyWith(color: colour, fontWeight: FontWeight.w700),
           ),
-          SizedBox(
-            width: 110,
-            child: Text(u.createdAt == null ? '-' : formatDate(u.createdAt!).split(',').first),
-          ),
-          PopupMenuButton<String>(
-            key: Key('user-menu-${u.uid}'),
-            onSelected: (a) => switch (a) {
-              'edit' => onEdit(),
-              'delete' => onDelete(),
-              _ => onToggle(),
-            },
-            itemBuilder: (_) => [
-              const PopupMenuItem(value: 'edit', child: Text('Edit')),
-              PopupMenuItem(value: 'toggle', child: Text(u.isActive ? 'Deactivate' : 'Reactivate')),
-              const PopupMenuItem(value: 'delete', child: Text('Delete permanently')),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                u.name.isEmpty ? '(no name)' : u.name,
+                style: theme.textTheme.titleSmall,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                u.email,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (u.isDoctor)
+                Text(
+                  '${u.specialty ?? 'Doctor'} · ${u.caseload ?? 0} / ${u.maxPatients} patients',
+                  style: theme.textTheme.bodySmall,
+                ),
             ],
           ),
-        ],
+        ),
+      ],
+    );
+    final role = TablePill(roleLabel(u.role), color: colour);
+    final state = TablePill(
+      status,
+      key: Key('status-${u.uid}'),
+      color: statusColor,
+      icon: u.isActive ? Icons.circle : Icons.block,
+    );
+    final joined = Text(
+      u.createdAt == null ? '-' : formatDate(u.createdAt!).split(',').first,
+      style: theme.textTheme.bodyMedium,
+    );
+    final menu = PopupMenuButton<String>(
+      key: Key('user-menu-${u.uid}'),
+      tooltip: 'Actions',
+      onSelected: (a) => switch (a) {
+        'edit' => onEdit(),
+        'delete' => onDelete(),
+        _ => onToggle(),
+      },
+      itemBuilder: (_) => [
+        const PopupMenuItem(
+          value: 'edit',
+          child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Edit')),
+        ),
+        PopupMenuItem(
+          value: 'toggle',
+          child: ListTile(
+            leading: Icon(u.isActive ? Icons.block : Icons.check_circle_outline),
+            title: Text(u.isActive ? 'Deactivate' : 'Reactivate'),
+          ),
+        ),
+        PopupMenuItem(
+          value: 'delete',
+          child: ListTile(
+            leading: Icon(Icons.delete_outline, color: theme.colorScheme.error),
+            title: Text('Delete permanently', style: TextStyle(color: theme.colorScheme.error)),
+          ),
+        ),
+      ],
+    );
+    return InkWell(
+      key: Key('user-${u.uid}'),
+      onTap: onOpen,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: theme.colorScheme.outlineVariant)),
+        ),
+        child: LayoutBuilder(
+          builder: (context, box) => box.maxWidth < wide
+              ? Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          who,
+                          const SizedBox(height: 8),
+                          Wrap(spacing: 8, runSpacing: 6, children: [role, state, joined]),
+                        ],
+                      ),
+                    ),
+                    menu,
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(flex: 5, child: who),
+                    Expanded(
+                      flex: 2,
+                      child: Align(alignment: Alignment.centerLeft, child: role),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Align(alignment: Alignment.centerLeft, child: state),
+                    ),
+                    Expanded(flex: 2, child: joined),
+                    SizedBox(width: 48, child: menu),
+                  ],
+                ),
+        ),
       ),
     );
   }
@@ -370,64 +506,158 @@ class _PatientDialogState extends ConsumerState<_PatientDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    key: const Key('patient-dialog'),
-    title: const Text('Create patient account'),
-    content: SizedBox(
-      width: 400,
-      child: Form(
-        key: _form,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    // D-116: a header with an icon, grouped fields with icons, and the next steps
+    // explained in a tinted box.
+    return AlertDialog(
+      key: const Key('patient-dialog'),
+      titlePadding: EdgeInsets.zero,
+      title: Container(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.teal.withValues(alpha: 0.14), scheme.surface],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Row(
           children: [
-            TextFormField(
-              key: const Key('patient-name'),
-              controller: _name,
-              decoration: const InputDecoration(labelText: 'Full name'),
-              validator: (v) => (v ?? '').trim().length < 2 ? 'Enter the full name.' : null,
-            ),
-            TextFormField(
-              key: const Key('patient-email'),
-              controller: _email,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(labelText: 'Email'),
-              validator: (v) => RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch((v ?? '').trim())
-                  ? null
-                  : 'Enter a valid email.',
-            ),
-            // D-103: MyKad or passport (with nationality).
-            IdentityFields(
-              id: _ic,
-              nationality: _nationality,
-              idKey: const Key('patient-ic'),
-              nationalityKey: const Key('patient-nationality'),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'A setup link is emailed. The patient signs in to the app and completes their '
-              'health profile; a doctor request is then created automatically.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  _error!,
-                  key: const Key('patient-error'),
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.teal.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(14),
               ),
+              child: Icon(Icons.person_add_alt_1, color: Colors.teal.shade700),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Create patient account', style: theme.textTheme.titleLarge),
+                  Text(
+                    'For a patient registered at the counter.',
+                    style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
-    ),
-    actions: [
-      TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-      FilledButton(
-        key: const Key('patient-save'),
-        onPressed: _busy ? null : _save,
-        child: const Text('Create'),
+      content: SizedBox(
+        width: 460,
+        child: Form(
+          key: _form,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 8),
+                TextFormField(
+                  key: const Key('patient-name'),
+                  controller: _name,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Full name',
+                    hintText: 'As on MyKad or passport',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                  validator: (v) => (v ?? '').trim().length < 2 ? 'Enter the full name.' : null,
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  key: const Key('patient-email'),
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    hintText: 'The setup link is sent here',
+                    prefixIcon: Icon(Icons.mail_outline),
+                  ),
+                  validator: (v) => RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch((v ?? '').trim())
+                      ? null
+                      : 'Enter a valid email.',
+                ),
+                const SizedBox(height: 14),
+                // D-103: MyKad or passport (with nationality).
+                IdentityFields(
+                  id: _ic,
+                  nationality: _nationality,
+                  idKey: const Key('patient-ic'),
+                  nationalityKey: const Key('patient-nationality'),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: scheme.primaryContainer.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline, size: 20, color: scheme.primary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'A setup link is emailed. The patient signs in to the app and completes '
+                          'their health profile; a doctor request is then created automatically.',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: scheme.errorContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.error_outline, size: 20, color: scheme.onErrorContainer),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _error!,
+                            key: const Key('patient-error'),
+                            style: TextStyle(color: scheme.onErrorContainer),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
-    ],
-  );
+      actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+        FilledButton.icon(
+          key: const Key('patient-save'),
+          onPressed: _busy ? null : _save,
+          icon: _busy
+              ? const SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.send_outlined, size: 18),
+          label: const Text('Create and send link'),
+        ),
+      ],
+    );
+  }
 }

@@ -65,6 +65,7 @@ class _IdentityFieldsState extends State<IdentityFields> {
           decoration: InputDecoration(
             labelText: 'MyKad or passport number',
             hintText: '900101-14-5678 or A12345678',
+            prefixIcon: const Icon(Icons.badge_outlined),
             helperText: shown,
             helperMaxLines: 2,
           ),
@@ -85,6 +86,7 @@ class _IdentityFieldsState extends State<IdentityFields> {
             maxLength: 60,
             decoration: const InputDecoration(
               labelText: 'Nationality (as on the passport)',
+              prefixIcon: Icon(Icons.flag_outlined),
               counterText: '',
             ),
             validator: (v) =>

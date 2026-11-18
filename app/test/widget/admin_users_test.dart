@@ -54,16 +54,15 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('User Management'), findsOneWidget);
     expect(find.textContaining('Cardiology · 12 / 30 patients'), findsOneWidget);
-    expect(find.text('● Deactivated'), findsOneWidget);
+    expect(find.text('Deactivated'), findsOneWidget);
     expect(find.text('Showing 1 to 4 of 4 entries'), findsOneWidget);
   });
 
   tallTest('UC11.1 step 1: filter by role and search', (t) async {
     await t.pumpWidget(host());
     await t.pumpAndSettle();
-    await t.tap(find.byKey(const Key('role-filter')));
-    await t.pumpAndSettle();
-    await t.tap(find.text('Patient').last);
+    // D-116: the role filter is a row of chips.
+    await t.tap(find.byKey(const Key('role-filter-patient')));
     await t.pumpAndSettle();
     expect(find.byKey(const Key('user-d1')), findsNothing);
     expect(find.byKey(const Key('user-p1')), findsOneWidget);

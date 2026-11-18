@@ -11,6 +11,9 @@ import '../state/admin_providers.dart';
 import 'admin_users_page.dart' show roleLabel;
 import 'audit_logs_page.dart' show actionLabel;
 import 'user_actions.dart';
+import '../../../shared/widgets/fill_grid.dart';
+import '../../../shared/widgets/profile_header.dart';
+import '../../../shared/widgets/wide_table.dart' show TablePill;
 
 Map<String, dynamic> _map(Object? v) => Map<String, dynamic>.from(v as Map? ?? const {});
 
@@ -95,6 +98,7 @@ class _Body extends ConsumerWidget {
       if (data.containsKey('pharmacist'))
         const _Section(
           key: Key('section-pharmacist'),
+          icon: Icons.local_pharmacy_outlined,
           title: 'Prescription orders',
           child: Text(
             'Orders prepared, ready for collection and dispatched for delivery appear here '
@@ -103,6 +107,7 @@ class _Body extends ConsumerWidget {
         ),
       _Section(
         key: const Key('section-activity'),
+        icon: Icons.history,
         title: 'Recent activity (30 days)',
         child: _list(data['activity']).isEmpty
             ? const Text('No recorded activity.')
@@ -112,6 +117,8 @@ class _Body extends ConsumerWidget {
                     ListTile(
                       dense: true,
                       contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.radio_button_checked, size: 14),
+                      minLeadingWidth: 14,
                       title: Text(actionLabel('${e['action']}')),
                       subtitle: Text('${_when(e['timestamp'])} · ${e['details'] ?? ''}'),
                     ),
@@ -119,108 +126,105 @@ class _Body extends ConsumerWidget {
               ),
       ),
     ];
+    final status = user.isActive
+        ? 'Active'
+        : user.deletionRequested
+        ? 'Deletion pending'
+        : 'Deactivated';
+    final account = <String, String>{
+      'Joined': user.createdAt == null ? '-' : formatDate(user.createdAt!).split(',').first,
+      if (profile['icNumber'] != null) 'MyKad': '${profile['icNumber']}',
+      // D-103
+      if (profile['passportNumber'] != null)
+        'Passport':
+            '${profile['passportNumber']}'
+            '${profile['nationality'] == null ? '' : ' (${profile['nationality']})'}',
+      if (profile['dateOfBirth'] != null) 'Date of birth': '${profile['dateOfBirth']}',
+      if (profile['gender'] != null) 'Gender': '${profile['gender']}',
+      if (profile['phone'] != null) 'Phone': '${profile['phone']}',
+      if (profile['onboardingComplete'] != null)
+        'Health profile': profile['onboardingComplete'] == true ? 'Complete' : 'Not completed yet',
+      if (user.isDoctor) 'Specialty': user.specialty ?? '-',
+      if (user.isDoctor) 'Caseload': '${user.caseload ?? 0} / ${user.maxPatients ?? 30} patients',
+    };
+    final roleColour = switch (user.role) {
+      UserRole.doctor => Colors.indigo.shade600,
+      UserRole.pharmacist => Colors.brown.shade500,
+      UserRole.admin => Colors.deepPurple.shade500,
+      UserRole.familyMember => Colors.orange.shade800,
+      _ => Colors.teal.shade700,
+    };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Card(
+        // D-116: profile header, then the sections in a grid that fills the page.
+        KeyedSubtree(
           key: const Key('detail-header'),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Wrap(
-              spacing: 24,
-              runSpacing: 12,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                CircleAvatar(
-                  radius: 28,
-                  child: Text(user.name.isEmpty ? '?' : user.name[0].toUpperCase()),
+          child: ProfileHeaderCard(
+            name: user.name,
+            color: roleColour,
+            badges: [
+              ProfileBadge(roleLabel(user.role), color: roleColour, icon: Icons.badge_outlined),
+              ProfileBadge(
+                status,
+                key: const Key('detail-status'),
+                color: user.isActive ? Colors.green.shade700 : theme.colorScheme.error,
+                icon: user.isActive ? Icons.check_circle : Icons.block,
+              ),
+            ],
+            facts: [
+              (Icons.mail_outline, user.email),
+              if (profile['phone'] != null) (Icons.phone_outlined, '${profile['phone']}'),
+              if (user.createdAt != null)
+                (
+                  Icons.calendar_today_outlined,
+                  'Joined ${formatDate(user.createdAt!).split(',').first}',
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(user.name, style: theme.textTheme.headlineSmall),
-                    Text(user.email),
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        Chip(label: Text(roleLabel(user.role))),
-                        Chip(
-                          key: const Key('detail-status'),
-                          label: Text(
-                            user.isActive
-                                ? 'Active'
-                                : user.deletionRequested
-                                ? 'Deletion pending'
-                                : 'Deactivated',
-                          ),
-                          labelStyle: TextStyle(
-                            color: user.isActive ? Colors.green.shade700 : Colors.red.shade700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                _Facts({
-                  'Joined': user.createdAt == null
-                      ? '-'
-                      : formatDate(user.createdAt!).split(',').first,
-                  if (profile['icNumber'] != null) 'MyKad': '${profile['icNumber']}',
-                  // D-103
-                  if (profile['passportNumber'] != null)
-                    'Passport':
-                        '${profile['passportNumber']}'
-                        '${profile['nationality'] == null ? '' : ' (${profile['nationality']})'}',
-                  if (profile['dateOfBirth'] != null) 'Date of birth': '${profile['dateOfBirth']}',
-                  if (profile['gender'] != null) 'Gender': '${profile['gender']}',
-                  if (profile['phone'] != null) 'Phone': '${profile['phone']}',
-                  if (profile['onboardingComplete'] != null)
-                    'Health profile': profile['onboardingComplete'] == true
-                        ? 'Complete'
-                        : 'Not completed yet',
-                  if (user.isDoctor) 'Specialty': user.specialty ?? '-',
-                  if (user.isDoctor)
-                    'Caseload': '${user.caseload ?? 0} / ${user.maxPatients ?? 30} patients',
-                }),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    OutlinedButton.icon(
-                      key: const Key('detail-edit'),
-                      onPressed: () async {
-                        if (await editUser(context, ref, user)) refresh();
-                      },
-                      icon: const Icon(Icons.edit_outlined),
-                      label: const Text('Edit'),
-                    ),
-                    OutlinedButton.icon(
-                      key: const Key('detail-toggle'),
-                      onPressed: () async {
-                        if (await toggleUserActive(context, ref, user)) refresh();
-                      },
-                      icon: Icon(user.isActive ? Icons.block : Icons.check_circle_outline),
-                      label: Text(user.isActive ? 'Deactivate' : 'Reactivate'),
-                    ),
-                    OutlinedButton.icon(
-                      key: const Key('detail-delete'),
-                      style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error),
-                      onPressed: () async {
-                        if (await deleteUser(context, ref, user) && context.mounted) {
-                          context.go('/admin/users');
-                        }
-                      },
-                      icon: const Icon(Icons.delete_outline),
-                      label: const Text('Delete'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+            ],
+            actions: [
+              OutlinedButton.icon(
+                key: const Key('detail-edit'),
+                onPressed: () async {
+                  if (await editUser(context, ref, user)) refresh();
+                },
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Edit'),
+              ),
+              OutlinedButton.icon(
+                key: const Key('detail-toggle'),
+                onPressed: () async {
+                  if (await toggleUserActive(context, ref, user)) refresh();
+                },
+                icon: Icon(user.isActive ? Icons.block : Icons.check_circle_outline),
+                label: Text(user.isActive ? 'Deactivate' : 'Reactivate'),
+              ),
+              OutlinedButton.icon(
+                key: const Key('detail-delete'),
+                style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error),
+                onPressed: () async {
+                  if (await deleteUser(context, ref, user) && context.mounted) {
+                    context.go('/admin/users');
+                  }
+                },
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('Delete'),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 16),
-        Wrap(spacing: 16, runSpacing: 16, children: sections),
+        FillGrid(
+          minItemWidth: 440,
+          children: [
+            _Section(
+              key: const Key('section-account'),
+              icon: Icons.badge_outlined,
+              title: 'Account details',
+              child: _Facts(account),
+            ),
+            ...sections,
+          ],
+        ),
       ],
     );
   }
@@ -229,6 +233,7 @@ class _Body extends ConsumerWidget {
     final patient = f['patient'] == null ? null : _map(f['patient']);
     return _Section(
       key: const Key('section-family-link'),
+      icon: Icons.family_restroom,
       title: 'Linked patient',
       child: patient == null
           ? const Text('Not linked to a patient yet (waiting for the patient to approve).')
@@ -263,6 +268,7 @@ class _Body extends ConsumerWidget {
     return [
       _Section(
         key: const Key('section-health'),
+        icon: Icons.monitor_heart_outlined,
         title: 'Health overview',
         child: _Facts({
           'Assigned doctor': doctor == null ? 'Not assigned yet' : '${doctor['name']}',
@@ -279,27 +285,15 @@ class _Body extends ConsumerWidget {
       ),
       _Section(
         key: const Key('section-meds'),
+        icon: Icons.medication_outlined,
         title: 'Medications',
         child: _list(p['medications']).isEmpty
             ? const Text('No medications recorded.')
-            : Column(
-                children: [
-                  for (final m in _list(p['medications']))
-                    ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('${m['name']} ${m['dosage'] ?? ''}'),
-                      trailing: Text(
-                        m['adherenceRate'] == null
-                            ? '-'
-                            : 'Adherence ${(m['adherenceRate'] as num).round()}%',
-                      ),
-                    ),
-                ],
-              ),
+            : Column(children: [for (final m in _list(p['medications'])) _MedAdherence(m: m)]),
       ),
       _Section(
         key: const Key('section-appointments'),
+        icon: Icons.event_outlined,
         title: 'Appointments',
         child: _Appointments(rows: _list(p['appointments']), otherLabel: 'with'),
       ),
@@ -309,6 +303,7 @@ class _Body extends ConsumerWidget {
   List<Widget> _doctor(BuildContext context, AdminUser user, Map<String, dynamic> d) => [
     _Section(
       key: const Key('section-patients'),
+      icon: Icons.people_outline,
       title: 'Assigned patients (${_list(d['patients']).length})',
       child: _list(d['patients']).isEmpty
           ? const Text('No patients assigned.')
@@ -339,11 +334,13 @@ class _Body extends ConsumerWidget {
     ),
     _Section(
       key: const Key('section-upcoming'),
+      icon: Icons.event_outlined,
       title: 'Upcoming appointments',
       child: _Appointments(rows: _list(d['upcoming']), otherLabel: 'patient'),
     ),
     _Section(
       key: const Key('section-workload'),
+      icon: Icons.work_outline,
       title: 'Workload',
       child: _Facts({
         'Completed visits': '${d['completedTotal'] ?? 0}',
@@ -354,28 +351,14 @@ class _Body extends ConsumerWidget {
 }
 
 class _Section extends StatelessWidget {
-  const _Section({super.key, required this.title, required this.child});
+  const _Section({super.key, required this.title, required this.child, required this.icon});
 
   final String title;
   final Widget child;
+  final IconData icon;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 460,
-    child: Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            child,
-          ],
-        ),
-      ),
-    ),
-  );
+  Widget build(BuildContext context) => InfoSection(icon: icon, title: title, child: child);
 }
 
 class _Facts extends StatelessWidget {
@@ -385,30 +368,103 @@ class _Facts extends StatelessWidget {
   final Color? highlight;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      for (final MapEntry(key: k, value: v) in facts.entries)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final entries = facts.entries.toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < entries.length; i++)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              border: i == entries.length - 1
+                  ? null
+                  : Border(bottom: BorderSide(color: theme.colorScheme.outlineVariant)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 150,
+                  child: Text(
+                    entries[i].key,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: entries[i].key == 'Risk level' && highlight != null
+                      ? Align(
+                          alignment: Alignment.centerLeft,
+                          child: TablePill(entries[i].value, color: highlight!),
+                        )
+                      : Text(
+                          entries[i].value,
+                          style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+                        ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// One medicine with its adherence as a coloured bar.
+class _MedAdherence extends StatelessWidget {
+  const _MedAdherence({required this.m});
+  final Map<String, dynamic> m;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final rate = (m['adherenceRate'] as num?)?.toDouble();
+    final colour = rate == null
+        ? theme.colorScheme.outline
+        : rate >= 80
+        ? Colors.green.shade600
+        : rate >= 50
+        ? Colors.amber.shade800
+        : Colors.red.shade600;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
             children: [
-              SizedBox(width: 140, child: Text(k, style: Theme.of(context).textTheme.bodySmall)),
-              Flexible(
-                child: Text(
-                  v,
-                  style: k == 'Risk level' && highlight != null
-                      ? TextStyle(color: highlight, fontWeight: FontWeight.w600)
-                      : null,
+              Expanded(
+                child: Text('${m['name']} ${m['dosage'] ?? ''}', style: theme.textTheme.titleSmall),
+              ),
+              Text(
+                rate == null ? '-' : 'Adherence ${rate.round()}%',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: colour,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
-        ),
-    ],
-  );
+          if (rate != null) ...[
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(
+                value: (rate / 100).clamp(0.0, 1.0),
+                minHeight: 5,
+                color: colour,
+                backgroundColor: theme.colorScheme.surfaceContainerHighest,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class _Appointments extends StatelessWidget {
