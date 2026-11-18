@@ -2,13 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../shared/services/api/api_client.dart';
 import '../../appointments/domain/appointment_text.dart';
 import '../data/order_models.dart';
 import '../../family/state/family_providers.dart';
 import '../state/orders_providers.dart';
+import '../../records/presentation/record_widgets.dart' show openRecordById;
 import 'order_widgets.dart';
 
 /// Fig 4.3.10.3 Delivery tracking (UC13.4, UC13.5; FR-13.4, FR-13.5), the self-collection
@@ -312,7 +312,7 @@ class _OrderTrackPageState extends ConsumerState<OrderTrackPage> {
         if (o.isPaid)
           TextButton.icon(
             key: const Key('open-receipt'),
-            onPressed: () => context.push('/records'),
+            onPressed: () => openRecordById(context, ref, o.receiptRecordId),
             icon: const Icon(Icons.receipt_long_outlined),
             label: const Text('Receipt saved in Health records'),
           ),
@@ -355,19 +355,39 @@ class _CollectionSlip extends StatelessWidget {
   }
 }
 
-Widget _row(BuildContext context, String label, String value, {Key? key, bool bold = false}) {
-  final style = bold ? Theme.of(context).textTheme.titleSmall : null;
+/// One line of a detail card. [amount] rows (medicines, fees, total) give the label the
+/// room and keep the price on one line; other rows keep the short label on one line and
+/// let the value (a date, an address) wrap on the right.
+Widget _row(
+  BuildContext context,
+  String label,
+  String value, {
+  Key? key,
+  bool bold = false,
+  bool amount = false,
+}) {
+  final theme = Theme.of(context);
+  final style = bold ? theme.textTheme.titleSmall : theme.textTheme.bodyMedium;
+  final labelStyle = bold || amount
+      ? style
+      : style?.copyWith(color: theme.colorScheme.onSurfaceVariant);
   return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 3),
+    padding: const EdgeInsets.symmetric(vertical: 4),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(child: Text(label, style: style)),
-        const SizedBox(width: 12),
-        Flexible(
-          child: Text(value, key: key, textAlign: TextAlign.right, style: style),
-        ),
-      ],
+      children: amount
+          ? [
+              Expanded(child: Text(label, style: labelStyle)),
+              const SizedBox(width: 12),
+              Text(value, key: key, style: style, softWrap: false),
+            ]
+          : [
+              Text(label, style: labelStyle),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(value, key: key, textAlign: TextAlign.right, style: style),
+              ),
+            ],
     ),
   );
 }
@@ -419,15 +439,31 @@ class _ItemsCard extends StatelessWidget {
       key: const Key('order-items'),
       [
         if (o.items.isEmpty)
-          _row(context, o.medicationDetails, o.amount == null ? '—' : rm(o.amount!))
+          _row(context, o.medicationDetails, o.amount == null ? '—' : rm(o.amount!), amount: true)
         else
-          for (final i in o.items) _row(context, '${i.label} × ${i.quantity}', rm(i.lineTotal)),
+          for (final i in o.items)
+            _row(context, '${i.label} × ${i.quantity}', rm(i.lineTotal), amount: true),
         const Divider(),
-        if (o.amount != null) _row(context, 'Medicines', rm(o.amount!)),
-        if (o.isDelivery && o.deliveryFee > 0)
-          _row(context, 'Delivery (${o.courierBrand})', rm(o.deliveryFee)),
+        if (o.amount != null) _row(context, 'Medicines', rm(o.amount!), amount: true),
+        // A paid delivery switched to collection after it failed keeps its fee in the total.
+        if (o.deliveryFee > 0)
+          _row(
+            context,
+            o.isDelivery
+                ? 'Delivery (${o.courierBrand})'
+                : 'Delivery fee (paid before switching to collection)',
+            rm(o.deliveryFee),
+            amount: true,
+          ),
         if (o.total != null)
-          _row(context, 'Total', rm(o.total!), bold: true, key: const Key('order-detail-total')),
+          _row(
+            context,
+            'Total',
+            rm(o.total!),
+            bold: true,
+            amount: true,
+            key: const Key('order-detail-total'),
+          ),
         const SizedBox(height: 4),
         _row(context, 'Order', o.ref),
         _row(context, 'Month', cycleLabel(o.cycleDate)),

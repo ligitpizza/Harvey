@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/enums.dart';
 import '../../provider_portal/presentation/portal_widgets.dart' show formatDate;
 import '../data/records_repository.dart';
+import '../state/records_providers.dart';
 import 'record_viewer_page.dart';
 
 /// Opens a record (UC6.3). D-88: full screen inside Harvey for both images and PDFs;
@@ -11,6 +13,27 @@ import 'record_viewer_page.dart';
 Future<void> openRecord(BuildContext context, WidgetRef ref, HealthRecord r) => Navigator.of(
   context,
 ).push(MaterialPageRoute<void>(builder: (_) => RecordViewerPage(record: r)));
+
+/// Opens one saved record by id (a weekly summary, an order receipt). Falls back to the
+/// Records tab when the id is unknown or the record isn't loaded. Records is a tab, so it
+/// is reached with go(), not push(): pushing a shell route from outside the shell shows
+/// an empty page.
+Future<void> openRecordById(BuildContext context, WidgetRef ref, String? id) async {
+  if (id != null) {
+    // Keep the (auto-dispose) list alive while waiting for it.
+    final keep = ref.listenManual(myRecordsProvider, (_, _) {});
+    try {
+      final all = await ref.read(myRecordsProvider.future);
+      final match = all.where((r) => r.id == id);
+      if (match.isNotEmpty && context.mounted) return openRecord(context, ref, match.first);
+    } catch (_) {
+      // Fall through to the Records tab.
+    } finally {
+      keep.close();
+    }
+  }
+  if (context.mounted) GoRouter.of(context).go('/records');
+}
 
 /// UC6.1 step 3: the category is required. Null when the patient cancels.
 Future<RecordCategory?> askRecordCategory(

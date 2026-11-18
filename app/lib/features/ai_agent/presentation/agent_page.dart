@@ -10,6 +10,7 @@ import '../../messaging/presentation/chat_ui.dart';
 import '../../messaging/state/messaging_providers.dart';
 import '../data/agent_repository.dart';
 import '../state/agent_providers.dart';
+import '../../records/presentation/record_widgets.dart' show openRecordById;
 import '../../notifications/state/notification_providers.dart';
 
 /// Fig 4.3.7.1 AI Health Agent chat (FR-14.1; UC2.6, UC2.6 A1/E1; D-34).
@@ -218,7 +219,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                         action: m.savedRecordId != null || _saved.contains(m.id)
                             ? TextButton.icon(
                                 key: Key('summary-saved-${m.id}'),
-                                onPressed: () => context.push('/records'),
+                                onPressed: () => openRecordById(context, ref, m.savedRecordId),
                                 icon: const Icon(Icons.check_circle_outline, size: 18),
                                 label: const Text('Open in Records'),
                               )

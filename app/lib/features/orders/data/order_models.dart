@@ -163,6 +163,7 @@ class MedicationOrder {
     this.failureReason,
     this.cancelReason,
     this.skipReason,
+    this.receiptRecordId,
     this.cancelledAt,
     this.skippedAt,
     this.cancelledBy,
@@ -231,6 +232,9 @@ class MedicationOrder {
 
   /// D-104: why the doctor skipped this month.
   final String? skipReason;
+
+  /// The payment receipt saved in the patient's Records (D-88).
+  final String? receiptRecordId;
   final String? cancelledBy;
 
   /// D-74: only orders the patient hasn't paid yet can be cancelled.
@@ -334,6 +338,7 @@ class MedicationOrder {
     failureReason: d['failureReason'] as String?,
     cancelReason: d['cancelReason'] as String?,
     skipReason: d['skipReason'] as String?,
+    receiptRecordId: d['receiptRecordId'] as String?,
     cancelledBy: d['cancelledBy'] as String?,
     cycleDate: _time(d['cycleDate']),
     cancelledAt: _time(d['cancelledAt']),

@@ -289,26 +289,30 @@ class _RecordsPageState extends ConsumerState<RecordsPage> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      ChoiceChip(
-                        key: const Key('filter-all'),
-                        label: Text('All (${all.length})'),
-                        selected: _filter == null,
-                        onSelected: (_) => setState(() => _filter = null),
-                      ),
-                      for (final c in RecordCategory.values)
-                        if (present.contains(c))
-                          ChoiceChip(
-                            key: Key('filter-${c.value}'),
-                            avatar: Icon(categoryStyle(c).$1, color: categoryStyle(c).$2),
-                            label: Text(c.label),
-                            selected: _filter == c,
-                            onSelected: (_) => setState(() => _filter = c),
-                          ),
-                    ],
+                  // One scrollable line of categories instead of a wrapped block.
+                  SingleChildScrollView(
+                    key: const Key('record-filters'),
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      spacing: 8,
+                      children: [
+                        ChoiceChip(
+                          key: const Key('filter-all'),
+                          label: Text('All (${all.length})'),
+                          selected: _filter == null,
+                          onSelected: (_) => setState(() => _filter = null),
+                        ),
+                        for (final c in RecordCategory.values)
+                          if (present.contains(c))
+                            ChoiceChip(
+                              key: Key('filter-${c.value}'),
+                              avatar: Icon(categoryStyle(c).$1, color: categoryStyle(c).$2),
+                              label: Text(c.label),
+                              selected: _filter == c,
+                              onSelected: (_) => setState(() => _filter = c),
+                            ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 8),
                   for (final r in shown) _RecordCard(record: r, onAction: _onAction),
