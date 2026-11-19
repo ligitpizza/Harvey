@@ -91,6 +91,11 @@ class FakePpgCapture implements PpgCapture {
   @override
   ValueListenable<bool> get fingerDetected => finger;
 
+  final info = ValueNotifier<PpgFrameInfo>(const PpgFrameInfo());
+
+  @override
+  ValueListenable<PpgFrameInfo> get frameInfo => info;
+
   @override
   Future<PpgResult> measure({required PpgProgress onProgress, Duration? duration}) async {
     measures++;
@@ -282,6 +287,51 @@ void main() {
       expect(find.text('Frames analysed'), findsOneWidget);
       expect(find.text('7.5 s'), findsOneWidget);
       expect(find.text('90%'), findsOneWidget); // signal quality
+    });
+
+    tallTest('D-123 coverage meter and image hints while positioning', (t) async {
+      final ppg = FakePpgCapture();
+      await t.pumpWidget(logApp(FakeVitalsRepository(), ppg));
+      await t.tap(find.byKey(const Key('ppg-start')));
+      await t.pumpAndSettle();
+      expect(find.text('0%'), findsOneWidget);
+      ppg.info.value = const PpgFrameInfo(coverage: 0.94);
+      await t.pump();
+      expect(find.text('94%'), findsOneWidget);
+      expect(find.byKey(const Key('ppg-image-warning')), findsNothing);
+      ppg.info.value = const PpgFrameInfo(coverage: 0.9, moving: true);
+      await t.pump();
+      expect(find.text('Hold still'), findsOneWidget);
+      ppg.info.value = const PpgFrameInfo(coverage: 0.9, pressingHard: true);
+      await t.pump();
+      expect(find.text('Press more lightly'), findsOneWidget);
+    });
+
+    tallTest('D-123 a reading spoilt by movement asks to retry', (t) async {
+      final ppg = FakePpgCapture()..result = const PpgResult.failed(PpgFailure.motion);
+      await t.pumpWidget(logApp(FakeVitalsRepository(), ppg));
+      await measureHeartRate(t);
+      expect(find.text('You moved during the reading.'), findsOneWidget);
+      expect(find.byKey(const Key('ppg-retry')), findsOneWidget);
+    });
+
+    tallTest('D-123 technical details show the adaptive ROI heat map', (t) async {
+      final ppg = FakePpgCapture()
+        ..result = PpgResult.success(
+          72,
+          0.9,
+          fftBpm: 73,
+          roiBlocks: const [5, 6, 9, 10],
+          blockStrength: List<double>.generate(16, (i) => [5, 6, 9, 10].contains(i) ? 0.9 : 0.2),
+          motionFrames: 4,
+        );
+      await t.pumpWidget(logApp(FakeVitalsRepository(), ppg));
+      await measureHeartRate(t);
+      await t.tap(find.text('Technical details'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('ppg-heatmap')), findsOneWidget);
+      expect(find.text('4 of 16 blocks'), findsOneWidget);
+      expect(find.text('Motion frames bridged'), findsOneWidget);
     });
 
     tallTest('D-121 the guide explains where to put the finger', (t) async {

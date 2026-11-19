@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -130,6 +131,8 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
           PpgFailure.tooShort => 'The measurement stopped too early.',
           // D-119: the two methods disagreed, so no number is shown.
           PpgFailure.mismatch => 'The reading was not steady enough to confirm.',
+          // D-123: frame differencing saw movement in too many frames.
+          PpgFailure.motion => 'You moved during the reading.',
           _ => 'We could not get a clear pulse signal.',
         };
       });
@@ -268,6 +271,57 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
     );
   }
 
+  /// D-123: live finger coverage (segmentation) with motion and pressure hints.
+  Widget _imageHints() {
+    final theme = Theme.of(context);
+    return ValueListenableBuilder<PpgFrameInfo>(
+      valueListenable: _capture.frameInfo,
+      builder: (context, info, _) {
+        final pct = (info.coverage * 100).round();
+        final good = info.coverage >= 0.8;
+        return Column(
+          key: const Key('ppg-image-hints'),
+          children: [
+            Row(
+              children: [
+                Text('Finger coverage', style: theme.textTheme.labelMedium),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: info.coverage,
+                      minHeight: 6,
+                      color: good ? Colors.green.shade600 : Colors.orange.shade700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text('$pct%', key: const Key('ppg-coverage'), style: theme.textTheme.labelMedium),
+              ],
+            ),
+            if (info.moving || info.pressingHard)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.warning_amber_rounded, size: 18, color: Colors.orange.shade800),
+                    const SizedBox(width: 4),
+                    Text(
+                      info.moving ? 'Hold still' : 'Press more lightly',
+                      key: const Key('ppg-image-warning'),
+                      style: theme.textTheme.bodyMedium?.copyWith(color: Colors.orange.shade900),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _body(BuildContext context) {
     final theme = Theme.of(context);
     switch (_phase) {
@@ -302,6 +356,8 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
           children: [
             _dualPreview(120),
             const SizedBox(height: 10),
+            _imageHints(),
+            const SizedBox(height: 6),
             _fingerHint(),
             const SizedBox(height: 4),
             Text('Measuring starts by itself.', style: theme.textTheme.bodySmall),
@@ -370,6 +426,8 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
             Text('Keep still · $left s left', key: const Key('ppg-time-left')),
             const SizedBox(height: 8),
             _LiveStats(live: _live),
+            const SizedBox(height: 8),
+            _imageHints(),
             const SizedBox(height: 6),
             _fingerHint(),
             TextButton(onPressed: _stop, child: const Text('Cancel')),
@@ -551,6 +609,10 @@ class _TechnicalDetails extends StatelessWidget {
       ('Frame rate', '${live.fps.toStringAsFixed(1)} fps'),
       ('Recording', '${seconds.toStringAsFixed(1)} s'),
       ('Signal', 'Mean green per frame (YUV → G)'),
+      ('Pixel masking', 'Dark < 30, saturated ≥ 245 (luma histogram)'),
+      if (result.blockStrength.isNotEmpty)
+        ('Adaptive ROI', '${result.roiBlocks.length} of ${result.blockStrength.length} blocks'),
+      ('Motion frames bridged', '${result.motionFrames}'),
       (
         'Band-pass filter',
         '${config.lowHz}–${config.highHz} Hz '
@@ -574,6 +636,10 @@ class _TechnicalDetails extends StatelessWidget {
           title: const Text('Technical details'),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           children: [
+            if (result.blockStrength.isNotEmpty) ...[
+              PulseHeatMap(strength: result.blockStrength, selected: result.roiBlocks),
+              const SizedBox(height: 8),
+            ],
             for (final (label, value) in rows)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 3),
@@ -623,4 +689,53 @@ class _TracePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_TracePainter old) => old.values != values;
+}
+
+/// D-123: pulse strength of each grid block (darker = stronger pulse); the blocks used
+/// for the signal (adaptive ROI) are outlined.
+class PulseHeatMap extends StatelessWidget {
+  const PulseHeatMap({super.key, required this.strength, required this.selected});
+
+  final List<double> strength;
+  final List<int> selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final grid = math.sqrt(strength.length).round();
+    final best = strength.fold<double>(0, math.max);
+    final small = Theme.of(context).textTheme.labelSmall;
+    return Column(
+      key: const Key('ppg-heatmap'),
+      children: [
+        SizedBox(
+          width: 120,
+          height: 120,
+          child: GridView.count(
+            crossAxisCount: grid,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 2,
+            crossAxisSpacing: 2,
+            children: [
+              for (var i = 0; i < strength.length; i++)
+                Container(
+                  decoration: BoxDecoration(
+                    color: Color.lerp(
+                      Colors.green.shade50,
+                      Colors.green.shade800,
+                      best == 0 ? 0 : strength[i] / best,
+                    ),
+                    borderRadius: BorderRadius.circular(3),
+                    border: selected.contains(i)
+                        ? Border.all(color: Colors.black87, width: 2)
+                        : null,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text('Pulse strength by area · outlined = used', style: small),
+      ],
+    );
+  }
 }

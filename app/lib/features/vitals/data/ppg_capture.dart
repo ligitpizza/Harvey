@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../domain/ppg.dart';
+import '../domain/ppg_image.dart';
 
 /// Why a camera measurement could not run at all (as opposed to a noisy signal).
 enum PpgUnavailable { noCamera, permissionDenied, notSupported }
@@ -42,6 +43,20 @@ class PpgLive {
   final double? green;
 }
 
+/// D-123: what the image stage sees in the latest frame, for the live hints.
+class PpgFrameInfo {
+  const PpgFrameInfo({this.coverage = 0, this.moving = false, this.pressingHard = false});
+
+  /// Share of the picture classified as lit fingertip, 0..1.
+  final double coverage;
+
+  /// Frame differencing flagged movement.
+  final bool moving;
+
+  /// Many saturated pixels: the finger presses too hard.
+  final bool pressingHard;
+}
+
 typedef PpgProgress = void Function(PpgLive live);
 
 /// Camera PPG capture (FR-3.2, UC3.3). Two steps so the patient can see the lens
@@ -58,6 +73,9 @@ abstract interface class PpgCapture {
   /// True while the lens looks covered by a fingertip (a hint, not a gate).
   ValueListenable<bool> get fingerDetected;
 
+  /// D-123: coverage, motion and pressure of the latest frame.
+  ValueListenable<PpgFrameInfo> get frameInfo;
+
   /// Records for [duration] and returns the estimate. Requires [open].
   Future<PpgResult> measure({required PpgProgress onProgress, Duration duration});
 
@@ -65,12 +83,15 @@ abstract interface class PpgCapture {
   Future<void> cancel();
 }
 
-/// Rear camera + torch, one mean green value per frame, processed in an isolate.
+/// Rear camera + torch. Each frame goes through the image stage (D-123, [analyzeFrame]);
+/// the signal stage runs in an isolate.
 class CameraPpgCapture implements PpgCapture {
   static const defaultDuration = Duration(seconds: 15);
 
   CameraController? _controller;
   final _finger = ValueNotifier<bool>(false);
+  final _info = ValueNotifier<PpgFrameInfo>(const PpgFrameInfo());
+  Float64List? _previousThumb;
 
   // Active measurement, if any.
   Completer<void>? _done;
@@ -79,6 +100,8 @@ class CameraPpgCapture implements PpgCapture {
   PpgProgress? _onProgress;
   final _times = <double>[];
   final _values = <double>[];
+  final _blocks = <List<double>>[];
+  final _moving = <bool>[];
 
   // D-119 live reading: re-estimated about once a second from the frames so far.
   static const _liveEvery = Duration(seconds: 1);
@@ -89,6 +112,9 @@ class CameraPpgCapture implements PpgCapture {
 
   @override
   ValueListenable<bool> get fingerDetected => _finger;
+
+  @override
+  ValueListenable<PpgFrameInfo> get frameInfo => _info;
 
   @override
   Future<void> open() async {
@@ -130,15 +156,38 @@ class CameraPpgCapture implements PpgCapture {
   }
 
   void _onFrame(CameraImage image) {
-    final stats = frameStats(image);
-    if (stats == null) return;
-    _finger.value = stats.covered;
+    if (image.planes.length < 3) return;
+    final y = image.planes[0];
+    final u = image.planes[1];
+    final v = image.planes[2];
+    final frame = analyzeFrame(
+      YuvFrame(
+        width: image.width,
+        height: image.height,
+        y: y.bytes,
+        yRowStride: y.bytesPerRow,
+        u: u.bytes,
+        v: v.bytes,
+        uvRowStride: u.bytesPerRow,
+        uvPixelStride: u.bytesPerPixel ?? 1,
+      ),
+      previousThumb: _previousThumb,
+    );
+    _previousThumb = frame.thumb;
+    _finger.value = frame.covered;
+    _info.value = PpgFrameInfo(
+      coverage: frame.coverage,
+      moving: frame.moving,
+      pressingHard: frame.pressingHard,
+    );
 
     final done = _done;
     final clock = _clock;
     if (done == null || clock == null || done.isCompleted) return;
     _times.add(clock.elapsedMicroseconds / 1e6);
-    _values.add(stats.green);
+    _values.add(frame.green);
+    _blocks.add(frame.blockGreen);
+    _moving.add(frame.moving);
     final p = (clock.elapsed.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0);
     final start = _values.length > 90 ? _values.length - 90 : 0;
     final secs = clock.elapsedMicroseconds / 1e6;
@@ -149,7 +198,7 @@ class CameraPpgCapture implements PpgCapture {
         bpm: _liveBpm,
         frames: _values.length,
         fps: secs > 0 ? _values.length / secs : 0,
-        green: stats.green,
+        green: frame.green,
       ),
     );
     _maybeUpdateLive(clock.elapsed);
@@ -160,8 +209,7 @@ class CameraPpgCapture implements PpgCapture {
     if (_liveBusy || elapsed < _liveAfter || elapsed - _lastLive < _liveEvery) return;
     _liveBusy = true;
     _lastLive = elapsed;
-    final input = PpgInput(List.of(_times), List.of(_values));
-    compute(liveHeartRate, input)
+    compute(liveHeartRate, _input())
         .then((bpm) {
           // Keep the last good value through a noisy second rather than flicker.
           if (bpm != null && _done != null) _liveBpm = bpm;
@@ -177,6 +225,8 @@ class CameraPpgCapture implements PpgCapture {
     await open();
     _times.clear();
     _values.clear();
+    _blocks.clear();
+    _moving.clear();
     _liveBpm = null;
     _lastLive = Duration.zero;
     _duration = duration;
@@ -189,8 +239,15 @@ class CameraPpgCapture implements PpgCapture {
     _clock = null;
     _onProgress = null;
     if (_values.length < 2) return const PpgResult.failed(PpgFailure.tooShort);
-    return compute(estimateHeartRate, PpgInput(List.of(_times), List.of(_values)));
+    return compute(estimateHeartRate, _input());
   }
+
+  PpgInput _input() => PpgInput(
+    List.of(_times),
+    List.of(_values),
+    blockGreens: List.of(_blocks),
+    moving: List.of(_moving),
+  );
 
   @override
   Future<void> cancel() async {
@@ -203,6 +260,8 @@ class CameraPpgCapture implements PpgCapture {
     final c = _controller;
     _controller = null;
     _finger.value = false;
+    _info.value = const PpgFrameInfo();
+    _previousThumb = null;
     if (c == null) return;
     try {
       if (c.value.isStreamingImages) await c.stopImageStream();
@@ -211,37 +270,5 @@ class CameraPpgCapture implements PpgCapture {
       // Already stopped or disposed.
     }
     await c.dispose();
-  }
-
-  /// Mean green intensity over the centre of a YUV420 frame (docs/06 algorithm B),
-  /// plus a "covered" hint: a fingertip lit by the torch fills the frame with a
-  /// bright, strongly red image (high Cr). Samples every 4th pixel.
-  static ({double green, bool covered})? frameStats(CameraImage image) {
-    if (image.planes.length < 3) return null;
-    final y = image.planes[0];
-    final u = image.planes[1];
-    final v = image.planes[2];
-    final uvStride = u.bytesPerPixel ?? 1;
-    final w = image.width;
-    final h = image.height;
-    var green = 0.0;
-    var luma = 0.0;
-    var red = 0.0;
-    var n = 0;
-    for (var row = h ~/ 4; row < 3 * h ~/ 4; row += 4) {
-      for (var col = w ~/ 4; col < 3 * w ~/ 4; col += 4) {
-        final yv = y.bytes[row * y.bytesPerRow + col];
-        final uvIndex = (row ~/ 2) * u.bytesPerRow + (col ~/ 2) * uvStride;
-        if (uvIndex >= u.bytes.length || uvIndex >= v.bytes.length) continue;
-        final uu = u.bytes[uvIndex] - 128;
-        final vv = v.bytes[uvIndex] - 128;
-        green += yv - 0.344 * uu - 0.714 * vv; // YUV -> G
-        luma += yv;
-        red += vv;
-        n++;
-      }
-    }
-    if (n == 0) return null;
-    return (green: green / n, covered: luma / n > 40 && red / n > 25);
   }
 }

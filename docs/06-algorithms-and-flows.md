@@ -65,6 +65,13 @@ INPUT: 10-second video frame stream from rear camera with fingertip covering the
 - Unit-test the signal pipeline with synthetic sine waves at known BPM (e.g. 60/90/120 bpm ± noise). This supports Objective 1's "verified through unit testing".
 - Label the result "estimate" in the UI (Ch1 limitation).
 - **D-119 additions:** an FFT cross-check (Hann window, zero-padded radix-2 FFT, strongest bin in 40-200 bpm, parabolic interpolation) must agree with the peak count within max(8 bpm, 10%) or the capture fails as `mismatch`; measuring auto-starts after the fingertip covers the lens for 1 s; a live reading updates about once a second while recording.
+- **D-123 image-processing stage** (`app/lib/features/vitals/domain/ppg_image.dart`), per frame, sampling every 4th pixel of the whole frame:
+  1. colour-space conversion YUV -> green, G = Y - 0.344Cb - 0.714Cr (BT.601), and Cr for skin;
+  2. luma histogram -> pixel masking: Y < 30 (unlit) and Y >= 245 (saturated) are excluded; > 25% saturated shows "Press more lightly";
+  3. segmentation: a pixel is fingertip when Y >= 30 and Cr > 20; finger coverage = fingertip share, "finger detected" at >= 80% (live meter);
+  4. 4x4 grid: mean green of usable fingertip pixels per block;
+  5. frame differencing: mean absolute difference of an 8x6 luma thumbnail from the previous frame; > 6 levels = moving ("Hold still").
+  Signal stage then: adaptive ROI — each block's pulse strength = share of in-band spectral power within 6 bpm of its peak; blocks >= 60% of the best are averaged (blocks missing in > 10% of frames are skipped); frames flagged as moving are bridged by linear interpolation, and more than 25% moving frames after settling fails as `motion`. Technical details show a 4x4 pulse-strength heat map with the used blocks outlined, the ROI count and motion frames bridged.
 
 ---
 

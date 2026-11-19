@@ -1,8 +1,13 @@
 import 'dart:math' as math;
 
+import 'ppg_image.dart';
+
 /// Camera PPG heart-rate estimation (FR-3.2, UC3.3; docs/06 algorithm B, Yan et al. 2017).
 ///
-/// 1. one green-channel mean per frame (fingertip over the lens, torch on)
+/// 1. image stage (D-123, ppg_image.dart): per frame, YUV -> green, histogram masking,
+///    fingertip segmentation, 4x4 grid block means and frame-differencing motion flags;
+///    here the most pulse-like blocks are averaged (adaptive ROI) and frames flagged as
+///    moving are bridged by interpolation
 /// 2. resample to a uniform rate and remove the slow baseline
 /// 3. band-pass 0.67-3.3 Hz (40-200 bpm), zero-phase
 /// 4. peak detection
@@ -17,21 +22,40 @@ import 'dart:math' as math;
 /// Pure Dart with no Flutter imports, so it runs in an isolate via `compute`
 /// and is unit-tested with synthetic signals.
 
-enum PpgFailure { tooShort, noSignal, irregular, outOfRange, mismatch }
+enum PpgFailure { tooShort, noSignal, irregular, outOfRange, mismatch, motion }
 
 class PpgInput {
-  const PpgInput(this.timesSeconds, this.greenMeans);
+  const PpgInput(this.timesSeconds, this.greenMeans, {this.blockGreens, this.moving});
 
   /// Frame timestamps in seconds (need not be evenly spaced).
   final List<double> timesSeconds;
 
   /// Mean green intensity of each frame.
   final List<double> greenMeans;
+
+  /// D-123: per frame, the mean green of each grid block (NaN when unusable).
+  final List<List<double>>? blockGreens;
+
+  /// D-123: per frame, true when frame differencing flagged movement.
+  final List<bool>? moving;
 }
 
 class PpgResult {
-  const PpgResult.success(this.bpm, this.quality, {this.fftBpm}) : failure = null;
-  const PpgResult.failed(this.failure) : bpm = null, quality = 0, fftBpm = null;
+  const PpgResult.success(
+    this.bpm,
+    this.quality, {
+    this.fftBpm,
+    this.roiBlocks = const [],
+    this.blockStrength = const [],
+    this.motionFrames = 0,
+  }) : failure = null;
+  const PpgResult.failed(this.failure)
+    : bpm = null,
+      quality = 0,
+      fftBpm = null,
+      roiBlocks = const [],
+      blockStrength = const [],
+      motionFrames = 0;
 
   /// Heart rate from counting peaks (the reported value).
   final int? bpm;
@@ -41,6 +65,14 @@ class PpgResult {
 
   /// 0..1, higher is a cleaner, more regular pulse.
   final double quality;
+
+  /// D-123: grid blocks averaged for the signal, and the pulse strength (0..1) of every
+  /// block for the heat map. Empty when the input had no grid.
+  final List<int> roiBlocks;
+  final List<double> blockStrength;
+
+  /// D-123: frames flagged as moving and bridged by interpolation.
+  final int motionFrames;
   final PpgFailure? failure;
 
   bool get ok => bpm != null;
@@ -56,6 +88,7 @@ class PpgConfig {
     this.maxIntervalCv = 0.25,
     this.maxMethodGapBpm = 8,
     this.maxMethodGapRatio = 0.1,
+    this.maxMotionShare = 0.25,
   });
 
   final double sampleRate;
@@ -75,6 +108,9 @@ class PpgConfig {
   /// bpm, or this fraction of the peak estimate, whichever is larger.
   final double maxMethodGapBpm;
   final double maxMethodGapRatio;
+
+  /// D-123: fail as `motion` when more than this share of frames (after settling) moved.
+  final double maxMotionShare;
 }
 
 /// Shorter minimum for the live reading while measuring (D-119).
@@ -86,10 +122,38 @@ const maxBpm = 200;
 /// Entry point used with `compute(estimateHeartRate, input)`.
 PpgResult estimateHeartRate(PpgInput input, {PpgConfig config = const PpgConfig()}) {
   final t = input.timesSeconds;
-  final y = input.greenMeans;
+  var y = input.greenMeans;
   if (t.length != y.length || t.length < 2) return const PpgResult.failed(PpgFailure.tooShort);
-
   final fs = config.sampleRate;
+
+  // D-123 motion: frames flagged by frame differencing are bridged; too many -> retry.
+  final moving = input.moving != null && input.moving!.length == t.length ? input.moving : null;
+  var motionFrames = 0;
+  if (moving != null) {
+    final settled = t.first + config.settleSeconds;
+    var counted = 0;
+    for (var i = 0; i < t.length; i++) {
+      if (t[i] < settled) continue;
+      counted++;
+      if (moving[i]) motionFrames++;
+    }
+    if (counted > 0 && motionFrames > config.maxMotionShare * counted) {
+      return const PpgResult.failed(PpgFailure.motion);
+    }
+  }
+
+  // D-123 adaptive ROI: average only the grid blocks with the strongest pulse.
+  RoiSelection? roi;
+  final blocks = input.blockGreens;
+  if (blocks != null && blocks.length == t.length) {
+    roi = selectRoi(
+      blocks,
+      (series) => pulseStrength(t, moving == null ? series : repairFlagged(series, moving), config),
+    );
+    if (roi.series.isNotEmpty) y = roi.series;
+  }
+  if (moving != null) y = repairFlagged(y, moving);
+
   final uniform = resample(t, y, fs);
   final skip = (config.settleSeconds * fs).round();
   if (uniform.length - skip < config.minSeconds * fs) {
@@ -134,7 +198,55 @@ PpgResult estimateHeartRate(PpgInput input, {PpgConfig config = const PpgConfig(
     bpm,
     (1 - cv / config.maxIntervalCv).clamp(0.0, 1.0),
     fftBpm: fft.round(),
+    roiBlocks: roi?.selected ?? const [],
+    blockStrength: roi?.strength ?? const [],
+    motionFrames: motionFrames,
   );
+}
+
+/// D-123: how pulse-like one series is, 0..1: the share of in-band (40-200 bpm) spectral
+/// power within 6 bpm of the strongest frequency. A clean pulse is near 1, noise is low.
+double pulseStrength(List<double> t, List<double> y, [PpgConfig config = const PpgConfig()]) {
+  final fs = config.sampleRate;
+  final uniform = resample(t, y, fs);
+  final skip = (config.settleSeconds * fs).round();
+  if (uniform.length - skip < 4 * fs) return 0;
+  final signal = uniform.sublist(skip);
+  if (_std(signal) < 1e-6) return 0;
+  final power = _powerSpectrum(bandPass(signal, fs, config.lowHz, config.highHz), 1024);
+  final n = (power.length - 1) * 2;
+  final lo = math.max(1, (minBpm / 60 * n / fs).ceil());
+  final hi = math.min(power.length - 1, (maxBpm / 60 * n / fs).floor());
+  var total = 0.0;
+  var best = lo;
+  for (var k = lo; k <= hi; k++) {
+    total += power[k];
+    if (power[k] > power[best]) best = k;
+  }
+  if (total == 0) return 0;
+  final width = (6 / 60 * n / fs).ceil();
+  var near = 0.0;
+  for (var k = math.max(lo, best - width); k <= math.min(hi, best + width); k++) {
+    near += power[k];
+  }
+  return near / total;
+}
+
+/// Power at bins 0..n/2 of a Hann-windowed, zero-padded FFT.
+List<double> _powerSpectrum(List<double> x, int minSize) {
+  var n = 1;
+  while (n < math.max(x.length, minSize)) {
+    n <<= 1;
+  }
+  final mean = x.reduce((a, b) => a + b) / x.length;
+  final re = List<double>.filled(n, 0);
+  final im = List<double>.filled(n, 0);
+  for (var i = 0; i < x.length; i++) {
+    final w = 0.5 - 0.5 * math.cos(2 * math.pi * i / (x.length - 1));
+    re[i] = (x[i] - mean) * w;
+  }
+  fft(re, im);
+  return [for (var k = 0; k <= n ~/ 2; k++) re[k] * re[k] + im[k] * im[k]];
 }
 
 /// Live reading from the frames captured so far (D-119), or null while there is
