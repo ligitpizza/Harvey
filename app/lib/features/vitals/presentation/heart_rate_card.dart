@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,7 +10,9 @@ import '../domain/ppg.dart';
 import '../state/vitals_providers.dart';
 
 /// "Measure Heart Rate" card (Fig 4.3.3.2, UC3.3). Shows a live camera preview so the
-/// patient can place the fingertip, then measures. Reports the measured or manually
+/// patient can place the fingertip, then measures. D-119: measuring starts by itself
+/// once a fingertip has covered the lens for [autoStartDelay], shows a live reading
+/// while it records, and the result shows the FFT cross-check. Reports the measured or manually
 /// entered heart rate through [onChanged]; null means none.
 class HeartRateCard extends ConsumerStatefulWidget {
   const HeartRateCard({super.key, required this.onChanged, this.allowSkip = true});
@@ -18,6 +22,9 @@ class HeartRateCard extends ConsumerStatefulWidget {
   /// False in the symptom checker, where heart rate is compulsory (D-38): no Skip button;
   /// the camera or a typed pulse must provide it.
   final bool allowSkip;
+
+  /// How long the fingertip must stay on the lens before measuring starts by itself.
+  static const autoStartDelay = Duration(seconds: 1);
 
   @override
   ConsumerState<HeartRateCard> createState() => _HeartRateCardState();
@@ -30,6 +37,9 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
   double _progress = 0;
   List<double> _trace = const [];
   int? _bpm;
+  int? _fftBpm;
+  int? _live;
+  Timer? _autoStart;
   String _message = '';
   final _manual = TextEditingController();
   // Kept so dispose() can stop the camera without touching ref.
@@ -39,10 +49,13 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
   void initState() {
     super.initState();
     _capture = ref.read(ppgCaptureProvider);
+    _capture.fingerDetected.addListener(_onFinger);
   }
 
   @override
   void dispose() {
+    _autoStart?.cancel();
+    _capture.fingerDetected.removeListener(_onFinger);
     _manual.dispose();
     _capture.cancel();
     super.dispose();
@@ -53,7 +66,9 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
     setState(() => _phase = _Phase.opening);
     try {
       await _capture.open();
-      if (mounted) setState(() => _phase = _Phase.positioning);
+      if (!mounted) return;
+      setState(() => _phase = _Phase.positioning);
+      _onFinger(); // the finger may already be on the lens
     } on PpgUnavailableException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -67,19 +82,38 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
     }
   }
 
+  /// D-119: start measuring by itself once the fingertip has stayed on the lens.
+  void _onFinger() {
+    if (_phase != _Phase.positioning || !_capture.fingerDetected.value) {
+      _autoStart?.cancel();
+      _autoStart = null;
+      return;
+    }
+    _autoStart ??= Timer(HeartRateCard.autoStartDelay, () {
+      _autoStart = null;
+      if (mounted && _phase == _Phase.positioning && _capture.fingerDetected.value) {
+        _measure();
+      }
+    });
+  }
+
   /// Step 2: record and estimate.
   Future<void> _measure() async {
+    _autoStart?.cancel();
+    _autoStart = null;
     setState(() {
       _phase = _Phase.measuring;
       _progress = 0;
       _trace = const [];
+      _live = null;
     });
     final result = await _capture.measure(
-      onProgress: (p, trace) {
+      onProgress: (p, trace, live) {
         if (mounted) {
           setState(() {
             _progress = p;
             _trace = trace;
+            _live = live;
           });
         }
       },
@@ -90,6 +124,7 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
       setState(() {
         _phase = _Phase.done;
         _bpm = result.bpm;
+        _fftBpm = result.fftBpm;
       });
       widget.onChanged(result.bpm);
     } else {
@@ -98,6 +133,8 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
         _phase = _Phase.failed;
         _message = switch (result.failure) {
           PpgFailure.tooShort => 'The measurement stopped too early.',
+          // D-119: the two methods disagreed, so no number is shown.
+          PpgFailure.mismatch => 'The reading was not steady enough to confirm.',
           _ => 'We could not get a clear pulse signal.',
         };
       });
@@ -214,7 +251,8 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
             const SizedBox(height: 8),
             const Text(
               'This is your rear camera. Cover the lens and the light next to it until the '
-              'picture turns evenly red, then tap Start measuring.',
+              'picture turns evenly red. Measuring starts by itself once your finger is '
+              'detected.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -258,6 +296,16 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
                 painter: _TracePainter(_trace, Theme.of(context).colorScheme.tertiary),
               ),
             ),
+            const SizedBox(height: 4),
+            // D-119: live reading while recording.
+            Text(
+              _live == null ? 'Finding your pulse…' : '$_live BPM',
+              key: const Key('ppg-live'),
+              style: _live == null
+                  ? Theme.of(context).textTheme.bodyMedium
+                  : Theme.of(context).textTheme.titleLarge,
+            ),
+            if (_live != null) Text('Live estimate', style: Theme.of(context).textTheme.bodySmall),
             _fingerHint(),
             const Text('Measuring… keep your finger still.'),
             TextButton(onPressed: _stop, child: const Text('Cancel')),
@@ -272,6 +320,24 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
               style: Theme.of(context).textTheme.headlineMedium,
             ),
             // Ch1 limitation: camera PPG is supplementary and less accurate than a device.
+            if (_fftBpm != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  key: const Key('ppg-crosscheck'),
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.verified_outlined, size: 16, color: Colors.green.shade700),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        'Cross-checked: beat count $_bpm · frequency (FFT) $_fftBpm BPM',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const Text(
               'Estimate from your phone camera, not a medical measurement.',
               textAlign: TextAlign.center,

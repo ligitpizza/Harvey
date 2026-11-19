@@ -51,12 +51,16 @@ class FakeVitalsRepository implements VitalsRepository {
 }
 
 class FakePpgCapture implements PpgCapture {
-  PpgResult result = const PpgResult.success(72, 0.9);
+  PpgResult result = const PpgResult.success(72, 0.9, fftBpm: 73);
   PpgUnavailable? unavailable;
   int opens = 0;
   int measures = 0;
   bool cancelled = false;
   final finger = ValueNotifier<bool>(false);
+  int? liveBpm;
+
+  /// When set, measure() waits for it, so a test can look at the measuring screen.
+  Completer<void>? hold;
 
   @override
   Future<void> open() async {
@@ -73,7 +77,11 @@ class FakePpgCapture implements PpgCapture {
   @override
   Future<PpgResult> measure({required PpgProgress onProgress, Duration? duration}) async {
     measures++;
-    onProgress(0.5, const [1, 2, 3, 2, 1]);
+    if (hold != null) {
+      onProgress(0.5, const [1, 2, 3, 2, 1], liveBpm);
+      await hold!.future;
+    }
+    onProgress(0.5, const [1, 2, 3, 2, 1], liveBpm);
     return result;
   }
 
@@ -206,6 +214,49 @@ void main() {
       await t.tap(find.byKey(const Key('bp-save')));
       await t.pumpAndSettle();
       expect(repo.last!['heartRate'], 72);
+    });
+
+    tallTest('D-119 measuring starts by itself once the finger stays on the lens', (t) async {
+      final ppg = FakePpgCapture();
+      await t.pumpWidget(logApp(FakeVitalsRepository(), ppg));
+      await t.tap(find.byKey(const Key('ppg-start')));
+      await t.pumpAndSettle();
+      // A brief touch does not start it.
+      ppg.finger.value = true;
+      await t.pump(const Duration(milliseconds: 500));
+      ppg.finger.value = false;
+      await t.pump(const Duration(seconds: 2));
+      expect(ppg.measures, 0);
+      // Kept on the lens for a second: it starts without tapping.
+      ppg.finger.value = true;
+      await t.pump(const Duration(milliseconds: 1100));
+      await t.pumpAndSettle();
+      expect(ppg.measures, 1);
+      expect(find.text('72 BPM'), findsOneWidget);
+    });
+
+    tallTest('D-119 a live reading shows while measuring, then the FFT cross-check', (t) async {
+      final ppg = FakePpgCapture()..hold = Completer<void>();
+      await t.pumpWidget(logApp(FakeVitalsRepository(), ppg));
+      await t.tap(find.byKey(const Key('ppg-start')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('ppg-measure')));
+      await t.pump();
+      expect(find.text('Finding your pulse…'), findsOneWidget);
+      ppg.liveBpm = 70;
+      ppg.hold!.complete();
+      await t.pumpAndSettle();
+      expect(find.text('72 BPM'), findsOneWidget);
+      expect(find.byKey(const Key('ppg-crosscheck')), findsOneWidget);
+      expect(find.textContaining('frequency (FFT) 73 BPM'), findsOneWidget);
+    });
+
+    tallTest('D-119 a reading the two methods disagree on is not shown', (t) async {
+      final ppg = FakePpgCapture()..result = const PpgResult.failed(PpgFailure.mismatch);
+      await t.pumpWidget(logApp(FakeVitalsRepository(), ppg));
+      await measureHeartRate(t);
+      expect(find.byKey(const Key('ppg-failed')), findsOneWidget);
+      expect(find.text('The reading was not steady enough to confirm.'), findsOneWidget);
     });
 
     tallTest('UC3.3 E1 poor signal offers retry and skip', (t) async {

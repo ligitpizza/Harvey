@@ -80,6 +80,57 @@ void main() {
     });
   });
 
+  group('D-119 FFT cross-check', () {
+    test('FFT of a pure sine finds its frequency', () {
+      for (final bpm in [45.0, 72.0, 110.0, 180.0]) {
+        final x = [for (var i = 0; i < 360; i++) math.sin(2 * math.pi * bpm / 60 * i / 30)];
+        expect(spectralBpm(x, 30)!, closeTo(bpm, 1.5));
+      }
+    });
+
+    test('fft matches a direct DFT', () {
+      final x = [for (var i = 0; i < 16; i++) math.cos(i * 0.7) + 0.3 * i];
+      final re = List.of(x), im = List<double>.filled(16, 0);
+      fft(re, im);
+      for (var k = 0; k < 16; k++) {
+        var r = 0.0, m = 0.0;
+        for (var i = 0; i < 16; i++) {
+          r += x[i] * math.cos(-2 * math.pi * k * i / 16);
+          m += x[i] * math.sin(-2 * math.pi * k * i / 16);
+        }
+        expect(re[k], closeTo(r, 1e-9));
+        expect(im[k], closeTo(m, 1e-9));
+      }
+    });
+
+    test('a flat signal has no spectral peak', () {
+      expect(spectralBpm(List.filled(300, 5.0), 30), isNull);
+    });
+
+    test('accepted results carry an FFT estimate that agrees', () {
+      for (final bpm in [60.0, 90.0, 150.0]) {
+        final r = estimateHeartRate(synth(bpm));
+        expect(r.ok, isTrue);
+        expect(methodsAgree(r.bpm!, r.fftBpm!.toDouble()), isTrue);
+        expect((r.fftBpm! - bpm).abs(), lessThanOrEqualTo(3));
+      }
+    });
+
+    test('agreement allows 8 bpm or 10%, whichever is larger', () {
+      expect(methodsAgree(70, 77.9), isTrue);
+      expect(methodsAgree(70, 78.5), isFalse);
+      expect(methodsAgree(150, 164), isTrue);
+      expect(methodsAgree(150, 166), isFalse);
+    });
+  });
+
+  group('D-119 live reading', () {
+    test('appears once there is enough signal', () {
+      expect(liveHeartRate(synth(72, seconds: 4)), isNull);
+      expect((liveHeartRate(synth(72, seconds: 8))! - 72).abs(), lessThanOrEqualTo(3));
+    });
+  });
+
   group('signal helpers', () {
     test('resample produces an even grid at the requested rate', () {
       final out = resample([0, 0.5, 1.0], [0, 5, 10], 10);

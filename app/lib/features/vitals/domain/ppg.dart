@@ -7,12 +7,17 @@ import 'dart:math' as math;
 /// 3. band-pass 0.67-3.3 Hz (40-200 bpm), zero-phase
 /// 4. peak detection
 /// 5. bpm = beats per minute over the span of detected beats
-/// 6. reject the capture if the signal quality is too low (UC3.3 E1 / UC14.2 E1)
+/// 6. D-119 cross-check: an FFT of the same filtered signal gives a second, independent
+///    estimate (strongest frequency in 40-200 bpm); the two must agree
+/// 7. reject the capture if the signal quality is too low (UC3.3 E1 / UC14.2 E1)
+///
+/// [liveHeartRate] runs the same steps on the frames so far, for the live reading
+/// shown while measuring (D-119).
 ///
 /// Pure Dart with no Flutter imports, so it runs in an isolate via `compute`
 /// and is unit-tested with synthetic signals.
 
-enum PpgFailure { tooShort, noSignal, irregular, outOfRange }
+enum PpgFailure { tooShort, noSignal, irregular, outOfRange, mismatch }
 
 class PpgInput {
   const PpgInput(this.timesSeconds, this.greenMeans);
@@ -25,10 +30,14 @@ class PpgInput {
 }
 
 class PpgResult {
-  const PpgResult.success(this.bpm, this.quality) : failure = null;
-  const PpgResult.failed(this.failure) : bpm = null, quality = 0;
+  const PpgResult.success(this.bpm, this.quality, {this.fftBpm}) : failure = null;
+  const PpgResult.failed(this.failure) : bpm = null, quality = 0, fftBpm = null;
 
+  /// Heart rate from counting peaks (the reported value).
   final int? bpm;
+
+  /// D-119: the frequency-spectrum (FFT) estimate it was checked against.
+  final int? fftBpm;
 
   /// 0..1, higher is a cleaner, more regular pulse.
   final double quality;
@@ -45,6 +54,8 @@ class PpgConfig {
     this.settleSeconds = 1.5,
     this.minSeconds = 8,
     this.maxIntervalCv = 0.25,
+    this.maxMethodGapBpm = 8,
+    this.maxMethodGapRatio = 0.1,
   });
 
   final double sampleRate;
@@ -59,7 +70,15 @@ class PpgConfig {
 
   /// Maximum coefficient of variation of beat intervals for a "regular" pulse.
   final double maxIntervalCv;
+
+  /// D-119: the peak and FFT estimates agree when they differ by at most this many
+  /// bpm, or this fraction of the peak estimate, whichever is larger.
+  final double maxMethodGapBpm;
+  final double maxMethodGapRatio;
 }
+
+/// Shorter minimum for the live reading while measuring (D-119).
+const livePpgConfig = PpgConfig(minSeconds: 5);
 
 const minBpm = 40;
 const maxBpm = 200;
@@ -104,7 +123,103 @@ PpgResult estimateHeartRate(PpgInput input, {PpgConfig config = const PpgConfig(
   final bpm = ((peaks.length - 1) / spanSeconds * 60).round();
   if (bpm < minBpm || bpm > maxBpm) return const PpgResult.failed(PpgFailure.outOfRange);
 
-  return PpgResult.success(bpm, (1 - cv / config.maxIntervalCv).clamp(0.0, 1.0));
+  // D-119: independent check in the frequency domain. Counting peaks can be fooled by
+  // a missed or extra beat; the spectrum looks at the whole window at once.
+  final fft = spectralBpm(core, fs);
+  if (fft == null || !methodsAgree(bpm, fft, config)) {
+    return const PpgResult.failed(PpgFailure.mismatch);
+  }
+
+  return PpgResult.success(
+    bpm,
+    (1 - cv / config.maxIntervalCv).clamp(0.0, 1.0),
+    fftBpm: fft.round(),
+  );
+}
+
+/// Live reading from the frames captured so far (D-119), or null while there is
+/// not yet a clear, cross-checked pulse. Top-level so it can run with `compute`.
+int? liveHeartRate(PpgInput input) => estimateHeartRate(input, config: livePpgConfig).bpm;
+
+/// D-119: true when the peak-count and FFT estimates are close enough.
+bool methodsAgree(int peakBpm, double fftBpm, [PpgConfig config = const PpgConfig()]) {
+  final allowed = math.max(config.maxMethodGapBpm, config.maxMethodGapRatio * peakBpm);
+  return (peakBpm - fftBpm).abs() <= allowed;
+}
+
+/// Heart rate from the frequency spectrum (D-119): Hann window, zero-padded radix-2
+/// FFT, strongest bin between 40 and 200 bpm, refined by parabolic interpolation.
+/// Null when the signal has no energy.
+double? spectralBpm(List<double> x, double fs, {int minSize = 2048}) {
+  if (x.length < 8) return null;
+  var n = 1;
+  while (n < math.max(x.length, minSize)) {
+    n <<= 1;
+  }
+  final mean = x.reduce((a, b) => a + b) / x.length;
+  final re = List<double>.filled(n, 0);
+  final im = List<double>.filled(n, 0);
+  for (var i = 0; i < x.length; i++) {
+    final w = 0.5 - 0.5 * math.cos(2 * math.pi * i / (x.length - 1)); // Hann
+    re[i] = (x[i] - mean) * w;
+  }
+  fft(re, im);
+  final lo = math.max(1, (minBpm / 60 * n / fs).ceil());
+  final hi = math.min(n ~/ 2 - 2, (maxBpm / 60 * n / fs).floor());
+  double mag(int k) => math.sqrt(re[k] * re[k] + im[k] * im[k]);
+  var best = lo;
+  for (var k = lo + 1; k <= hi; k++) {
+    if (mag(k) > mag(best)) best = k;
+  }
+  if (mag(best) == 0) return null;
+  final a = mag(best - 1), b = mag(best), c = mag(best + 1);
+  final denom = a - 2 * b + c;
+  final delta = denom == 0 ? 0.0 : (0.5 * (a - c) / denom).clamp(-0.5, 0.5);
+  return (best + delta) * fs / n * 60;
+}
+
+/// In-place iterative radix-2 Cooley-Tukey FFT. [re] and [im] must have the same
+/// power-of-two length.
+void fft(List<double> re, List<double> im) {
+  final n = re.length;
+  assert(n == im.length && n & (n - 1) == 0, 'length must be a power of two');
+  // Bit-reversal permutation.
+  for (var i = 1, j = 0; i < n; i++) {
+    var bit = n >> 1;
+    for (; j & bit != 0; bit >>= 1) {
+      j ^= bit;
+    }
+    j ^= bit;
+    if (i < j) {
+      final tr = re[i];
+      re[i] = re[j];
+      re[j] = tr;
+      final ti = im[i];
+      im[i] = im[j];
+      im[j] = ti;
+    }
+  }
+  // Butterflies.
+  for (var len = 2; len <= n; len <<= 1) {
+    final half = len >> 1;
+    final ang = -2 * math.pi / len;
+    final wr = math.cos(ang), wi = math.sin(ang);
+    for (var i = 0; i < n; i += len) {
+      var cr = 1.0, ci = 0.0;
+      for (var k = 0; k < half; k++) {
+        final a = i + k, b = a + half;
+        final vr = re[b] * cr - im[b] * ci;
+        final vi = re[b] * ci + im[b] * cr;
+        re[b] = re[a] - vr;
+        im[b] = im[a] - vi;
+        re[a] += vr;
+        im[a] += vi;
+        final next = cr * wr - ci * wi;
+        ci = cr * wi + ci * wr;
+        cr = next;
+      }
+    }
+  }
 }
 
 /// Linear interpolation onto an even grid at [fs] Hz.

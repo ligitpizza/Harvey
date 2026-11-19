@@ -14,8 +14,9 @@ class PpgUnavailableException implements Exception {
   final PpgUnavailable reason;
 }
 
-/// Live progress while measuring: 0..1 and the recent signal for the trace.
-typedef PpgProgress = void Function(double progress, List<double> recentSignal);
+/// Live progress while measuring: 0..1, the recent signal for the trace, and the
+/// live heart-rate reading so far (D-119; null until a clear pulse is found).
+typedef PpgProgress = void Function(double progress, List<double> recentSignal, int? liveBpm);
 
 /// Camera PPG capture (FR-3.2, UC3.3). Two steps so the patient can see the lens
 /// before measuring: [open] starts the camera + torch and a live preview,
@@ -52,6 +53,13 @@ class CameraPpgCapture implements PpgCapture {
   PpgProgress? _onProgress;
   final _times = <double>[];
   final _values = <double>[];
+
+  // D-119 live reading: re-estimated about once a second from the frames so far.
+  static const _liveEvery = Duration(seconds: 1);
+  static const _liveAfter = Duration(milliseconds: 6500); // settle 1.5 s + 5 s
+  int? _liveBpm;
+  bool _liveBusy = false;
+  Duration _lastLive = Duration.zero;
 
   @override
   ValueListenable<bool> get fingerDetected => _finger;
@@ -107,8 +115,22 @@ class CameraPpgCapture implements PpgCapture {
     _values.add(stats.green);
     final p = (clock.elapsed.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0);
     final start = _values.length > 90 ? _values.length - 90 : 0;
-    _onProgress?.call(p, _values.sublist(start));
+    _onProgress?.call(p, _values.sublist(start), _liveBpm);
+    _maybeUpdateLive(clock.elapsed);
     if (clock.elapsed >= _duration) done.complete();
+  }
+
+  void _maybeUpdateLive(Duration elapsed) {
+    if (_liveBusy || elapsed < _liveAfter || elapsed - _lastLive < _liveEvery) return;
+    _liveBusy = true;
+    _lastLive = elapsed;
+    final input = PpgInput(List.of(_times), List.of(_values));
+    compute(liveHeartRate, input)
+        .then((bpm) {
+          // Keep the last good value through a noisy second rather than flicker.
+          if (bpm != null && _done != null) _liveBpm = bpm;
+        })
+        .whenComplete(() => _liveBusy = false);
   }
 
   @override
@@ -119,6 +141,8 @@ class CameraPpgCapture implements PpgCapture {
     await open();
     _times.clear();
     _values.clear();
+    _liveBpm = null;
+    _lastLive = Duration.zero;
     _duration = duration;
     _onProgress = onProgress;
     _clock = Stopwatch()..start();

@@ -64,6 +64,7 @@ INPUT: 10-second video frame stream from rear camera with fingertip covering the
 - Use the YUV420 Y/U/V planes from the `camera` image stream converted to green intensity, or the green channel when the format is BGRA.
 - Unit-test the signal pipeline with synthetic sine waves at known BPM (e.g. 60/90/120 bpm ± noise). This supports Objective 1's "verified through unit testing".
 - Label the result "estimate" in the UI (Ch1 limitation).
+- **D-119 additions:** an FFT cross-check (Hann window, zero-padded radix-2 FFT, strongest bin in 40-200 bpm, parabolic interpolation) must agree with the peak count within max(8 bpm, 10%) or the capture fails as `mismatch`; measuring auto-starts after the fingertip covers the lens for 1 s; a live reading updates about once a second while recording.
 
 ---
 
