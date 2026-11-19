@@ -40,6 +40,7 @@ class SymptomCheckerPage extends ConsumerStatefulWidget {
 class _SymptomCheckerPageState extends ConsumerState<SymptomCheckerPage> {
   int _step = 0;
   int? _heartRate;
+  HeartRateSource? _heartRateSource;
   final _sys = TextEditingController();
   final _dia = TextEditingController();
   final Set<String> _selected = {};
@@ -88,6 +89,7 @@ class _SymptomCheckerPageState extends ConsumerState<SymptomCheckerPage> {
               systolic: int.parse(_sys.text.trim()),
               diastolic: int.parse(_dia.text.trim()),
               heartRate: _heartRate,
+              heartRateSource: _heartRateSource,
               note: 'Symptom checker',
             );
         readingId = _savedReadingId = saved.id;
@@ -145,7 +147,13 @@ class _SymptomCheckerPageState extends ConsumerState<SymptomCheckerPage> {
         'on your blood pressure monitor.',
       ),
       const SizedBox(height: 8),
-      HeartRateCard(allowSkip: false, onChanged: (bpm) => setState(() => _heartRate = bpm)),
+      HeartRateCard(
+        allowSkip: false,
+        onChanged: (bpm, source) => setState(() {
+          _heartRate = bpm;
+          _heartRateSource = source;
+        }),
+      ),
       const SizedBox(height: 16),
       Text('Blood pressure (required)', style: Theme.of(context).textTheme.titleMedium),
       const Text(

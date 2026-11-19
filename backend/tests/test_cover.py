@@ -101,7 +101,9 @@ def test_access_is_checked_against_the_time() -> None:
 
 
 def test_d120_admin_moving_a_visit_to_another_doctor_makes_it_a_cover_visit(
-    client: TestClient, appointment_repo: InMemoryAppointmentRepository, repo: InMemoryUserRepository
+    client: TestClient,
+    appointment_repo: InMemoryAppointmentRepository,
+    repo: InMemoryUserRepository,
 ) -> None:
     appt_id = admin_book(client, OWN, soon(30))
     assert appointment_repo.appointments[appt_id].get("coverForDoctorId") is None
@@ -122,7 +124,9 @@ def test_d120_admin_moving_a_visit_to_another_doctor_makes_it_a_cover_visit(
 
 
 def test_d120_admin_booking_with_another_doctor_is_a_cover_visit(
-    client: TestClient, appointment_repo: InMemoryAppointmentRepository, repo: InMemoryUserRepository
+    client: TestClient,
+    appointment_repo: InMemoryAppointmentRepository,
+    repo: InMemoryUserRepository,
 ) -> None:
     appt_id = admin_book(client, COVERING, soon(30))
     assert appointment_repo.appointments[appt_id]["coverForDoctorId"] == OWN
@@ -151,9 +155,7 @@ def test_d120_covering_doctor_writes_a_note_only_inside_the_window(
 
     # After the window the access ends.
     past = datetime.now(UTC) - timedelta(days=1)
-    repo.users[P]["coverAccess"] = {
-        COVERING: {"from": past - timedelta(days=9), "until": past}
-    }
+    repo.users[P]["coverAccess"] = {COVERING: {"from": past - timedelta(days=9), "until": past}}
     assert client.post(url, json=note, headers=COVER).status_code == 403
 
 

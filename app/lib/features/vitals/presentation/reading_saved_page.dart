@@ -109,8 +109,9 @@ class ReadingSavedPage extends StatelessWidget {
                   systolic: reading.systolic,
                   diastolic: reading.diastolic,
                   heartRate: reading.heartRate,
+                  source: reading.heartRateSource,
                 ),
-                if (reading.heartRate != null) ...[
+                if (reading.heartRateSource == HeartRateSource.camera) ...[
                   const SizedBox(height: 6),
                   Text(
                     'A heart rate from the phone camera is an estimate.',

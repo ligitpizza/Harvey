@@ -1,6 +1,6 @@
 """Module 3 request/response models (FR-3.1, FR-3.2)."""
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -16,6 +16,8 @@ class LogReadingRequest(BaseModel):
     systolic: int = Field(ge=0, le=1000)
     diastolic: int = Field(ge=0, le=1000)
     heartRate: int | None = Field(default=None, ge=0, le=1000)  # PPG estimate (UC3.3)
+    # D-122: where the heart rate came from; kept only with a heart rate.
+    heartRateSource: Literal["camera", "manual"] | None = None
     note: str | None = Field(default=None, max_length=500)  # UC3.2
     # D-62: the phone's GPS position; kept only if the reading raises a family emergency.
     location: Location | None = None
@@ -31,6 +33,7 @@ class LogReadingResponse(BaseModel):
     systolic: int
     diastolic: int
     heartRate: int | None
+    heartRateSource: str | None = None
     category: BpCategory
     # Threshold alert band (FR-9.1).
     alertLevel: AlertLevel | None

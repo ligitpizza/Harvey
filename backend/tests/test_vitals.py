@@ -108,3 +108,31 @@ def test_missing_values_are_validation_errors(
     res = client.post(URL, json={"systolic": 120}, headers=bearer("patient-token"))
     assert res.status_code == 422
     assert res.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_d122_heart_rate_source_is_kept_only_with_a_heart_rate(
+    client: TestClient, patient: InMemoryUserRepository, vitals_repo: InMemoryVitalsRepository
+) -> None:
+    res = client.post(
+        URL,
+        json={"systolic": 118, "diastolic": 76, "heartRate": 64, "heartRateSource": "camera"},
+        headers=bearer("patient-token"),
+    )
+    assert res.status_code == 201
+    assert res.json()["heartRateSource"] == "camera"
+    assert vitals_repo.readings[res.json()["id"]]["heartRateSource"] == "camera"
+
+    res = client.post(
+        URL,
+        json={"systolic": 118, "diastolic": 76, "heartRateSource": "manual"},
+        headers=bearer("patient-token"),
+    )
+    assert res.json()["heartRateSource"] is None
+    assert "heartRateSource" not in vitals_repo.readings[res.json()["id"]]
+
+    res = client.post(
+        URL,
+        json={"systolic": 118, "diastolic": 76, "heartRate": 64, "heartRateSource": "watch"},
+        headers=bearer("patient-token"),
+    )
+    assert res.status_code == 422

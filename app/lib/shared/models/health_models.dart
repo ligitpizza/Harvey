@@ -14,6 +14,7 @@ class VitalReading {
     required this.diastolic,
     required this.timestamp,
     this.heartRate,
+    this.heartRateSource,
     this.note,
   });
 
@@ -22,6 +23,9 @@ class VitalReading {
   final int systolic;
   final int diastolic;
   final int? heartRate;
+
+  /// D-122: camera or typed; null for older readings.
+  final HeartRateSource? heartRateSource;
   final String? note;
   final DateTime timestamp;
 
@@ -31,6 +35,7 @@ class VitalReading {
     systolic: (d['systolic'] as num).round(),
     diastolic: (d['diastolic'] as num).round(),
     heartRate: (d['heartRate'] as num?)?.round(),
+    heartRateSource: HeartRateSource.tryValue(d['heartRateSource']),
     note: d['note'] as String?,
     timestamp: _time(d['timestamp']),
   );

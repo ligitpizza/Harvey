@@ -40,6 +40,13 @@ String? categoryReason(int systolic, int diastolic) {
       'higher of the two.';
 }
 
+/// D-122: where the heart rate came from, or null for older readings that do not say.
+String? heartRateSourceLabel(HeartRateSource? s) => switch (s) {
+  HeartRateSource.camera => 'Camera estimate',
+  HeartRateSource.manual => 'Entered by you',
+  null => null,
+};
+
 /// The five AHA categories as a coloured scale with this reading's category marked.
 class BpScaleBar extends StatelessWidget {
   const BpScaleBar({super.key, required this.category});
@@ -231,11 +238,13 @@ class BpStatRow extends StatelessWidget {
     required this.systolic,
     required this.diastolic,
     required this.heartRate,
+    this.source,
   });
 
   final int systolic;
   final int diastolic;
   final int? heartRate;
+  final HeartRateSource? source;
 
   @override
   Widget build(BuildContext context) {
@@ -276,6 +285,7 @@ class BpStatRow extends StatelessWidget {
             value: heartRate == null ? '—' : '$heartRate',
             unit: heartRate == null ? 'not measured' : 'bpm',
             color: heartColor,
+            footnote: heartRate == null ? null : heartRateSourceLabel(source),
           ),
         ),
       ],

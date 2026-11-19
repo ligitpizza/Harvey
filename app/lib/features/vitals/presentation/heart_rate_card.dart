@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/enums.dart';
 import '../../../core/utils/bp_classifier.dart';
 import '../data/ppg_capture.dart';
 import '../domain/ppg.dart';
@@ -17,10 +18,13 @@ import 'ppg_guide.dart';
 /// a placement guide, the green channel the algorithm reads shown beside the camera,
 /// live frame statistics and a technical summary of the result. Reports the measured or
 /// manually entered heart rate through [onChanged]; null means none.
+/// D-122: the heart rate and where it came from; both null when cleared.
+typedef HeartRateChanged = void Function(int? bpm, HeartRateSource? source);
+
 class HeartRateCard extends ConsumerStatefulWidget {
   const HeartRateCard({super.key, required this.onChanged, this.allowSkip = true});
 
-  final ValueChanged<int?> onChanged;
+  final HeartRateChanged onChanged;
 
   /// False in the symptom checker, where heart rate is compulsory (D-38): no Skip button;
   /// the camera or a typed pulse must provide it.
@@ -117,7 +121,7 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
         _phase = _Phase.done;
         _result = result;
       });
-      widget.onChanged(result.bpm);
+      widget.onChanged(result.bpm, HeartRateSource.camera);
     } else {
       // UC3.3 E1: poor signal -> reposition and retry, or skip.
       setState(() {
@@ -142,7 +146,7 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
       _phase = _Phase.idle;
       _result = null;
     });
-    widget.onChanged(null);
+    widget.onChanged(null, null);
   }
 
   @override
@@ -472,7 +476,7 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
                   final n = int.tryParse(v);
                   final ok =
                       n != null && n >= BpClassifier.heartRateMin && n <= BpClassifier.heartRateMax;
-                  widget.onChanged(ok ? n : null);
+                  widget.onChanged(ok ? n : null, ok ? HeartRateSource.manual : null);
                 },
               ),
             ),

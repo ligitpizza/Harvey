@@ -262,6 +262,7 @@ void main() {
         'systolic': 150,
         'diastolic': 95,
         'heartRate': 88,
+        'heartRateSource': HeartRateSource.manual, // D-122: typed pulse
         'note': 'Symptom checker',
       });
       expect(repo.calls.single, {

@@ -44,6 +44,7 @@ class LoggedReading {
     required this.category,
     required this.loggedAt,
     this.heartRate,
+    this.heartRateSource,
     this.alertLevel,
     this.risk,
     this.readingsUntilRisk = 0,
@@ -55,6 +56,9 @@ class LoggedReading {
   final int systolic;
   final int diastolic;
   final int? heartRate;
+
+  /// D-122: camera or typed; null for older readings.
+  final HeartRateSource? heartRateSource;
   final BpCategory category;
   final AlertLevel? alertLevel;
   final DateTime loggedAt;
@@ -74,6 +78,7 @@ class LoggedReading {
     systolic: j['systolic'] as int,
     diastolic: j['diastolic'] as int,
     heartRate: j['heartRate'] as int?,
+    heartRateSource: HeartRateSource.tryValue(j['heartRateSource']),
     category: BpCategory.fromValue(j['category'] as String),
     alertLevel: j['alertLevel'] == null ? null : AlertLevel.fromValue(j['alertLevel'] as String),
     loggedAt: now,
@@ -92,6 +97,7 @@ abstract interface class VitalsRepository {
     required int systolic,
     required int diastolic,
     int? heartRate,
+    HeartRateSource? heartRateSource,
     String? note,
   });
 }
@@ -109,12 +115,14 @@ class ApiVitalsRepository implements VitalsRepository {
     required int systolic,
     required int diastolic,
     int? heartRate,
+    HeartRateSource? heartRateSource,
     String? note,
   }) async {
     final res = await _api.logReading(
       systolic: systolic,
       diastolic: diastolic,
       heartRate: heartRate,
+      heartRateSource: heartRateSource?.value,
       note: note,
       location: await _location.current(),
     );

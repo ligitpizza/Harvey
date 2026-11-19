@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/enums.dart';
 import '../../../core/utils/bp_classifier.dart';
 import '../../../shared/models/health_models.dart';
 import '../../symptom_checker/presentation/triage_result_page.dart';
@@ -140,8 +141,9 @@ class ReadingDetailPage extends ConsumerWidget {
             systolic: reading.systolic,
             diastolic: reading.diastolic,
             heartRate: reading.heartRate,
+            source: reading.heartRateSource,
           ),
-          if (reading.heartRate != null)
+          if (reading.heartRate != null && reading.heartRateSource != HeartRateSource.manual)
             Padding(
               padding: const EdgeInsets.only(top: 6, left: 4),
               child: Text(

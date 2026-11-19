@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/constants/enums.dart';
 import '../../../core/utils/bp_classifier.dart';
 import '../../../shared/services/api/api_client.dart';
 import '../state/vitals_providers.dart';
@@ -23,6 +24,7 @@ class _LogVitalsPageState extends ConsumerState<LogVitalsPage> {
   final _dia = TextEditingController();
   final _note = TextEditingController();
   int? _heartRate;
+  HeartRateSource? _heartRateSource;
   bool _saving = false;
   String? _error;
 
@@ -49,7 +51,13 @@ class _LogVitalsPageState extends ConsumerState<LogVitalsPage> {
     try {
       final saved = await ref
           .read(vitalsRepositoryProvider)
-          .logReading(systolic: sys, diastolic: dia, heartRate: _heartRate, note: _note.text);
+          .logReading(
+            systolic: sys,
+            diastolic: dia,
+            heartRate: _heartRate,
+            heartRateSource: _heartRateSource,
+            note: _note.text,
+          );
       if (mounted) context.pushReplacement('/vitals/saved', extra: saved);
     } on ApiException catch (e) {
       if (mounted) {
@@ -200,7 +208,12 @@ class _LogVitalsPageState extends ConsumerState<LogVitalsPage> {
               ),
             ),
             const SizedBox(height: 16),
-            HeartRateCard(onChanged: (bpm) => setState(() => _heartRate = bpm)),
+            HeartRateCard(
+              onChanged: (bpm, source) => setState(() {
+                _heartRate = bpm;
+                _heartRateSource = source;
+              }),
+            ),
           ],
         ),
       ),

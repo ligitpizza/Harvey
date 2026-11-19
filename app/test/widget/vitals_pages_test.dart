@@ -35,15 +35,23 @@ class FakeVitalsRepository implements VitalsRepository {
     required int systolic,
     required int diastolic,
     int? heartRate,
+    HeartRateSource? heartRateSource,
     String? note,
   }) async {
-    last = {'systolic': systolic, 'diastolic': diastolic, 'heartRate': heartRate, 'note': note};
+    last = {
+      'systolic': systolic,
+      'diastolic': diastolic,
+      'heartRate': heartRate,
+      'heartRateSource': heartRateSource,
+      'note': note,
+    };
     if (error != null) throw error!;
     return LoggedReading(
       id: 'r1',
       systolic: systolic,
       diastolic: diastolic,
       heartRate: heartRate,
+      heartRateSource: heartRateSource,
       category: BpCategory.normal,
       loggedAt: now,
     );
@@ -155,6 +163,7 @@ void main() {
         'systolic': 128,
         'diastolic': 82,
         'heartRate': null,
+        'heartRateSource': null,
         'note': 'after walk',
       });
       expect(find.text('SAVED 128'), findsOneWidget);
@@ -225,6 +234,7 @@ void main() {
       await t.tap(find.byKey(const Key('bp-save')));
       await t.pumpAndSettle();
       expect(repo.last!['heartRate'], 72);
+      expect(repo.last!['heartRateSource'], HeartRateSource.camera); // D-122
     });
 
     tallTest('D-119 measuring starts by itself once the finger stays on the lens', (t) async {
@@ -326,6 +336,7 @@ void main() {
       await t.tap(find.byKey(const Key('bp-save')));
       await t.pumpAndSettle();
       expect(repo.last!['heartRate'], 66);
+      expect(repo.last!['heartRateSource'], HeartRateSource.manual); // D-122
     });
 
     tallTest('implausible manual heart rate is not attached', (t) async {
@@ -353,6 +364,7 @@ void main() {
             systolic: 120,
             diastolic: 80,
             heartRate: 72,
+            heartRateSource: HeartRateSource.camera,
             category: BpCategory.stage1,
             loggedAt: now,
           ),
@@ -369,6 +381,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(const Key('saved-hr')), findsOneWidget);
+      expect(find.text('Camera estimate'), findsOneWidget); // D-122
       expect(find.text('Great job logging!'), findsOneWidget);
       expect(find.byKey(const Key('crisis-banner')), findsNothing);
     });

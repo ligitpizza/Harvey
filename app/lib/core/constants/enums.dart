@@ -255,6 +255,16 @@ enum BpCategory {
   static BpCategory fromValue(String v) => enumFromValue(values, v, (e) => e.value);
 }
 
+/// D-122: where a reading's heart rate came from.
+enum HeartRateSource {
+  camera('camera'),
+  manual('manual');
+
+  const HeartRateSource(this.value);
+  final String value;
+  static HeartRateSource? tryValue(Object? v) => values.where((e) => e.value == v).firstOrNull;
+}
+
 /// Threshold alert levels (FR-9.1, docs/06 §E). Kept separate from TriageOutcome (D-18).
 enum AlertLevel {
   mild('mild'),

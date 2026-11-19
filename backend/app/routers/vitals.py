@@ -94,6 +94,8 @@ def log_reading(
     # Optional fields are omitted rather than stored as null (docs/04).
     if body.heartRate is not None:
         data["heartRate"] = body.heartRate
+        if body.heartRateSource is not None:
+            data["heartRateSource"] = body.heartRateSource
     if body.note:
         data["note"] = body.note
     reading_id = vitals.add_reading(data)
@@ -239,6 +241,7 @@ def log_reading(
         systolic=body.systolic,
         diastolic=body.diastolic,
         heartRate=body.heartRate,
+        heartRateSource=body.heartRateSource if body.heartRate is not None else None,
         category=category,
         alertLevel=plan.alert_level,
         risk=risk,

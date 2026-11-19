@@ -187,12 +187,14 @@ class ApiClient {
     required int systolic,
     required int diastolic,
     int? heartRate,
+    String? heartRateSource,
     String? note,
     Map<String, double>? location,
   }) => _post('/vitals', {
     'systolic': systolic,
     'diastolic': diastolic,
     'heartRate': ?heartRate,
+    if (heartRate != null) 'heartRateSource': ?heartRateSource,
     if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
     // D-62: GPS, kept by the backend only if the reading raises a family emergency.
     'location': ?location,

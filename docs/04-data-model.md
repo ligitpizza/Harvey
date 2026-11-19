@@ -64,6 +64,7 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | systolic | Number | Systolic BP (mmHg) | Required |
 | diastolic | Number | Diastolic BP (mmHg) | Required |
 | heartRate | Number | PPG-captured heart rate | Optional; present if captured in the same session (UC3.3) |
+| heartRateSource | String | D-122: `camera` (PPG estimate) or `manual` (typed) | Optional; stored only with `heartRate`; absent on older readings |
 | note | String | Patient annotation | Optional |
 | timestamp | Timestamp | When the reading was logged | Required |
 
