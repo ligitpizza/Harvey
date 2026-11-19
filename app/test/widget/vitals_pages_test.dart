@@ -59,6 +59,15 @@ class FakePpgCapture implements PpgCapture {
   final finger = ValueNotifier<bool>(false);
   int? liveBpm;
 
+  PpgLive get live => PpgLive(
+    progress: 0.5,
+    signal: const [1, 2, 3, 2, 1],
+    bpm: liveBpm,
+    frames: 225,
+    fps: 30,
+    green: 84.5,
+  );
+
   /// When set, measure() waits for it, so a test can look at the measuring screen.
   Completer<void>? hold;
 
@@ -78,10 +87,10 @@ class FakePpgCapture implements PpgCapture {
   Future<PpgResult> measure({required PpgProgress onProgress, Duration? duration}) async {
     measures++;
     if (hold != null) {
-      onProgress(0.5, const [1, 2, 3, 2, 1], liveBpm);
+      onProgress(live);
       await hold!.future;
     }
-    onProgress(0.5, const [1, 2, 3, 2, 1], liveBpm);
+    onProgress(live);
     return result;
   }
 
@@ -199,7 +208,9 @@ void main() {
       await t.pumpAndSettle();
       // Live preview + finger hint before measuring.
       expect(find.byKey(const Key('ppg-positioning')), findsOneWidget);
-      expect(find.byKey(const Key('fake-preview')), findsOneWidget);
+      // D-121: the camera and its green channel side by side.
+      expect(find.byKey(const Key('fake-preview')), findsNWidgets(2));
+      expect(find.byKey(const Key('ppg-green-preview')), findsOneWidget);
       expect(find.text('Cover the lens and the light with your fingertip'), findsOneWidget);
       ppg.finger.value = true;
       await t.pump();
@@ -243,12 +254,37 @@ void main() {
       await t.tap(find.byKey(const Key('ppg-measure')));
       await t.pump();
       expect(find.text('Finding your pulse…'), findsOneWidget);
+      // D-121: live frame statistics.
+      expect(find.byKey(const Key('ppg-stats')), findsOneWidget);
+      expect(find.text('225'), findsOneWidget);
+      expect(find.text('30.0 fps'), findsOneWidget);
+      expect(find.text('84.5'), findsOneWidget);
       ppg.liveBpm = 70;
       ppg.hold!.complete();
       await t.pumpAndSettle();
       expect(find.text('72 BPM'), findsOneWidget);
       expect(find.byKey(const Key('ppg-crosscheck')), findsOneWidget);
       expect(find.textContaining('frequency (FFT) 73 BPM'), findsOneWidget);
+      // D-121: technical summary, collapsed until opened.
+      expect(find.text('Frames analysed'), findsNothing);
+      await t.tap(find.text('Technical details'));
+      await t.pumpAndSettle();
+      expect(find.text('Frames analysed'), findsOneWidget);
+      expect(find.text('7.5 s'), findsOneWidget);
+      expect(find.text('90%'), findsOneWidget); // signal quality
+    });
+
+    tallTest('D-121 the guide explains where to put the finger', (t) async {
+      await t.pumpWidget(logApp(FakeVitalsRepository(), FakePpgCapture()));
+      await t.tap(find.byKey(const Key('ppg-guide-open')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('ppg-guide')), findsOneWidget);
+      expect(find.text('Use your index finger'), findsOneWidget);
+      expect(find.text('Cover the camera and the flash'), findsOneWidget);
+      expect(find.text('Touch lightly'), findsOneWidget);
+      await t.tap(find.byKey(const Key('ppg-guide-close')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('ppg-guide')), findsNothing);
     });
 
     tallTest('D-119 a reading the two methods disagree on is not shown', (t) async {
@@ -322,10 +358,17 @@ void main() {
           ),
         ),
       );
-      expect(find.text('120/80 mmHg'), findsOneWidget);
+      expect(find.text('120/80'), findsOneWidget);
       expect(find.text('High — Stage 1'), findsOneWidget);
       expect(find.text('Today, 8:42 AM'), findsOneWidget);
-      expect(find.text('72 BPM'), findsOneWidget);
+      expect(find.byKey(const Key('bp-scale')), findsOneWidget);
+      // D-121: says which number made 120/80 Stage 1.
+      expect(find.textContaining('bottom number (80)'), findsOneWidget);
+      expect(
+        find.descendant(of: find.byKey(const Key('stat-heart-rate')), matching: find.text('72')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('saved-hr')), findsOneWidget);
       expect(find.text('Great job logging!'), findsOneWidget);
       expect(find.byKey(const Key('crisis-banner')), findsNothing);
     });
@@ -415,7 +458,7 @@ void main() {
       expect(find.text('<1%'), findsNWidgets(3)); // cad, heart failure, ckd
       expect(find.byKey(const Key('saved-diagnosed-t2d')), findsOneWidget);
       expect(find.byKey(const Key('saved-risk-low-confidence')), findsOneWidget);
-      expect(find.text('• Avoid heavy exertion.'), findsOneWidget);
+      expect(find.text('Avoid heavy exertion.'), findsOneWidget);
       expect(find.text('Not a substitute for a doctor.'), findsOneWidget);
       expect(find.text('Great job logging!'), findsNothing);
       await t.pumpAndSettle();
@@ -454,7 +497,10 @@ void main() {
       await t.tap(find.byKey(const Key('reading-b')));
       await t.pumpAndSettle();
       expect(find.text('Reading details'), findsOneWidget);
-      expect(find.text('70 bpm'), findsOneWidget);
+      expect(
+        find.descendant(of: find.byKey(const Key('reading-detail-hr')), matching: find.text('70')),
+        findsOneWidget,
+      );
       expect(find.byKey(const Key('reading-detail-note')), findsOneWidget);
       expect(find.byKey(const Key('reading-detail-triage')), findsOneWidget);
     });

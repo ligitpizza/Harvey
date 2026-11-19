@@ -8,12 +8,15 @@ import '../../../core/utils/bp_classifier.dart';
 import '../data/ppg_capture.dart';
 import '../domain/ppg.dart';
 import '../state/vitals_providers.dart';
+import 'ppg_guide.dart';
 
 /// "Measure Heart Rate" card (Fig 4.3.3.2, UC3.3). Shows a live camera preview so the
 /// patient can place the fingertip, then measures. D-119: measuring starts by itself
 /// once a fingertip has covered the lens for [autoStartDelay], shows a live reading
-/// while it records, and the result shows the FFT cross-check. Reports the measured or manually
-/// entered heart rate through [onChanged]; null means none.
+/// while it records, and the result shows the FFT cross-check. D-121: shorter copy with
+/// a placement guide, the green channel the algorithm reads shown beside the camera,
+/// live frame statistics and a technical summary of the result. Reports the measured or
+/// manually entered heart rate through [onChanged]; null means none.
 class HeartRateCard extends ConsumerStatefulWidget {
   const HeartRateCard({super.key, required this.onChanged, this.allowSkip = true});
 
@@ -34,11 +37,8 @@ enum _Phase { idle, opening, positioning, measuring, done, failed, unavailable, 
 
 class _HeartRateCardState extends ConsumerState<HeartRateCard> {
   _Phase _phase = _Phase.idle;
-  double _progress = 0;
-  List<double> _trace = const [];
-  int? _bpm;
-  int? _fftBpm;
-  int? _live;
+  PpgLive _live = const PpgLive(progress: 0, signal: []);
+  PpgResult? _result;
   Timer? _autoStart;
   String _message = '';
   final _manual = TextEditingController();
@@ -103,19 +103,11 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
     _autoStart = null;
     setState(() {
       _phase = _Phase.measuring;
-      _progress = 0;
-      _trace = const [];
-      _live = null;
+      _live = const PpgLive(progress: 0, signal: []);
     });
     final result = await _capture.measure(
-      onProgress: (p, trace, live) {
-        if (mounted) {
-          setState(() {
-            _progress = p;
-            _trace = trace;
-            _live = live;
-          });
-        }
+      onProgress: (live) {
+        if (mounted) setState(() => _live = live);
       },
     );
     await _capture.cancel(); // torch off as soon as the frames are in
@@ -123,8 +115,7 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
     if (result.ok) {
       setState(() {
         _phase = _Phase.done;
-        _bpm = result.bpm;
-        _fftBpm = result.fftBpm;
+        _result = result;
       });
       widget.onChanged(result.bpm);
     } else {
@@ -149,7 +140,7 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
   void _skip() {
     setState(() {
       _phase = _Phase.idle;
-      _bpm = null;
+      _result = null;
     });
     widget.onChanged(null);
   }
@@ -166,28 +157,39 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
       ),
       child: Column(
         children: [
-          CircleAvatar(
-            radius: 28,
-            backgroundColor: scheme.surface,
-            child: Icon(Icons.monitor_heart_outlined, color: scheme.tertiary),
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: scheme.surface,
+                child: Icon(Icons.monitor_heart_outlined, color: scheme.tertiary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Measure Heart Rate',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+              IconButton(
+                key: const Key('ppg-guide-open'),
+                tooltip: 'How to place your finger',
+                onPressed: () => showPpgGuide(context),
+                icon: const Icon(Icons.help_outline),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
-          Text('Measure Heart Rate', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          const Text(
-            "Place your fingertip completely over your phone's rear camera lens. Keep still.",
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 12),
           _body(context),
         ],
       ),
     );
   }
 
-  Widget _preview(double size) {
-    return ClipRRect(
-      key: const Key('ppg-preview'),
+  Widget _preview(double size, {bool green = false}) {
+    final view = ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: SizedBox(
         width: size,
@@ -199,7 +201,45 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
         ),
       ),
     );
+    if (!green) return KeyedSubtree(key: const Key('ppg-preview'), child: view);
+    // D-121: the green channel the algorithm averages (docs/06 §B: G = Y - 0.344U - 0.714V),
+    // with the centre region it samples outlined.
+    return Stack(
+      key: const Key('ppg-green-preview'),
+      children: [
+        ColorFiltered(colorFilter: greenChannelFilter, child: view),
+        Positioned.fill(
+          child: Padding(
+            padding: EdgeInsets.all(size / 4),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: 1.5),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
+
+  Widget _labelled(String label, Widget child) => Column(
+    children: [
+      child,
+      const SizedBox(height: 4),
+      Text(label, style: Theme.of(context).textTheme.labelSmall),
+    ],
+  );
+
+  /// Camera and green channel side by side.
+  Widget _dualPreview(double size) => Row(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      _labelled('Camera', _preview(size)),
+      const SizedBox(width: 12),
+      _labelled('Green channel', _preview(size, green: true)),
+    ],
+  );
 
   Widget _fingerHint() {
     return ValueListenableBuilder<bool>(
@@ -209,6 +249,7 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
         children: [
           Icon(
             covered ? Icons.check_circle : Icons.touch_app_outlined,
+            size: 18,
             color: covered ? Colors.green : null,
           ),
           const SizedBox(width: 6),
@@ -224,15 +265,23 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
   }
 
   Widget _body(BuildContext context) {
+    final theme = Theme.of(context);
     switch (_phase) {
       case _Phase.idle:
         return Column(
           children: [
+            const SizedBox(height: 60, child: PhoneFingerIllustration()),
+            const SizedBox(height: 8),
+            const Text(
+              'Cover the rear camera and flash with your index fingertip.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
             FilledButton.tonalIcon(
               key: const Key('ppg-start'),
               onPressed: _openCamera,
               icon: const Icon(Icons.camera_outlined),
-              label: const Text('Tap to Start Camera'),
+              label: const Text('Start camera'),
             ),
             TextButton(
               key: const Key('ppg-manual'),
@@ -247,16 +296,11 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
         return Column(
           key: const Key('ppg-positioning'),
           children: [
-            _preview(160),
-            const SizedBox(height: 8),
-            const Text(
-              'This is your rear camera. Cover the lens and the light next to it until the '
-              'picture turns evenly red. Measuring starts by itself once your finger is '
-              'detected.',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
+            _dualPreview(120),
+            const SizedBox(height: 10),
             _fingerHint(),
+            const SizedBox(height: 4),
+            Text('Measuring starts by itself.', style: theme.textTheme.bodySmall),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -273,54 +317,78 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
           ],
         );
       case _Phase.measuring:
+        final left = ((1 - _live.progress) * CameraPpgCapture.defaultDuration.inSeconds).ceil();
         return Column(
           key: const Key('ppg-measuring'),
           children: [
+            _dualPreview(104),
+            const SizedBox(height: 10),
+            // D-119: live reading while recording.
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
               children: [
-                _preview(90),
-                const SizedBox(width: 16),
-                SizedBox(
-                  width: 72,
-                  height: 72,
-                  child: CircularProgressIndicator(value: _progress, strokeWidth: 6),
+                Icon(Icons.favorite, size: 20, color: Colors.red.shade400),
+                const SizedBox(width: 6),
+                Text(
+                  _live.bpm == null ? 'Finding your pulse…' : '${_live.bpm} BPM',
+                  key: const Key('ppg-live'),
+                  style: _live.bpm == null
+                      ? theme.textTheme.bodyMedium
+                      : theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
                 ),
               ],
             ),
+            if (_live.bpm != null) Text('Live estimate', style: theme.textTheme.bodySmall),
             const SizedBox(height: 8),
-            SizedBox(
-              height: 48,
+            Container(
+              height: 56,
               width: double.infinity,
-              child: CustomPaint(
-                painter: _TracePainter(_trace, Theme.of(context).colorScheme.tertiary),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(10),
               ),
+              child: CustomPaint(painter: _TracePainter(_live.signal, Colors.green.shade600)),
+            ),
+            const SizedBox(height: 2),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Pulse signal (green intensity)', style: theme.textTheme.labelSmall),
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(value: _live.progress, minHeight: 6),
             ),
             const SizedBox(height: 4),
-            // D-119: live reading while recording.
-            Text(
-              _live == null ? 'Finding your pulse…' : '$_live BPM',
-              key: const Key('ppg-live'),
-              style: _live == null
-                  ? Theme.of(context).textTheme.bodyMedium
-                  : Theme.of(context).textTheme.titleLarge,
-            ),
-            if (_live != null) Text('Live estimate', style: Theme.of(context).textTheme.bodySmall),
+            Text('Keep still · $left s left', key: const Key('ppg-time-left')),
+            const SizedBox(height: 8),
+            _LiveStats(live: _live),
+            const SizedBox(height: 6),
             _fingerHint(),
-            const Text('Measuring… keep your finger still.'),
             TextButton(onPressed: _stop, child: const Text('Cancel')),
           ],
         );
       case _Phase.done:
+        final r = _result!;
         return Column(
           children: [
-            Text(
-              '$_bpm BPM',
-              key: const Key('ppg-result'),
-              style: Theme.of(context).textTheme.headlineMedium,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.favorite, color: Colors.red.shade400, size: 28),
+                const SizedBox(width: 8),
+                Text(
+                  '${r.bpm} BPM',
+                  key: const Key('ppg-result'),
+                  style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ],
             ),
             // Ch1 limitation: camera PPG is supplementary and less accurate than a device.
-            if (_fftBpm != null)
+            if (r.fftBpm != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Row(
@@ -331,16 +399,26 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
                     const SizedBox(width: 4),
                     Flexible(
                       child: Text(
-                        'Cross-checked: beat count $_bpm · frequency (FFT) $_fftBpm BPM',
-                        style: Theme.of(context).textTheme.bodySmall,
+                        'Cross-checked: beat count ${r.bpm} · frequency (FFT) ${r.fftBpm} BPM',
+                        style: theme.textTheme.bodySmall,
                       ),
                     ),
                   ],
                 ),
               ),
-            const Text(
-              'Estimate from your phone camera, not a medical measurement.',
+            const SizedBox(height: 4),
+            Text(
+              'Estimate from your phone camera, not a medical device.',
               textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            _TechnicalDetails(result: r, live: _live),
+            const SizedBox(height: 4),
+            Text(
+              'Looks off? Measure again: two close readings are more reliable.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall,
             ),
             TextButton(onPressed: _openCamera, child: const Text('Measure again')),
           ],
@@ -352,9 +430,9 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
           children: [
             Text(_message, textAlign: TextAlign.center),
             if (_phase == _Phase.failed)
-              const Text(
-                'Cover the lens fully, rest your hand, and try again.',
-                textAlign: TextAlign.center,
+              TextButton(
+                onPressed: () => showPpgGuide(context),
+                child: const Text('See how to place your finger'),
               ),
             Wrap(
               alignment: WrapAlignment.center,
@@ -402,6 +480,113 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
           ],
         );
     }
+  }
+}
+
+/// D-121: keeps only the green channel of the camera picture (R and B set to 0).
+const greenChannelFilter = ColorFilter.matrix(<double>[
+  0, 0, 0, 0, 0, //
+  0, 1, 0, 0, 0, //
+  0, 0, 0, 0, 0, //
+  0, 0, 0, 1, 0, //
+]);
+
+/// D-121: live frame statistics while recording.
+class _LiveStats extends StatelessWidget {
+  const _LiveStats({required this.live});
+
+  final PpgLive live;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget chip(String label, String value) => Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        margin: const EdgeInsets.symmetric(horizontal: 3),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+            ),
+            Text(label, style: Theme.of(context).textTheme.labelSmall),
+          ],
+        ),
+      ),
+    );
+    return Row(
+      key: const Key('ppg-stats'),
+      children: [
+        chip('frames', '${live.frames}'),
+        chip('frame rate', '${live.fps.toStringAsFixed(1)} fps'),
+        chip('green level', live.green == null ? '—' : live.green!.toStringAsFixed(1)),
+      ],
+    );
+  }
+}
+
+/// D-121: how the number was produced, for the curious (and the examiner).
+class _TechnicalDetails extends StatelessWidget {
+  const _TechnicalDetails({required this.result, required this.live});
+
+  final PpgResult result;
+  final PpgLive live;
+
+  @override
+  Widget build(BuildContext context) {
+    const config = PpgConfig();
+    final seconds = live.fps > 0 ? live.frames / live.fps : 0.0;
+    final rows = [
+      ('Frames analysed', '${live.frames}'),
+      ('Frame rate', '${live.fps.toStringAsFixed(1)} fps'),
+      ('Recording', '${seconds.toStringAsFixed(1)} s'),
+      ('Signal', 'Mean green per frame (YUV → G)'),
+      (
+        'Band-pass filter',
+        '${config.lowHz}–${config.highHz} Hz '
+            '(${(config.lowHz * 60).round()}–${(config.highHz * 60).round()} bpm)',
+      ),
+      ('Beat count (peaks)', '${result.bpm} BPM'),
+      if (result.fftBpm != null) ('Frequency (FFT)', '${result.fftBpm} BPM'),
+      ('Signal quality', '${(result.quality * 100).round()}%'),
+    ];
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: theme.copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          key: const Key('ppg-tech'),
+          dense: true,
+          leading: const Icon(Icons.analytics_outlined, size: 20),
+          title: const Text('Technical details'),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          children: [
+            for (final (label, value) in rows)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(label, style: theme.textTheme.bodySmall)),
+                    Text(
+                      value,
+                      style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

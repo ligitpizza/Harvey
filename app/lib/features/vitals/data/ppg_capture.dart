@@ -14,9 +14,35 @@ class PpgUnavailableException implements Exception {
   final PpgUnavailable reason;
 }
 
-/// Live progress while measuring: 0..1, the recent signal for the trace, and the
-/// live heart-rate reading so far (D-119; null until a clear pulse is found).
-typedef PpgProgress = void Function(double progress, List<double> recentSignal, int? liveBpm);
+/// Live progress while measuring (D-119, D-121): how far along, the recent green signal
+/// for the trace, the live heart-rate reading so far (null until a clear pulse is found)
+/// and frame statistics for the technical readout.
+class PpgLive {
+  const PpgLive({
+    required this.progress,
+    required this.signal,
+    this.bpm,
+    this.frames = 0,
+    this.fps = 0,
+    this.green,
+  });
+
+  /// 0..1 of the measurement window.
+  final double progress;
+
+  /// The most recent mean-green values (about 3 s), one per frame.
+  final List<double> signal;
+  final int? bpm;
+
+  /// Frames recorded so far and the rate they arrive at.
+  final int frames;
+  final double fps;
+
+  /// Mean green intensity of the latest frame (0..255).
+  final double? green;
+}
+
+typedef PpgProgress = void Function(PpgLive live);
 
 /// Camera PPG capture (FR-3.2, UC3.3). Two steps so the patient can see the lens
 /// before measuring: [open] starts the camera + torch and a live preview,
@@ -115,7 +141,17 @@ class CameraPpgCapture implements PpgCapture {
     _values.add(stats.green);
     final p = (clock.elapsed.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0);
     final start = _values.length > 90 ? _values.length - 90 : 0;
-    _onProgress?.call(p, _values.sublist(start), _liveBpm);
+    final secs = clock.elapsedMicroseconds / 1e6;
+    _onProgress?.call(
+      PpgLive(
+        progress: p,
+        signal: _values.sublist(start),
+        bpm: _liveBpm,
+        frames: _values.length,
+        fps: secs > 0 ? _values.length / secs : 0,
+        green: stats.green,
+      ),
+    );
     _maybeUpdateLive(clock.elapsed);
     if (clock.elapsed >= _duration) done.complete();
   }
