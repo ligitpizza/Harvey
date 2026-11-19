@@ -15,6 +15,7 @@ import '../../admin/data/admin_repository.dart';
 import '../../admin/state/admin_providers.dart';
 import 'admin_booking_dialog.dart';
 import 'appointment_details_dialog.dart';
+import 'cover_labels.dart';
 
 enum CalendarView { month, week, day }
 
@@ -93,6 +94,16 @@ class _DoctorCalendarPageState extends ConsumerState<DoctorCalendarPage> {
         for (final p in ref.watch(assignedPatientsProvider).value ?? const <PortalPatient>[])
           p.uid: p.name,
     };
+    // D-120: a patient seen as cover is not in the doctor's own list; read the name
+    // (allowed during the cover window).
+    if (!admin) {
+      for (final a in appts.value ?? const <Appointment>[]) {
+        if (a.isCover && !names.containsKey(a.patientId)) {
+          final n = ref.watch(personProvider(a.patientId)).value?.name;
+          if (n != null) names[a.patientId] = n;
+        }
+      }
+    }
     // Cancelled ones stay visible (struck through) so the doctor sees what changed.
     final list = [
       for (final a in appts.value ?? const <Appointment>[])
@@ -480,18 +491,28 @@ class _AgendaList extends ConsumerWidget {
                       ? const TextStyle(decoration: TextDecoration.lineThrough, color: Colors.grey)
                       : null,
                 ),
-                subtitle: Text(
-                  '${doctorNames == null ? '' : '${doctorNames![a.doctorId] ?? 'Doctor'} · '}'
-                  '${a.isAdminAssigned ? 'Admin assigned · ' : ''}'
-                  '${a.walkIn ? 'Walk-in · ' : ''}'
-                  '${a.needsReschedule && a.isActive ? 'On your leave: being moved · ' : ''}'
-                  '${a.pendingChange != null && !a.isCancelled ? (a.pendingChange!.isCancel ? 'Cancellation requested · ' : 'Reschedule requested · ') : ''}'
-                  '${a.type.label}${switch (a.status) {
-                    AppointmentStatus.completed => ' · completed',
-                    AppointmentStatus.noShow => ' · no-show',
-                    AppointmentStatus.rescheduled => ' · rescheduled',
-                    _ => '',
-                  }}',
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (a.isCover)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2, bottom: 2),
+                        child: CoverTag(appointment: a, forOwnDoctor: false),
+                      ),
+                    Text(
+                      '${doctorNames == null ? '' : '${doctorNames![a.doctorId] ?? 'Doctor'} · '}'
+                      '${a.isAdminAssigned ? 'Admin assigned · ' : ''}'
+                      '${a.walkIn ? 'Walk-in · ' : ''}'
+                      '${a.needsReschedule && a.isActive ? 'On your leave: being moved · ' : ''}'
+                      '${a.pendingChange != null && !a.isCancelled ? (a.pendingChange!.isCancel ? 'Cancellation requested · ' : 'Reschedule requested · ') : ''}'
+                      '${a.type.label}${switch (a.status) {
+                        AppointmentStatus.completed => ' · completed',
+                        AppointmentStatus.noShow => ' · no-show',
+                        AppointmentStatus.rescheduled => ' · rescheduled',
+                        _ => '',
+                      }}',
+                    ),
+                  ],
                 ),
                 trailing: a.isOverdue(now)
                     ? Chip(

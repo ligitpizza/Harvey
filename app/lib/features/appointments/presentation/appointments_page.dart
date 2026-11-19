@@ -12,6 +12,7 @@ import '../domain/appointment_text.dart';
 import '../state/appointment_providers.dart';
 import 'admin_booking_dialog.dart' show AdminAssignedBadge;
 import 'change_reason_dialog.dart';
+import 'cover_labels.dart';
 import '../../../shared/widgets/patient_hero.dart';
 
 /// Fig 4.3.6.1 Appointments (FR-7.1, FR-7.4; UC7.1, UC7.2, UC7.5; D-53, D-54).
@@ -478,6 +479,8 @@ class AppointmentCard extends ConsumerWidget {
               ),
             const SizedBox(height: 4),
             Text(doctor?.name ?? 'Your doctor', style: Theme.of(context).textTheme.titleLarge),
+            // D-120: another doctor covers this visit.
+            if (a.isCover) AppointmentDoctorLine(appointment: a),
             Text('${a.type.label} · $clinicName'),
             const SizedBox(height: 12),
             ListTile(
@@ -889,10 +892,17 @@ class AppointmentHistoryPage extends ConsumerWidget {
                     key: Key('history-${a.id}'),
                     leading: Icon(Icons.circle, size: 12, color: appointmentColor(a.type)),
                     title: Text(whenLabel(a.dateTime, now)),
-                    subtitle: Text(
-                      '${a.type.label} · ${a.status.label}'
-                      '${a.isAdminAssigned ? ' · Admin assigned' : ''}'
-                      '${a.changeReason == null ? '' : ' · ${a.changeReason}'}',
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // D-120: which doctor the patient saw (a covering doctor is named).
+                        AppointmentDoctorLine(appointment: a),
+                        Text(
+                          '${a.type.label} · ${a.status.label}'
+                          '${a.isAdminAssigned ? ' · Admin assigned' : ''}'
+                          '${a.changeReason == null ? '' : ' · ${a.changeReason}'}',
+                        ),
+                      ],
                     ),
                     onTap: a.status == AppointmentStatus.cancelled
                         ? null

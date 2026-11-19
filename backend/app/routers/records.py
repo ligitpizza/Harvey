@@ -23,6 +23,7 @@ from app.core.errors import ApiError
 from app.integrations.push import PushMessage
 from app.schemas.records import CreateRecordRequest, UpdateRecordRequest
 from app.services.agent_context import MYT, AgentDataRepository, get_agent_data_repository
+from app.services.cover import can_see_patient
 from app.services.health_report import report_pdf, save_report, snapshot
 from app.services.notifications import Notifier, get_notifier
 from app.services.records import (
@@ -269,7 +270,10 @@ def record_file(
         allowed = patient_id == user.uid
     else:
         owner = repo.user(patient_id) or {}
-        allowed = bool(r.get("sharedWithDoctor")) and owner.get("assignedDoctorId") == user.uid
+        # D-120: a doctor covering a visit sees shared records during the window.
+        allowed = bool(r.get("sharedWithDoctor")) and can_see_patient(
+            owner, user.uid, datetime.now(UTC)
+        )
     if not allowed:
         raise _not_found()
     data = files.read(str(r.get("fileUrl") or storage_path(patient_id, record_id)))

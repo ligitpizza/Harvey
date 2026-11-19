@@ -223,11 +223,16 @@ class Appointment {
     this.bookedBy,
     this.walkIn = false,
     this.needsReschedule = false,
+    this.coverForDoctorId,
   });
 
   final String id;
   final String patientId;
   final String? doctorId;
+
+  /// D-120: set when another doctor covers this visit; the patient's own doctor.
+  final String? coverForDoctorId;
+  bool get isCover => coverForDoctorId != null;
   final DateTime dateTime;
   final AppointmentStatus status;
 
@@ -288,6 +293,7 @@ class Appointment {
     bookedBy: d['bookedBy'] as String?,
     walkIn: d['walkIn'] == true,
     needsReschedule: d['needsReschedule'] == true,
+    coverForDoctorId: d['coverForDoctorId'] as String?,
   );
 }
 

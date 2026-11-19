@@ -30,6 +30,7 @@ from app.services.appointments import (
     get_appointment_repository,
 )
 from app.services.assignments import AssignmentRepository, get_assignment_repository
+from app.services.cover import refresh_cover_access
 from app.services.notifications import Notifier, get_notifier
 
 router = APIRouter(tags=["assignments"])
@@ -154,7 +155,10 @@ def approve(
     moved = cancelled = 0
     for a in appointments.upcoming_for_patient(patient_id, datetime.now(UTC)):
         try:
-            appointments.book({**a.data, "doctorId": body.doctorId}, exclude_id=a.id)
+            # D-120: they become the new doctor's own visits, not cover visits.
+            appointments.book(
+                {**a.data, "doctorId": body.doctorId, "coverForDoctorId": None}, exclude_id=a.id
+            )
             moved += 1
         except SlotTakenError:
             appointments.update(a.id, {"status": AppointmentStatus.CANCELLED.value})
@@ -168,6 +172,7 @@ def approve(
                     {"type": "appointment", "appointmentId": a.id},
                 ),
             )
+    refresh_cover_access(appointments, patient_id)
     repo.resolve(
         request_id,
         {

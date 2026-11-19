@@ -68,6 +68,9 @@ String? notificationRoute(String? type, Map<String, String> data, UserRole? role
     'triage' ||
     'emergency_alert' when role == UserRole.doctor => '/doctor',
     'appointment' when role == UserRole.doctor => '/doctor/calendar',
+    // D-120: a colleague saw this doctor's patient; open the patient (notes).
+    'cover_handover' when role == UserRole.doctor =>
+      data['patientId'] == null ? '/doctor' : '/doctor/patient/${data['patientId']}',
     'appointment' when role == UserRole.admin => '/admin/appointments',
     'assignment' when role == UserRole.admin => '/admin/assignments',
     'staff_request' => role == UserRole.admin ? '/admin/requests' : '$staffBase/admin-center',

@@ -18,10 +18,22 @@ class PortalPatient {
     this.icNumber,
     this.passportNumber,
     this.nationality,
+    this.assignedDoctorId,
+    this.coverAccess = const {},
   });
 
   final String uid;
   final String name;
+
+  /// The patient's own doctor.
+  final String? assignedDoctorId;
+
+  /// D-120: covering doctor uid -> end of their access window.
+  final Map<String, DateTime> coverAccess;
+
+  /// D-120: [doctorUid] sees this patient only through a cover visit.
+  bool coveredBy(String? doctorUid) =>
+      doctorUid != null && assignedDoctorId != doctorUid && coverAccess.containsKey(doctorUid);
   final DateTime? dateOfBirth;
   final String? gender;
 
@@ -40,6 +52,12 @@ class PortalPatient {
     icNumber: d['icNumber'] as String?,
     passportNumber: d['passportNumber'] as String?,
     nationality: d['nationality'] as String?,
+    assignedDoctorId: d['assignedDoctorId'] as String?,
+    coverAccess: {
+      for (final e in ((d['coverAccess'] as Map?) ?? const {}).entries)
+        if (e.value is Map && (e.value as Map)['until'] != null)
+          '${e.key}': _time((e.value as Map)['until']),
+    },
   );
 }
 
@@ -108,16 +126,25 @@ class ClinicalAlert {
 
 /// `clinical_notes` (Table 4.2.3.10).
 class ClinicalNote {
-  const ClinicalNote({required this.id, required this.content, required this.createdAt});
+  const ClinicalNote({
+    required this.id,
+    required this.content,
+    required this.createdAt,
+    this.doctorId,
+  });
 
   final String id;
   final String content;
   final DateTime createdAt;
 
+  /// The authoring doctor (a covering doctor's note is labelled with their name, D-120).
+  final String? doctorId;
+
   factory ClinicalNote.fromFirestore(String id, Map<String, dynamic> d) => ClinicalNote(
     id: id,
     content: d['content'] as String? ?? '',
     createdAt: _time(d['createdAt']),
+    doctorId: d['doctorId'] as String?,
   );
 }
 

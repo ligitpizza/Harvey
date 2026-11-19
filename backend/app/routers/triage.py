@@ -31,6 +31,7 @@ from app.schemas.family import Location
 from app.services.agent_context import AgentDataRepository, get_agent_data_repository
 from app.services.bp import HEART_RATE_MAX, HEART_RATE_MIN
 from app.services.bp import classify as classify_bp
+from app.services.cover import can_see_patient
 from app.services.emergency_record import EmergencyEvent, try_store
 from app.services.escalation import (
     AVOID_EXERTION_NOTE,
@@ -277,7 +278,7 @@ def get_outcome(
         owner == user.uid
         or (
             user.role is UserRole.DOCTOR
-            and (users.get_user(owner) or {}).get("assignedDoctorId") == user.uid
+            and can_see_patient(users.get_user(owner), user.uid, datetime.now(UTC))  # D-120
         )
     )
     if o is None or not allowed:

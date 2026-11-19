@@ -206,6 +206,7 @@ class _Row extends ConsumerWidget {
         ),
         subtitle: Text(
           '${doctorName ?? 'Doctor'} · ${a.type.label}'
+          '${a.isCover ? ' · Cover visit' : ''}' // D-120
           '${a.isAdminAssigned ? ' · Admin assigned' : ''}'
           '${a.walkIn ? ' · Walk-in' : ''}\n$detail',
         ),

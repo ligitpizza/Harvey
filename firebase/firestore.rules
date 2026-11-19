@@ -28,6 +28,20 @@ service cloud.firestore {
            == request.auth.uid;
     }
 
+    // D-120: a doctor covering one visit for the patient's own doctor (e.g. on leave)
+    // reads the patient's data from the day before the visit until 7 days after it.
+    // FastAPI keeps users/{patient}.coverAccess = {doctorUid: {from, until}}; clients
+    // cannot write it.
+    function coverOpen(patientData) {
+      let c = patientData.get('coverAccess', {}).get(request.auth.uid, null);
+      return c != null && request.time >= c.from && request.time < c.until;
+    }
+
+    function isCoveringDoctorOf(patientId) {
+      return hasRole('doctor')
+        && coverOpen(get(/databases/$(database)/documents/users/$(patientId)).data);
+    }
+
     function onlyChanges(fields) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
     }
@@ -39,11 +53,16 @@ service cloud.firestore {
       allow read: if isSelf(uid)
         || isAdmin()
         || (hasRole('doctor') && resource.data.assignedDoctorId == request.auth.uid)
+        || (hasRole('doctor') && coverOpen(resource.data)) // D-120
         // D-54: doctors see colleagues (to suggest one when asking for a reassignment).
         || (hasRole('doctor') && resource.data.role == 'doctor')
         // D-42: a patient reads their own assigned doctor (name + public key for messaging).
         || (hasRole('patient')
             && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.assignedDoctorId == uid)
+        // D-120: ... and a doctor who covered one of their visits (named in the history).
+        || (hasRole('patient')
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+                 .get('coverAccess', {}).keys().hasAny([uid]))
         // FR-14.2: a family member reads the patient they follow; a patient reads the
         // family members linked to them (D-62).
         || isLinkedFamilyOf(uid)
@@ -65,7 +84,8 @@ service cloud.firestore {
     match /health_profiles/{patientId} {
       allow read: if isSelf(resource.data.patientId)
         || isAdmin()
-        || isAssignedDoctorOf(resource.data.patientId);
+        || isAssignedDoctorOf(resource.data.patientId)
+        || isCoveringDoctorOf(resource.data.patientId); // D-120
       allow write: if false;
     }
 
@@ -78,7 +98,8 @@ service cloud.firestore {
     }
 
     function canReadPatientData(patientId) {
-      return isSelf(patientId) || isAdmin() || isAssignedDoctorOf(patientId);
+      return isSelf(patientId) || isAdmin() || isAssignedDoctorOf(patientId)
+        || isCoveringDoctorOf(patientId); // D-120
     }
 
     // vital_readings, risk_scores: also readable by linked family (docs/04).
@@ -117,7 +138,8 @@ service cloud.firestore {
     match /health_records/{recordId} {
       allow read: if isSelf(resource.data.patientId)
         || (resource.data.sharedWithDoctor == true
-            && isAssignedDoctorOf(resource.data.patientId));
+            && (isAssignedDoctorOf(resource.data.patientId)
+                || isCoveringDoctorOf(resource.data.patientId))); // D-120
       allow write: if false;
     }
 

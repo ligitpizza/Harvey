@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:hypertension/features/medications/state/medication_providers.dart';
 import 'package:hypertension/features/medications/data/medications_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hypertension/core/constants/enums.dart';
@@ -258,7 +259,12 @@ class FakePortalRepository implements PortalRepository {
 
 final symptoms = FakeSymptomRepository();
 
-Widget portal(FakePortalRepository repo, FakePatientData data, String location) {
+Widget portal(
+  FakePortalRepository repo,
+  FakePatientData data,
+  String location, {
+  List<Override> extra = const [],
+}) {
   final router = GoRouter(
     initialLocation: location,
     routes: [
@@ -303,6 +309,7 @@ Widget portal(FakePortalRepository repo, FakePatientData data, String location) 
       ),
       nowProvider.overrideWithValue(() => now),
       authUidProvider.overrideWith((ref) => Stream.value('u-doctor')),
+      ...extra,
     ],
     child: MaterialApp.router(routerConfig: router),
   );

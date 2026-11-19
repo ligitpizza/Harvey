@@ -8,6 +8,8 @@ DELETE /provider/patients/{id}/prescriptions/{rxId}  the issuing doctor only (D-
 GET  /provider/patients/{id}/medication-effect  risk before vs after medication (D-44)
 
 Only the patient's assigned doctor may write (FR-8.1, NFR-2.2); every write is audited.
+D-120: a doctor covering a visit may also add clinical notes and use the read endpoints
+during the cover window; prescriptions, care plan and reports stay with the own doctor.
 """
 
 from datetime import UTC, datetime
@@ -36,6 +38,7 @@ from app.services.catalog import (
     items_summary,
     items_total,
 )
+from app.services.cover import can_see_patient
 from app.services.health_report import report_pdf, save_report, snapshot
 from app.services.interactions import check
 from app.services.medication_effect import medication_effect
@@ -82,6 +85,20 @@ def _assigned_patient(
     return patient
 
 
+def _visible_patient(
+    patient_id: str, doctor: CurrentUser, repo: ProviderRepository
+) -> dict[str, Any]:
+    """D-120: the assigned doctor, or a doctor covering a visit (inside the window)."""
+    patient = repo.patient(patient_id)
+    if patient is None or patient.get("role") != UserRole.PATIENT.value:
+        raise ApiError("PATIENT_NOT_FOUND", "Patient not found.", status.HTTP_404_NOT_FOUND)
+    if not can_see_patient(patient, doctor.uid, datetime.now(UTC)):
+        raise ApiError(
+            "NOT_ASSIGNED", "This patient is not assigned to you.", status.HTTP_403_FORBIDDEN
+        )
+    return patient
+
+
 doctor_only = require_roles(UserRole.DOCTOR)
 
 
@@ -93,7 +110,7 @@ def add_note(
     repo: ProviderRepository = Depends(get_provider_repository),
     audit: AuditLogger = Depends(get_audit_logger),
 ) -> dict[str, str]:
-    _assigned_patient(patient_id, doctor, repo)
+    _visible_patient(patient_id, doctor, repo)  # D-120: a covering doctor too
     note_id = repo.add_note(
         {"patientId": patient_id, "doctorId": doctor.uid, "content": body.content}
     )
@@ -345,7 +362,7 @@ def delivery_preference(
     orders: OrderRepository = Depends(get_order_repository),
 ) -> dict[str, Any]:
     """D-72 (M8): how the patient gets their medicines: the latest order's method and stage."""
-    _assigned_patient(patient_id, doctor, repo)
+    _visible_patient(patient_id, doctor, repo)
 
     def when(o: dict[str, Any]) -> datetime:
         v = o.get("cycleDate")
@@ -381,5 +398,5 @@ def get_medication_effect(
 ) -> dict[str, Any]:
     """D-44: the model's estimate of what the BP change since the first medicine means for
     each complication, with all other inputs (including the medication flag) held fixed."""
-    _assigned_patient(patient_id, doctor, repo)
+    _visible_patient(patient_id, doctor, repo)
     return medication_effect(patient_id, risk_repo, model)

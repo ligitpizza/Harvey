@@ -237,6 +237,14 @@ class AppointmentRepository(Protocol):
         """D-80: Malaysian dates the doctor is on approved leave."""
         ...
 
+    def all_for_patient(self, patient_id: str) -> list[AppointmentDoc]:
+        """D-120: every appointment of the patient, any status."""
+        ...
+
+    def set_cover_access(self, patient_id: str, access: dict[str, Any]) -> None:
+        """D-120: replace users/{patient}.coverAccess."""
+        ...
+
 
 class FirestoreAppointmentRepository:
     def __init__(self, db: Any) -> None:
@@ -369,6 +377,16 @@ class FirestoreAppointmentRepository:
         return [
             AppointmentDoc(d.id, dict(d.to_dict())) for d in q.stream() if d.get("status") in ACTIVE
         ]
+
+    def all_for_patient(self, patient_id: str) -> list[AppointmentDoc]:
+        q = self._col().where(filter=gfs.FieldFilter("patientId", "==", patient_id))
+        return [AppointmentDoc(d.id, dict(d.to_dict())) for d in q.stream()]
+
+    def set_cover_access(self, patient_id: str, access: dict[str, Any]) -> None:
+        # update() with a whole map value replaces the map (old doctors drop out).
+        self._db.collection(Collection.USERS.value).document(patient_id).update(
+            {"coverAccess": access, "updatedAt": gfs.SERVER_TIMESTAMP}
+        )
 
     def active_between(self, start: datetime, end: datetime) -> list[AppointmentDoc]:
         q = (

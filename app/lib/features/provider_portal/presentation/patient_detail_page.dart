@@ -24,6 +24,8 @@ import '../../symptom_checker/state/symptom_providers.dart';
 import '../state/portal_providers.dart';
 import '../../appointments/domain/appointment_text.dart' show dateLabel, timeLabel;
 import '../../appointments/presentation/appointment_details_dialog.dart';
+import '../../appointments/presentation/cover_labels.dart';
+import '../../auth/state/auth_providers.dart';
 import '../../appointments/presentation/reassignment_dialog.dart';
 import '../../appointments/state/appointment_providers.dart';
 import 'dose_history.dart';
@@ -59,10 +61,13 @@ class _PatientDetailPageState extends ConsumerState<PatientDetailPage> {
     return patient.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (_, _) => const _Message(
-        'You can only view patients assigned to you. Check the patient list and try again.',
+        'You can only view patients assigned to you, or a patient whose visit you are '
+        'covering (from the day before the visit until 7 days after). Check the patient '
+        'list and try again.',
       ),
       data: (p) {
         if (p == null) return const _Message('Patient not found.');
+        final covering = p.coveredBy(ref.watch(authUidProvider).value); // D-120
         final top = [
           Expanded(child: _VitalsAndRisk(patientId: id)),
           const SizedBox(width: 16, height: 16),
@@ -80,7 +85,8 @@ class _PatientDetailPageState extends ConsumerState<PatientDetailPage> {
                 label: const Text('My patients'),
               ),
             ),
-            _Header(patient: p, now: now),
+            if (covering) ...[_CoverBanner(patient: p), const SizedBox(height: 12)],
+            _Header(patient: p, now: now, covering: covering),
             const SizedBox(height: 16),
             if (wide)
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: top)
@@ -137,11 +143,57 @@ class _Message extends StatelessWidget {
   );
 }
 
+/// D-120: shown to a doctor covering a visit for the patient's own doctor.
+class _CoverBanner extends ConsumerWidget {
+  const _CoverBanner({required this.patient});
+
+  final PortalPatient patient;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final me = ref.watch(authUidProvider).value;
+    final own = patient.assignedDoctorId == null
+        ? null
+        : ref.watch(personProvider(patient.assignedDoctorId!)).value?.name;
+    final until = me == null ? null : patient.coverAccess[me];
+    // The window ends at midnight; show the last full day.
+    final last = until?.subtract(const Duration(minutes: 1));
+    final color = Colors.indigo.shade600;
+    return Container(
+      key: const Key('cover-banner'),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.swap_horiz, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              "You are covering a visit for ${own ?? "the patient's own doctor"}. You can read "
+              "this patient's records and add clinical notes"
+              "${last == null ? '' : ' until ${dateLabel(last)}'}. Your note is shared with "
+              "${own ?? 'their doctor'}; prescriptions and the care plan stay with them.",
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _Header extends StatelessWidget {
-  const _Header({required this.patient, required this.now});
+  const _Header({required this.patient, required this.now, this.covering = false});
 
   final PortalPatient patient;
   final DateTime now;
+
+  /// D-120: a covering doctor only adds notes.
+  final bool covering;
 
   @override
   Widget build(BuildContext context) {
@@ -179,43 +231,45 @@ class _Header extends StatelessWidget {
               icon: const Icon(Icons.edit_note),
               label: const Text('Add note'),
             ),
-            OutlinedButton.icon(
-              key: const Key('action-prescribe'),
-              onPressed: () => context.go('/doctor/patient/${patient.uid}/prescriptions'),
-              icon: const Icon(Icons.medication_outlined),
-              label: const Text('Prescribe'),
-            ),
-            // D-100: a written report saved to the patient's Records as a PDF.
-            OutlinedButton.icon(
-              key: const Key('action-report'),
-              onPressed: () async {
-                final messenger = ScaffoldMessenger.of(context);
-                if (await showWriteReport(context, patient.uid, patient.name)) {
-                  messenger.showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        "Report saved to the patient's Records. You'll find it under Records.",
+            if (!covering) ...[
+              OutlinedButton.icon(
+                key: const Key('action-prescribe'),
+                onPressed: () => context.go('/doctor/patient/${patient.uid}/prescriptions'),
+                icon: const Icon(Icons.medication_outlined),
+                label: const Text('Prescribe'),
+              ),
+              // D-100: a written report saved to the patient's Records as a PDF.
+              OutlinedButton.icon(
+                key: const Key('action-report'),
+                onPressed: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  if (await showWriteReport(context, patient.uid, patient.name)) {
+                    messenger.showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          "Report saved to the patient's Records. You'll find it under Records.",
+                        ),
                       ),
-                    ),
-                  );
-                }
-              },
-              icon: const Icon(Icons.assignment_ind_outlined),
-              label: const Text('Write report'),
-            ),
-            OutlinedButton.icon(
-              key: const Key('action-care-plan'),
-              onPressed: () => context.go('/doctor/patient/${patient.uid}/care-plan'),
-              icon: const Icon(Icons.assignment_outlined),
-              label: const Text('Care plan'),
-            ),
-            // D-54: hand this patient to another doctor (the admin decides).
-            TextButton.icon(
-              key: const Key('action-reassign'),
-              onPressed: () => requestReassignment(context, patient.uid, patient.name),
-              icon: const Icon(Icons.swap_horiz),
-              label: const Text('Request reassignment'),
-            ),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.assignment_ind_outlined),
+                label: const Text('Write report'),
+              ),
+              OutlinedButton.icon(
+                key: const Key('action-care-plan'),
+                onPressed: () => context.go('/doctor/patient/${patient.uid}/care-plan'),
+                icon: const Icon(Icons.assignment_outlined),
+                label: const Text('Care plan'),
+              ),
+              // D-54: hand this patient to another doctor (the admin decides).
+              TextButton.icon(
+                key: const Key('action-reassign'),
+                onPressed: () => requestReassignment(context, patient.uid, patient.name),
+                icon: const Icon(Icons.swap_horiz),
+                label: const Text('Request reassignment'),
+              ),
+            ],
           ],
         ),
       ),
@@ -466,14 +520,23 @@ class _HistoryTabs extends ConsumerWidget {
 }
 
 /// Past notes, newest first (also shown under the editor after saving, Fig 4.3.12.6).
-class NotesList extends StatelessWidget {
+class NotesList extends ConsumerWidget {
   const NotesList({super.key, required this.notes, this.shrinkWrap = false});
 
   final AsyncValue<List<ClinicalNote>> notes;
   final bool shrinkWrap;
 
   @override
-  Widget build(BuildContext context) => AsyncSection(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final me = ref.watch(authUidProvider).value;
+    // D-120: a note written by another doctor (e.g. while covering) says who wrote it.
+    String? author(ClinicalNote n) => n.doctorId == null || n.doctorId == me
+        ? null
+        : 'by ${ref.watch(personProvider(n.doctorId!)).value?.name ?? 'another doctor'}';
+    return _notes(context, author);
+  }
+
+  Widget _notes(BuildContext context, String? Function(ClinicalNote) author) => AsyncSection(
     value: notes,
     isEmpty: (n) => n.isEmpty,
     emptyText: 'No clinical notes yet.',
@@ -510,6 +573,18 @@ class NotesList extends StatelessWidget {
                       style: Theme.of(context).textTheme.labelLarge,
                     ),
                   ),
+                  if (author(n[i]) case final by?)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Text(
+                        by,
+                        key: Key('note-author-${n[i].id}'),
+                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: Colors.indigo.shade600,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
                   if (i == 0) const _Tag('Latest'),
                 ],
               ),
@@ -626,13 +701,23 @@ class AppointmentHistoryList extends StatelessWidget {
               trailing: onOpen == null ? null : const Icon(Icons.chevron_right),
               leading: Icon(icon, color: color),
               title: Text('${dateLabel(a.dateTime)}, ${timeLabel(a.dateTime)} · ${a.type.label}'),
-              subtitle: Text(
-                [
-                  a.isOverdue(DateTime.now()) ? 'Not completed' : a.status.label,
-                  if (a.walkIn) 'Walk-in',
-                  if (a.isAdminAssigned) 'Admin assigned',
-                  if (a.changeReason != null) a.changeReason!,
-                ].join(' · '),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (a.isCover)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2, bottom: 2),
+                      child: CoverTag(appointment: a, forOwnDoctor: true),
+                    ),
+                  Text(
+                    [
+                      a.isOverdue(DateTime.now()) ? 'Not completed' : a.status.label,
+                      if (a.walkIn) 'Walk-in',
+                      if (a.isAdminAssigned) 'Admin assigned',
+                      if (a.changeReason != null) a.changeReason!,
+                    ].join(' · '),
+                  ),
+                ],
               ),
             );
           },

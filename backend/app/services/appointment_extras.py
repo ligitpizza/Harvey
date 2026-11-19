@@ -214,6 +214,10 @@ class AppointmentJob:
                 },
             )
             title, body = "Appointment cancelled", f"Your appointment on {when} is cancelled."
+            if a.data.get("coverForDoctorId"):
+                from app.services.cover import refresh_cover_access
+
+                refresh_cover_access(self.repo, patient_id)  # D-120
         else:
             self.repo.update(a.id, {"pendingChange": None})
             title, body = "Appointment unchanged", f"Your appointment stays on {when}."

@@ -739,6 +739,18 @@ class InMemoryAppointmentRepository:
             if start <= a["dateTime"] < end and a["status"] in ACTIVE
         ]
 
+    def all_for_patient(self, patient_id: str) -> list[Any]:
+        from app.services.appointments import AppointmentDoc
+
+        return [
+            AppointmentDoc(k, a)
+            for k, a in self.appointments.items()
+            if a["patientId"] == patient_id
+        ]
+
+    def set_cover_access(self, patient_id: str, access: dict[str, Any]) -> None:
+        self._users.users[patient_id]["coverAccess"] = access
+
 
 class InMemoryAssignmentRepository:
     """D-54 doctor assignment requests."""

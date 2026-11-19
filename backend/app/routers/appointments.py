@@ -48,6 +48,7 @@ from app.services.appointments import (
     period,
     reason_text,
 )
+from app.services.cover import cover_for, refresh_cover_access
 from app.services.medications import MYT
 from app.services.notifications import Notifier, get_notifier
 
@@ -240,6 +241,9 @@ def _apply_cancel(repo: AppointmentRepository, appt_id: str, reason: str, by: st
             "pendingChange": None,
         },
     )
+    appt = repo.get(appt_id)
+    if appt is not None and appt.data.get("coverForDoctorId"):
+        refresh_cover_access(repo, str(appt.data["patientId"]))  # D-120: access ends
 
 
 @router.patch("/{appointment_id}")
@@ -540,6 +544,7 @@ def record_outcome(
     body: OutcomeRequest,
     user: CurrentUser = Depends(require_roles(UserRole.DOCTOR, UserRole.ADMIN)),
     repo: AppointmentRepository = Depends(get_appointment_repository),
+    notifier: Notifier = Depends(get_notifier),
     audit: AuditLogger = Depends(get_audit_logger),
 ) -> dict[str, Any]:
     """D-56: from its start time, the doctor (or admin) marks the visit Completed or
@@ -564,6 +569,9 @@ def record_outcome(
         {"status": new_status.value, "pendingChange": None, "updatedAt": datetime.now(UTC)},
     )
     label = "completed" if new_status is AppointmentStatus.COMPLETED else "no-show"
+    cover = str(a.get("coverForDoctorId") or "")
+    if cover and new_status is AppointmentStatus.COMPLETED:
+        _handover(repo, notifier, a, cover)
     audit.log(
         user_id=user.uid,
         action=(
@@ -577,6 +585,24 @@ def record_outcome(
         target_id=appointment_id,
     )
     return {"id": appointment_id, "status": new_status.value}
+
+
+def _handover(
+    repo: AppointmentRepository, notifier: Notifier, a: dict[str, Any], own_doctor: str
+) -> None:
+    """D-120: tell the patient's own doctor that a colleague saw their patient."""
+    patient_id = str(a["patientId"])
+    covering = str((repo.user(str(a.get("doctorId"))) or {}).get("name") or "A colleague")
+    day = a["dateTime"].astimezone(MYT).strftime("%d %b %Y").lstrip("0")
+    notifier.notify(
+        own_doctor,
+        PushMessage(
+            "Visit covered for you",
+            f"{covering} saw {_patient_name(repo, patient_id)} on {day} while you were away. "
+            "Read the note.",
+            {"type": "cover_handover", "patientId": patient_id},
+        ),
+    )
 
 
 @router.get("/{appointment_id}/pre-visit-summary")
@@ -681,10 +707,16 @@ def admin_book(
         "type": body.type,
         "bookedBy": "admin",
     }
+    # D-120: with a doctor other than the patient's own, it is a cover visit.
+    cover = cover_for(body.doctorId, patient)
+    if cover:
+        data["coverForDoctorId"] = cover
     try:
         appt_id = repo.book(data)
     except SlotTakenError as exc:
         raise _doctor_busy(exc) from exc
+    if cover:
+        refresh_cover_access(repo, body.patientId)
     when = when_text(moment)
     doctor_name = str(doctor.get("name") or "your doctor")
     _push(
@@ -755,6 +787,9 @@ def admin_edit(
         "type": body.type or a.get("type"),
         "pendingChange": None,
     }
+    if doctor_id != old_doctor:
+        # D-120: moved to someone other than the patient's own doctor = a cover visit.
+        update["coverForDoctorId"] = cover_for(doctor_id, repo.user(str(a["patientId"])))
     if moved:
         update["needsReschedule"] = False  # D-80: the leave clash is resolved
     if moment != a["dateTime"]:
@@ -766,6 +801,8 @@ def admin_edit(
             raise _doctor_busy(exc) from exc
     else:
         repo.update(appointment_id, {"type": update["type"], "pendingChange": None})
+    if moved and (update.get("coverForDoctorId") or a.get("coverForDoctorId")):
+        refresh_cover_access(repo, str(a["patientId"]))
     when = when_text(moment)
     summary = "; ".join(changes)
     _push(

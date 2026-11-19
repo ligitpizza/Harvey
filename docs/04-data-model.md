@@ -30,6 +30,7 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | gender | String | Patient's gender | Present only when role = patient |
 | onboardingComplete | Boolean | Whether the onboarding health profile is complete | Present only when role = patient; default false |
 | assignedDoctorId | Reference (users) | Currently assigned doctor | Present only when role = patient; null until UC7.3 assignment |
+| coverAccess | Map | D-120: covering doctor uid -> `{from, until}` timestamps; the window in which that doctor may read this patient's data | Optional, patients only; written only by FastAPI (rebuilt from cover appointments) |
 | icNumber | String | D-51: MyKad number, "YYMMDD-PB-####" | Patients with a MyKad; unique among users |
 | passportNumber | String | D-103: a foreign patient's passport number (instead of icNumber), upper-case | Optional; 5-15 letters and digits; unique among users |
 | nationality | String | D-103: nationality shown on the passport | Required with passportNumber |
@@ -143,6 +144,7 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | bookedBy | String | patient / admin / system (D-60) / pharmacist (D-80 walk-in) | Optional; absent = patient |
 | walkIn | Boolean | Booked at the pharmacy counter (D-80) | Optional; absent = false |
 | needsReschedule | Boolean | The doctor's approved leave clashes; the admin must move it (D-80) | Optional; set on leave approval, cleared when the admin moves it |
+| coverForDoctorId | Reference (users) | D-120: the patient's own doctor when another doctor covers this visit | Optional; set by the admin's booking/edit when `doctorId` is not the patient's `assignedDoctorId` |
 
 ### `clinical_notes`  (Table 4.2.3.10)
 
