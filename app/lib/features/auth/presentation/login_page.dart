@@ -89,23 +89,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               constraints: const BoxConstraints(maxWidth: 420),
               child: Column(
                 children: [
-                  if (family)
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        color: scheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Icon(
-                        Icons.family_restroom,
-                        key: const Key('login-icon-family'),
-                        color: scheme.onPrimaryContainer,
-                        size: 34,
-                      ),
-                    )
-                  else
-                    const HarveyLogo.mark(key: Key('login-icon-patient'), size: 72),
+                  // D-124: the Harvey logo in both modes (family keeps its own key and colours).
+                  HarveyLogo.mark(
+                    key: Key(family ? 'login-icon-family' : 'login-icon-patient'),
+                    size: 72,
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     isFamilyApp || family ? 'Harvey Family' : 'Harvey',
