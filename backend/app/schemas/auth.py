@@ -5,6 +5,7 @@ Onboarding payload shape is decision D-25: three JSON objects stored in the
 """
 
 import re
+import unicodedata
 from datetime import date
 from typing import Literal
 
@@ -55,6 +56,22 @@ def check_dob(v: date) -> date:
     return v
 
 
+NAME_PUNCTUATION = set(" .'@/-")
+
+
+def _check_name(value: str) -> str:
+    """D-124: a person's name: letters (any language), spaces and . ' - @ /, at least two
+    letters (same rule as the app's Validators.name)."""
+    v = value.strip()
+    ok = all(
+        ch.isalpha() or ch in NAME_PUNCTUATION or unicodedata.category(ch).startswith("M")
+        for ch in v
+    )
+    if not ok or sum(ch.isalpha() for ch in v) < 2:
+        raise ValueError("Use letters only (spaces and . ' - @ / are fine).")
+    return v
+
+
 def _check_phone(value: str) -> str:
     """D-82: a Malaysian mobile number, normalised to +60XXXXXXXXX."""
     digits = re.sub(r"[\s-]", "", value or "")
@@ -80,6 +97,8 @@ class RegisterProfileRequest(_Strict):
     # D-51/D-103: MyKad or passport, required for patients (checked in the router).
     icNumber: str | None = Field(default=None, max_length=20)
     nationality: str | None = Field(default=None, max_length=60)  # D-103: passports
+
+    _name = field_validator("name")(_check_name)
 
 
 class RegisterProfileResponse(BaseModel):

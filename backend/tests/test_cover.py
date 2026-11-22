@@ -142,7 +142,8 @@ def test_d120_covering_doctor_writes_a_note_only_inside_the_window(
     url = f"/api/v1/provider/patients/{P}/notes"
     assert client.post(url, json=note, headers=COVER).status_code == 403  # no cover yet
 
-    admin_book(client, COVERING, soon(30))
+    # 3 h ahead is always inside the window (30 h crossed two days late in the evening).
+    admin_book(client, COVERING, soon(3))
     res = client.post(url, json=note, headers=COVER)
     assert res.status_code == 201, res.text
     assert provider_repo.notes[-1]["doctorId"] == COVERING  # saved with the covering doctor

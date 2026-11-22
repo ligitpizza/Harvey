@@ -206,3 +206,22 @@ def test_d103_a_passport_can_be_registered_only_once(
         headers=bearer("norole-token"),
     )
     assert res.status_code == 409 and res.json()["error"]["code"] == "IC_IN_USE"
+
+
+@pytest.mark.parametrize("name", ["12345", "Ali123", "<script>", "a"])
+def test_d124_register_profile_rejects_names_that_are_not_names(
+    client: TestClient, name: str
+) -> None:
+    res = client.post(
+        URL,
+        json={"name": name, "role": "family_member"},
+        headers=bearer("norole-token"),
+    )
+    assert res.status_code == 422
+
+
+def test_d124_name_rule_accepts_malaysian_names() -> None:
+    from app.schemas.auth import _check_name
+
+    for name in ["Siti binti Ali", "Ravi a/l Kumar", "Ahmad @ Mat", "O'Neil", "Tan Mei-Ling"]:
+        assert _check_name(f"  {name} ") == name

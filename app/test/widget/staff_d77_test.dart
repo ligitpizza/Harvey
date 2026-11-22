@@ -316,7 +316,10 @@ void main() {
     );
     await t.pumpAndSettle();
     expect(find.text('1 new'), findsOneWidget);
-    for (final day in ['Today', 'Yesterday', 'Earlier']) {
+    // Just after midnight, "5 minutes ago" is yesterday, so there is no Today group.
+    final local = DateTime.now();
+    final afterMidnight = local.subtract(const Duration(minutes: 5)).day != local.day;
+    for (final day in [if (!afterMidnight) 'Today', 'Yesterday', 'Earlier']) {
       expect(find.byKey(Key('notif-day-$day')), findsOneWidget, reason: day);
     }
     expect(find.text('5 min ago'), findsNWidgets(2));

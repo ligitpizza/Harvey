@@ -12,6 +12,7 @@ import '../data/auth_repository.dart';
 import '../state/auth_providers.dart';
 import '../../../core/utils/ic_number.dart';
 import 'onboarding/onboarding_labels.dart';
+import '../../../shared/widgets/harvey_logo.dart';
 
 /// UC1.1 Register Account (FR-1.1). Patient app registers patients, Family app
 /// registers family members; staff never self-register (FR-1.6).
@@ -69,15 +70,21 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
   @override
   void dispose() {
-    for (final c in [_name, _ic, _email, _password, _confirm]) {
+    for (final c in [_name, _ic, _nationality, _email, _password, _confirm]) {
       c.dispose();
     }
     super.dispose();
   }
 
+  /// After the first submit, fields re-check as the user types.
+  AutovalidateMode _autovalidate = AutovalidateMode.disabled;
+
   Future<void> _submit() async {
     setState(() => _error = null);
-    if (!_form.currentState!.validate()) return;
+    if (!_form.currentState!.validate()) {
+      setState(() => _autovalidate = AutovalidateMode.onUserInteraction);
+      return;
+    }
     setState(() => _submitting = true);
     final role = _role;
     final busy = ref.read(authBusyProvider.notifier)..set(true);
@@ -127,10 +134,25 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
               constraints: const BoxConstraints(maxWidth: 420),
               child: Form(
                 key: _form,
+                autovalidateMode: _autovalidate,
                 child: AutofillGroup(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // D-124: Harvey logo on the registration page (both roles).
+                      Center(
+                        child: HarveyLogo.mark(
+                          key: Key(isFamily ? 'register-logo-family' : 'register-logo-patient'),
+                          size: 64,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        isFamily ? 'Harvey Family' : 'Harvey',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 16),
                       if (canChoose) ...[
                         RoleToggle(
                           key: const Key('register-role'),
@@ -150,6 +172,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                         key: const Key('register-name'),
                         controller: _name,
                         textCapitalization: TextCapitalization.words,
+                        textInputAction: TextInputAction.next,
+                        maxLength: 100,
                         autofillHints: const [AutofillHints.name],
                         decoration: const InputDecoration(labelText: 'Full name'),
                         validator: Validators.name,
@@ -171,6 +195,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                         key: const Key('register-email'),
                         controller: _email,
                         keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        autocorrect: false,
                         autofillHints: const [AutofillHints.email],
                         decoration: const InputDecoration(labelText: 'Email address'),
                         validator: Validators.email,
@@ -193,7 +219,11 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                         controller: _confirm,
                         obscureText: true,
                         decoration: const InputDecoration(labelText: 'Confirm password'),
-                        validator: (v) => v == _password.text ? null : 'Passwords do not match.',
+                        validator: (v) => (v ?? '').isEmpty
+                            ? 'Confirm your password.'
+                            : v == _password.text
+                            ? null
+                            : 'Passwords do not match.',
                       ),
                       const SizedBox(height: 20),
                       if (_error != null) ...[

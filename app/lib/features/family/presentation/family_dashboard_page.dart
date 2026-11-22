@@ -1,3 +1,4 @@
+import '../../notifications/presentation/notification_bell.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -36,7 +37,11 @@ class FamilyDashboardPage extends ConsumerWidget {
     final linked = ref.watch(linkedPatientIdProvider);
     final pending = ref.watch(myPendingLinkProvider).value;
     return Scaffold(
-      appBar: AppBar(title: const Text('Family Dashboard')),
+      appBar: AppBar(
+        title: const Text('Family Dashboard'),
+        // D-124: the family member's notification inbox.
+        actions: const [NotificationBell(page: '/family/notifications')],
+      ),
       body: linked.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (_, _) => const Center(child: Text('Could not load. Check your connection.')),

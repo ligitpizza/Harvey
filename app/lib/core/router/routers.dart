@@ -1,3 +1,5 @@
+import '../../features/notifications/presentation/notification_bell.dart';
+import '../../features/auth/presentation/family_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -117,6 +119,12 @@ final List<RouteBase> familyRoutes = [
       GoRoute(path: '/family/link', builder: (_, _) => const LinkPage()),
       GoRoute(path: '/family/settings', builder: (_, _) => const FamilySettingsPage()),
     ],
+  ),
+  // D-124: the family member's notification inbox (same module as the patient's).
+  GoRoute(
+    path: '/family/notifications',
+    builder: (context, _) =>
+        Theme(data: familyTheme(Theme.of(context)), child: const NotificationsPage()),
   ),
   GoRoute(
     path: '/family/alert/:alertId',

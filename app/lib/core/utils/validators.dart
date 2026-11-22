@@ -31,10 +31,18 @@ abstract final class Validators {
     return (value?.trim() ?? '').isEmpty ? '$label is required.' : null;
   }
 
+  // D-124: letters (any language), spaces and . ' - @ / as in "Siti binti Ali",
+  // "Ravi a/l Kumar", "O'Neil", "Ahmad @ Mat".
+  static final _nameChars = RegExp(r"^[\p{L}\p{M} .'@/-]+$", unicode: true);
+  static final _nameLetter = RegExp(r'\p{L}', unicode: true);
+
   static String? name(String? value) {
     final v = value?.trim() ?? '';
     if (v.length < 2) return 'Enter your full name.';
     if (v.length > 100) return 'Name is too long.';
+    if (!_nameChars.hasMatch(v) || _nameLetter.allMatches(v).length < 2) {
+      return 'Use letters only (spaces and . \' - @ / are fine).';
+    }
     return null;
   }
 

@@ -12,11 +12,14 @@ import '../state/notification_providers.dart';
 /// D-77: the bell. Shows the unread count; on the portal it opens a panel under the top
 /// bar, on the phone the Notifications page. Checks for new ones every minute.
 class NotificationBell extends ConsumerStatefulWidget {
-  const NotificationBell({super.key, this.panel = false, this.color});
+  const NotificationBell({super.key, this.panel = false, this.color, this.page = '/notifications'});
 
   /// true on the web portal (panel), false on the phone (full page).
   final bool panel;
   final Color? color;
+
+  /// The phone page it opens (D-124: '/family/notifications' on the family side).
+  final String page;
 
   static const refreshEvery = Duration(minutes: 1);
 
@@ -45,7 +48,7 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
   Future<void> _open() async {
     ref.invalidate(notificationInboxProvider);
     if (!widget.panel) {
-      await context.push('/notifications');
+      await context.push(widget.page);
       return;
     }
     final route = await showDialog<String>(
@@ -146,6 +149,9 @@ class _NotificationsPanelState extends ConsumerState<NotificationsPanel> {
   @override
   Widget build(BuildContext context) {
     final inbox = ref.watch(notificationInboxProvider);
+    // D-124: keep the profile loaded, so a tap knows the role (a family member must get
+    // family routes, never patient ones).
+    ref.watch(currentUserProvider);
     final theme = Theme.of(context);
     final items = inbox.value?.items ?? const <AppNotification>[];
     final unread = inbox.value?.unread ?? 0;
