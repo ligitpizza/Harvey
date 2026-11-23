@@ -280,13 +280,8 @@ void main() {
       expect(find.text('72 BPM'), findsOneWidget);
       expect(find.byKey(const Key('ppg-crosscheck')), findsOneWidget);
       expect(find.textContaining('frequency (FFT) 73 BPM'), findsOneWidget);
-      // D-121: technical summary, collapsed until opened.
-      expect(find.text('Frames analysed'), findsNothing);
-      await t.tap(find.text('Technical details'));
-      await t.pumpAndSettle();
-      expect(find.text('Frames analysed'), findsOneWidget);
-      expect(find.text('7.5 s'), findsOneWidget);
-      expect(find.text('90%'), findsOneWidget); // signal quality
+      // D-126: no technical details on the result.
+      expect(find.text('Technical details'), findsNothing);
     });
 
     tallTest('D-123 coverage meter and image hints while positioning', (t) async {
@@ -315,23 +310,14 @@ void main() {
       expect(find.byKey(const Key('ppg-retry')), findsOneWidget);
     });
 
-    tallTest('D-123 technical details show the adaptive ROI heat map', (t) async {
-      final ppg = FakePpgCapture()
-        ..result = PpgResult.success(
-          72,
-          0.9,
-          fftBpm: 73,
-          roiBlocks: const [5, 6, 9, 10],
-          blockStrength: List<double>.generate(16, (i) => [5, 6, 9, 10].contains(i) ? 0.9 : 0.2),
-          motionFrames: 4,
-        );
+    tallTest('D-126 asks for a warm room before measuring and after a failed reading', (t) async {
+      final ppg = FakePpgCapture()..result = const PpgResult.failed(PpgFailure.noSignal);
       await t.pumpWidget(logApp(FakeVitalsRepository(), ppg));
+      expect(find.byKey(const Key('ppg-warm-note')), findsOneWidget);
+      expect(find.textContaining('warm room'), findsOneWidget);
       await measureHeartRate(t);
-      await t.tap(find.text('Technical details'));
-      await t.pumpAndSettle();
-      expect(find.byKey(const Key('ppg-heatmap')), findsOneWidget);
-      expect(find.text('4 of 16 blocks'), findsOneWidget);
-      expect(find.text('Motion frames bridged'), findsOneWidget);
+      expect(find.byKey(const Key('ppg-failed')), findsOneWidget);
+      expect(find.byKey(const Key('ppg-warm-note')), findsOneWidget);
     });
 
     tallTest('D-121 the guide explains where to put the finger', (t) async {
@@ -342,6 +328,7 @@ void main() {
       expect(find.text('Use your index finger'), findsOneWidget);
       expect(find.text('Cover the camera and the flash'), findsOneWidget);
       expect(find.text('Touch lightly'), findsOneWidget);
+      expect(find.text('Measure somewhere warm'), findsOneWidget); // D-126
       await t.tap(find.byKey(const Key('ppg-guide-close')));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('ppg-guide')), findsNothing);

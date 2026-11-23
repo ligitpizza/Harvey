@@ -27,6 +27,12 @@ const ppgGuideSteps = [
     'Do not press hard: pressing squeezes the blood out and hides the pulse.',
   ),
   (
+    Icons.thermostat_outlined,
+    'Measure somewhere warm',
+    'Cold rooms and cold hands narrow the blood vessels in your fingertip, which weakens the '
+        'pulse. Rub your hands together or wait a few minutes in a warm room first.',
+  ),
+  (
     Icons.self_improvement_outlined,
     'Rest and keep still for 15 s',
     'Sit down, rest your arm on a table and do not talk while it measures.',

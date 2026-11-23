@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -334,6 +333,8 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
               'Cover the rear camera and flash with your index fingertip.',
               textAlign: TextAlign.center,
             ),
+            const SizedBox(height: 8),
+            const _WarmNote(),
             const SizedBox(height: 12),
             FilledButton.tonalIcon(
               key: const Key('ppg-start'),
@@ -474,8 +475,6 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall,
             ),
-            const SizedBox(height: 8),
-            _TechnicalDetails(result: r, live: _live),
             const SizedBox(height: 4),
             Text(
               'Looks off? Measure again: two close readings are more reliable.',
@@ -491,6 +490,7 @@ class _HeartRateCardState extends ConsumerState<HeartRateCard> {
           key: Key(_phase == _Phase.failed ? 'ppg-failed' : 'ppg-unavailable'),
           children: [
             Text(_message, textAlign: TextAlign.center),
+            if (_phase == _Phase.failed) ...[const SizedBox(height: 8), const _WarmNote()],
             if (_phase == _Phase.failed)
               TextButton(
                 onPressed: () => showPpgGuide(context),
@@ -593,73 +593,6 @@ class _LiveStats extends StatelessWidget {
   }
 }
 
-/// D-121: how the number was produced, for the curious (and the examiner).
-class _TechnicalDetails extends StatelessWidget {
-  const _TechnicalDetails({required this.result, required this.live});
-
-  final PpgResult result;
-  final PpgLive live;
-
-  @override
-  Widget build(BuildContext context) {
-    const config = PpgConfig();
-    final seconds = live.fps > 0 ? live.frames / live.fps : 0.0;
-    final rows = [
-      ('Frames analysed', '${live.frames}'),
-      ('Frame rate', '${live.fps.toStringAsFixed(1)} fps'),
-      ('Recording', '${seconds.toStringAsFixed(1)} s'),
-      ('Signal', 'Mean green per frame (YUV → G)'),
-      ('Pixel masking', 'Dark < 30, saturated ≥ 245 (luma histogram)'),
-      if (result.blockStrength.isNotEmpty)
-        ('Adaptive ROI', '${result.roiBlocks.length} of ${result.blockStrength.length} blocks'),
-      ('Motion frames bridged', '${result.motionFrames}'),
-      (
-        'Band-pass filter',
-        '${config.lowHz}–${config.highHz} Hz '
-            '(${(config.lowHz * 60).round()}–${(config.highHz * 60).round()} bpm)',
-      ),
-      ('Beat count (peaks)', '${result.bpm} BPM'),
-      if (result.fftBpm != null) ('Frequency (FFT)', '${result.fftBpm} BPM'),
-      ('Signal quality', '${(result.quality * 100).round()}%'),
-    ];
-    final theme = Theme.of(context);
-    return Material(
-      color: theme.colorScheme.surface,
-      borderRadius: BorderRadius.circular(12),
-      clipBehavior: Clip.antiAlias,
-      child: Theme(
-        data: theme.copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          key: const Key('ppg-tech'),
-          dense: true,
-          leading: const Icon(Icons.analytics_outlined, size: 20),
-          title: const Text('Technical details'),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          children: [
-            if (result.blockStrength.isNotEmpty) ...[
-              PulseHeatMap(strength: result.blockStrength, selected: result.roiBlocks),
-              const SizedBox(height: 8),
-            ],
-            for (final (label, value) in rows)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(
-                  children: [
-                    Expanded(child: Text(label, style: theme.textTheme.bodySmall)),
-                    Text(
-                      value,
-                      style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _TracePainter extends CustomPainter {
   _TracePainter(this.values, this.color);
 
@@ -691,51 +624,35 @@ class _TracePainter extends CustomPainter {
   bool shouldRepaint(_TracePainter old) => old.values != values;
 }
 
-/// D-123: pulse strength of each grid block (darker = stronger pulse); the blocks used
-/// for the signal (adaptive ROI) are outlined.
-class PulseHeatMap extends StatelessWidget {
-  const PulseHeatMap({super.key, required this.strength, required this.selected});
-
-  final List<double> strength;
-  final List<int> selected;
+/// D-126: camera PPG works poorly with cold fingers (narrowed blood vessels give a weak
+/// pulse), so the card asks for a warm room.
+class _WarmNote extends StatelessWidget {
+  const _WarmNote();
 
   @override
   Widget build(BuildContext context) {
-    final grid = math.sqrt(strength.length).round();
-    final best = strength.fold<double>(0, math.max);
-    final small = Theme.of(context).textTheme.labelSmall;
-    return Column(
-      key: const Key('ppg-heatmap'),
-      children: [
-        SizedBox(
-          width: 120,
-          height: 120,
-          child: GridView.count(
-            crossAxisCount: grid,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 2,
-            crossAxisSpacing: 2,
-            children: [
-              for (var i = 0; i < strength.length; i++)
-                Container(
-                  decoration: BoxDecoration(
-                    color: Color.lerp(
-                      Colors.green.shade50,
-                      Colors.green.shade800,
-                      best == 0 ? 0 : strength[i] / best,
-                    ),
-                    borderRadius: BorderRadius.circular(3),
-                    border: selected.contains(i)
-                        ? Border.all(color: Colors.black87, width: 2)
-                        : null,
-                  ),
-                ),
-            ],
+    final theme = Theme.of(context);
+    return Container(
+      key: const Key('ppg-warm-note'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.thermostat_outlined, size: 18, color: Colors.orange.shade800),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'Measure in a warm room with warm hands. Cold fingers have a weaker pulse, '
+              'so the reading may fail or be less accurate.',
+              style: theme.textTheme.bodySmall,
+            ),
           ),
-        ),
-        const SizedBox(height: 4),
-        Text('Pulse strength by area · outlined = used', style: small),
-      ],
+        ],
+      ),
     );
   }
 }
