@@ -257,11 +257,32 @@ class _Linked extends ConsumerWidget {
                       ],
                     ),
                     const SizedBox(height: 6),
-                    if (latestToday == null)
+                    if (latestToday == null && latest == null)
+                      const Text('No readings yet.')
+                    else if (latestToday == null) ...[
+                      // D-125: the last reading stays readable; the caption says it is old.
                       Text(
-                        'No reading today${latest == null ? '' : ' (last: ${latest.systolic}/${latest.diastolic}, ${dateLabel(latest.timestamp)})'}',
-                      )
-                    else ...[
+                        '${latest!.systolic}/${latest.diastolic} mmHg',
+                        key: const Key('family-bp-last'),
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          color: color,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        '${BpClassifier.label(cat!)} · last reading '
+                        '${dateLabel(latest.timestamp)}, ${timeLabel(latest.timestamp)}',
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text('No reading today', style: theme.textTheme.labelMedium),
+                      ),
+                    ] else ...[
                       Text(
                         '${latestToday.systolic}/${latestToday.diastolic} mmHg',
                         style: theme.textTheme.headlineSmall?.copyWith(
@@ -303,13 +324,47 @@ class _Linked extends ConsumerWidget {
         _Tinted(
           key: const Key('family-hr'),
           color: Colors.pink.shade400,
-          child: ListTile(
-            leading: Icon(Icons.monitor_heart_outlined, color: Colors.pink.shade400),
-            title: const Text('HEART RATE'),
-            subtitle: Text(
-              hr == null ? 'No heart rate recorded' : '${hr.heartRate} BPM (camera estimate)',
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.monitor_heart_outlined, color: Colors.pink.shade400),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text('HEART RATE', style: TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                    if (hr != null)
+                      Text(
+                        sameDay(hr.timestamp, today)
+                            ? timeLabel(hr.timestamp)
+                            : '${dateLabel(hr.timestamp)}, ${timeLabel(hr.timestamp)}',
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                if (hr == null)
+                  const Text('No heart rate recorded.')
+                else ...[
+                  Text(
+                    '${hr.heartRate} BPM',
+                    key: const Key('family-hr-value'),
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      color: Colors.pink.shade400,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  // D-122: camera readings are estimates; typed ones came from a monitor.
+                  Text(switch (hr.heartRateSource) {
+                    HeartRateSource.camera => 'Camera estimate',
+                    HeartRateSource.manual => 'Entered by them',
+                    null => 'Camera readings are estimates',
+                  }),
+                ],
+              ],
             ),
-            trailing: hr == null ? null : Text(timeLabel(hr.timestamp)),
           ),
         ),
         const SizedBox(height: 12),
@@ -318,44 +373,13 @@ class _Linked extends ConsumerWidget {
         Card(
           key: const Key('family-trend'),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(8, 16, 16, 12),
             child: week.length < 2
-                ? const Text('Not enough readings this week to show a trend.')
-                : SizedBox(
-                    height: 160,
-                    child: LineChart(
-                      LineChartData(
-                        gridData: const FlGridData(drawVerticalLine: false),
-                        borderData: FlBorderData(show: false),
-                        titlesData: const FlTitlesData(
-                          topTitles: AxisTitles(),
-                          rightTitles: AxisTitles(),
-                          bottomTitles: AxisTitles(),
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(showTitles: true, reservedSize: 32),
-                          ),
-                        ),
-                        lineBarsData: [
-                          LineChartBarData(
-                            spots: [
-                              for (final (i, r) in week.indexed)
-                                FlSpot(i.toDouble(), r.systolic.toDouble()),
-                            ],
-                            color: theme.colorScheme.primary,
-                            isCurved: true,
-                          ),
-                          LineChartBarData(
-                            spots: [
-                              for (final (i, r) in week.indexed)
-                                FlSpot(i.toDouble(), r.diastolic.toDouble()),
-                            ],
-                            color: Colors.teal,
-                            isCurved: true,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                ? const Padding(
+                    padding: EdgeInsets.only(left: 8),
+                    child: Text('Not enough readings this week to show a trend.'),
+                  )
+                : _TrendChart(week: week),
           ),
         ),
         const SizedBox(height: 8),
@@ -488,6 +512,142 @@ class _FamilyMapCard extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// D-125: 7-day systolic/diastolic chart with readable axes, day labels, the 130/80
+/// guide lines and a legend.
+class _TrendChart extends StatelessWidget {
+  const _TrendChart({required this.week});
+
+  final List<VitalReading> week;
+
+  static const _days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final sysColor = theme.colorScheme.primary;
+    const diaColor = Colors.teal;
+    final axis = theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.outline);
+    final lo = week.map((r) => r.diastolic).reduce((a, b) => a < b ? a : b);
+    final hi = week.map((r) => r.systolic).reduce((a, b) => a > b ? a : b);
+    final minY = ((lo - 10) / 20).floor() * 20.0;
+    final maxY = ((hi + 10) / 20).ceil() * 20.0;
+    String? dayAt(int i) {
+      final d = toMyt(week[i].timestamp);
+      if (i > 0) {
+        final p = toMyt(week[i - 1].timestamp);
+        if (p.year == d.year && p.month == d.month && p.day == d.day) return null;
+      }
+      return _days[d.weekday - 1];
+    }
+
+    HorizontalLine guide(double y, Color c) =>
+        HorizontalLine(y: y, color: c.withValues(alpha: 0.45), strokeWidth: 1, dashArray: [5, 4]);
+
+    LineChartBarData line(List<double> ys, Color c) => LineChartBarData(
+      spots: [for (final (i, y) in ys.indexed) FlSpot(i.toDouble(), y)],
+      color: c,
+      barWidth: 3,
+      isCurved: true,
+      preventCurveOverShooting: true,
+      dotData: FlDotData(
+        getDotPainter: (_, _, _, _) => FlDotCirclePainter(radius: 3.5, color: c, strokeWidth: 0),
+      ),
+    );
+
+    Widget legend(Color c, String label) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: theme.textTheme.labelMedium),
+      ],
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          height: 180,
+          child: LineChart(
+            LineChartData(
+              minY: minY,
+              maxY: maxY,
+              gridData: FlGridData(
+                drawVerticalLine: false,
+                horizontalInterval: 20,
+                getDrawingHorizontalLine: (_) => FlLine(
+                  color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+                  strokeWidth: 1,
+                ),
+              ),
+              borderData: FlBorderData(show: false),
+              extraLinesData: ExtraLinesData(
+                horizontalLines: [guide(130, sysColor), guide(80, diaColor)],
+              ),
+              lineTouchData: const LineTouchData(enabled: false),
+              titlesData: FlTitlesData(
+                topTitles: const AxisTitles(),
+                rightTitles: const AxisTitles(),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 36,
+                    interval: 20,
+                    getTitlesWidget: (v, meta) => v % 20 != 0
+                        ? const SizedBox.shrink()
+                        : SideTitleWidget(
+                            meta: meta,
+                            child: Text('${v.toInt()}', style: axis),
+                          ),
+                  ),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 24,
+                    interval: 1,
+                    getTitlesWidget: (v, meta) {
+                      final i = v.toInt();
+                      final label = i == v && i >= 0 && i < week.length ? dayAt(i) : null;
+                      return label == null
+                          ? const SizedBox.shrink()
+                          : SideTitleWidget(
+                              meta: meta,
+                              child: Text(label, style: axis),
+                            );
+                    },
+                  ),
+                ),
+              ),
+              lineBarsData: [
+                line([for (final r in week) r.systolic.toDouble()], sysColor),
+                line([for (final r in week) r.diastolic.toDouble()], diaColor),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: Wrap(
+            spacing: 16,
+            runSpacing: 4,
+            children: [
+              legend(sysColor, 'Systolic (top)'),
+              legend(diaColor, 'Diastolic (bottom)'),
+              Text('Dashed: 130/80 limit', style: axis),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

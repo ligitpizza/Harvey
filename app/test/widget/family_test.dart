@@ -342,6 +342,10 @@ void main() {
       await t.pumpWidget(app('/family/link'));
       await t.pumpAndSettle();
       expect(find.text('Siti Aminah'), findsOneWidget);
+      // D-125: a linked member sees what they follow, not the link-code form.
+      expect(find.text('Linked'), findsOneWidget);
+      expect(find.text('What you can see'), findsOneWidget);
+      expect(find.byKey(const Key('link-code')), findsNothing);
       await t.tap(find.byKey(const Key('link-unlink')));
       await t.pumpAndSettle();
       await t.tap(find.byKey(const Key('unlink-confirm')));
@@ -351,6 +355,24 @@ void main() {
   });
 
   group('Fig 4.3.16.2 family dashboard', () {
+    tallTest('D-125 no reading today still shows the last one, and the trend has a legend', (
+      t,
+    ) async {
+      repo.linked = 'p1';
+      health.readings = [
+        reading(now.subtract(const Duration(days: 1)), 140, 90, hr: 74),
+        reading(now.subtract(const Duration(days: 2)), 130, 85),
+      ];
+      await t.pumpWidget(app('/family/home'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('family-bp-last')), findsOneWidget);
+      expect(find.text('140/90 mmHg'), findsOneWidget);
+      expect(find.text('No reading today'), findsOneWidget);
+      expect(find.text('74 BPM'), findsOneWidget);
+      expect(find.text('Systolic (top)'), findsOneWidget);
+      expect(find.text('Diastolic (bottom)'), findsOneWidget);
+    });
+
     tallTest('status, today\'s BP and HR, trend; no alert banner', (t) async {
       repo.linked = 'p1';
       health
@@ -375,7 +397,7 @@ void main() {
       // D-79: big number, then category and change.
       expect(find.text('128/82 mmHg'), findsOneWidget);
       expect(find.textContaining('+4 from yesterday'), findsOneWidget);
-      expect(find.text('72 BPM (camera estimate)'), findsOneWidget);
+      expect(find.text('72 BPM'), findsOneWidget);
       expect(find.byKey(const Key('family-alert-banner')), findsNothing);
     });
 
