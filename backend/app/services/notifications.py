@@ -31,7 +31,9 @@ def pref_key(message: PushMessage) -> str | None:
 
 
 class TokenRepository(Protocol):
-    def add(self, uid: str, token: str, platform: str) -> None: ...
+    def add(self, uid: str, token: str, platform: str) -> None:
+        """Register the token for uid and remove it from every other user (D-128)."""
+        ...
 
     def remove(self, uid: str, token: str) -> None: ...
 
@@ -50,6 +52,13 @@ class FirestoreTokenRepository:
         return self._db.collection(Collection.USERS.value).document(uid).collection(TOKENS)
 
     def add(self, uid: str, token: str, platform: str) -> None:
+        # D-128: a device belongs to the account signed in on it; drop the token from any
+        # other account (a sign-out whose unregister failed would otherwise keep sending
+        # that account's alerts to this phone).
+        for doc in self._db.collection_group(TOKENS).select([]).stream():
+            owner = doc.reference.parent.parent
+            if doc.id == token and owner is not None and owner.id != uid:
+                doc.reference.delete()
         self._col(uid).document(token).set(
             {"platform": platform, "createdAt": firestore.SERVER_TIMESTAMP}
         )

@@ -300,6 +300,9 @@ class InMemoryTokenRepository:
         self.notification_prefs: dict[str, dict[str, Any]] = {}
 
     def add(self, uid: str, token: str, platform: str) -> None:
+        for other, toks in self.by_user.items():
+            if other != uid:
+                toks.pop(token, None)
         self.by_user.setdefault(uid, {})[token] = platform
 
     def remove(self, uid: str, token: str) -> None:
