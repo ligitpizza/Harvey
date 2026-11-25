@@ -79,3 +79,33 @@ def test_d131_deactivated_login_is_not_resolved(
     identity.disabled.add("u-mail")
     r = client.post(URL, json={"identifier": "081229780003", "password": "Secret123"})
     assert r.status_code == 400
+
+
+def test_d131_passport_resolves_both_ways(
+    client: TestClient, repo: InMemoryUserRepository, identity: FakeIdentityProvider
+) -> None:
+    # Email account with a passport added later: the passport (any case) finds the email login.
+    repo.users["u-pp"] = {
+        "role": "patient",
+        "email": "budi@x.id",
+        "passportNumber": "B9876543",
+        "nationality": "Indonesia",
+    }
+    identity.emails["budi@x.id"] = "u-pp"
+    identity.passwords["u-pp"] = "Secret123"
+    for typed in ("B9876543", "b9876543"):
+        r = client.post(URL, json={"identifier": typed, "password": "Secret123"})
+        assert r.json() == {"email": "budi@x.id"}, typed
+    # Walk-in passport login with a contact email: the email finds the passport alias.
+    repo.users["u-pp2"] = {
+        "role": "patient",
+        "email": None,
+        "passportNumber": "A1234567",
+        "contactEmail": "siti@x.id",
+    }
+    identity.emails["a1234567@id.harvey.invalid"] = "u-pp2"
+    identity.passwords["u-pp2"] = "Secret123"
+    r = client.post(URL, json={"identifier": "siti@x.id", "password": "Secret123"})
+    assert r.json() == {"email": "a1234567@id.harvey.invalid"}
+    bad = client.post(URL, json={"identifier": "A1234567", "password": "wrong"})
+    assert bad.status_code == 400
