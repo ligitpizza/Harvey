@@ -202,6 +202,14 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
             decoration: const InputDecoration(labelText: 'Email address'),
             validator: Validators.email,
           ),
+          const SizedBox(height: 8),
+          // D-129: no email means no code by email; the counter gives a new one.
+          Text(
+            'Registered at the clinic without an email? Ask the clinic counter for a new '
+            'setup code, then use "Registered at the clinic?" on the sign-in page.',
+            key: const Key('reset-no-email-note'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ],
         _errorText(),
         const SizedBox(height: 20),

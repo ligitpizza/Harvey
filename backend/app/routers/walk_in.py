@@ -2,7 +2,9 @@
 and books them into a free slot with a doctor today.
 
 GET  /walk-in/patients?q=     pharmacist / admin: find patients (name, email or IC)
-POST /walk-in/patients        pharmacist / admin: open a patient account (setup email)
+POST /walk-in/patients        pharmacist / admin: open a patient account (setup email, or
+                              a counter setup code when there is no email, D-129)
+POST /walk-in/patients/{uid}/setup-code   pharmacist / admin: a new counter code (D-129)
 GET  /walk-in/doctors         pharmacist / admin: active doctors and today's free slots
 POST /walk-in/appointments    pharmacist / admin: book today; bookedBy "pharmacist"
 
@@ -24,7 +26,12 @@ from app.core.errors import ApiError
 from app.integrations.email import EmailClient, get_email_client
 from app.integrations.push import PushMessage
 from app.routers.admin import DEFAULT_MAX_PATIENTS, caseloads, open_patient_account
-from app.schemas.auth import CreatePatientRequest
+from app.routers.password_otp import (
+    PasswordOtpRepository,
+    get_password_otp_repository,
+    issue_setup_code,
+)
+from app.schemas.auth import WalkInPatientRequest
 from app.schemas.d80 import WalkInBooking
 from app.services.appointment_extras import when_text
 from app.services.appointments import (
@@ -38,6 +45,7 @@ from app.services.appointments import (
     period,
 )
 from app.services.identity import IdentityProvider, get_identity_provider
+from app.services.login_alias import login_alias
 from app.services.medications import MYT
 from app.services.notifications import Notifier, get_notifier
 from app.services.users import UserRepository, get_user_repository
@@ -65,7 +73,9 @@ def _patient_row(uid: str, u: dict[str, Any], doctors: dict[str, str]) -> dict[s
     return {
         "id": uid,
         "name": u.get("name"),
-        "email": u.get("email"),
+        "email": u.get("email") or None,
+        "phone": u.get("phone"),  # D-129
+        "hasEmail": bool(u.get("email")),
         # Only the last 4 characters: enough to tell people apart at the counter.
         "icLast4": ic[-4:] if ic else None,
         "idKind": "passport" if u.get("passportNumber") else "mykad",  # D-103
@@ -97,8 +107,10 @@ def find_patients(
         email = str(u.get("email") or "").lower()
         ic = str(u.get("icNumber") or "")
         passport = str(u.get("passportNumber") or "").lower()
+        phone = "".join(c for c in str(u.get("phone") or "") if c.isdigit())
         if (
-            needle in name
+            (len(digits) >= 6 and digits.lstrip("0") in phone)  # D-129
+            or needle in name
             or needle in email
             or (len(digits) >= 4 and digits in ic)
             or (len(needle) >= 4 and needle.replace(" ", "") in passport)  # D-103
@@ -110,19 +122,25 @@ def find_patients(
 
 @router.post("/patients", status_code=status.HTTP_201_CREATED)
 def register_walk_in(
-    body: CreatePatientRequest,
+    body: WalkInPatientRequest,
     user: CurrentUser = Depends(counter),
     identity: IdentityProvider = Depends(get_identity_provider),
     users: UserRepository = Depends(get_user_repository),
     email_client: EmailClient = Depends(get_email_client),
+    codes: PasswordOtpRepository = Depends(get_password_otp_repository),
     audit: AuditLogger = Depends(get_audit_logger),
 ) -> dict[str, Any]:
     uid, email_sent, link = open_patient_account(body, identity, users, email_client)
+    code = None if body.email else issue_setup_code(codes, login_alias(body.icNumber), uid)
     audit.log(
         user_id=user.uid,
         action="REGISTER_WALK_IN",
-        details="Walk-in patient account opened at the counter; setup link "
-        f"{'emailed' if email_sent else 'shown'}.",
+        details="Walk-in patient account opened at the counter; "
+        + (
+            "counter setup code given (no email)."
+            if code
+            else f"setup link {'emailed' if email_sent else 'shown'}."
+        ),
         target_type=Collection.USERS.value,
         target_id=uid,
     )
@@ -130,8 +148,49 @@ def register_walk_in(
         "uid": uid,
         "name": body.name,
         "emailSent": email_sent,
-        "setupLink": None if email_sent else link,
+        "setupLink": None if email_sent or code else link,
+        "setupCode": code,  # D-129: shown once at the counter
     }
+
+
+@router.post("/patients/{uid}/setup-code")
+def new_setup_code(
+    uid: str,
+    user: CurrentUser = Depends(counter),
+    identity: IdentityProvider = Depends(get_identity_provider),
+    users: UserRepository = Depends(get_user_repository),
+    codes: PasswordOtpRepository = Depends(get_password_otp_repository),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    """D-129: a patient without an email lost or never used their code (or forgot their
+    password): the counter checks their MyKad/passport and issues a new 7-day code."""
+    u = users.get_user(uid)
+    if not u or u.get("role") != UserRole.PATIENT.value:
+        raise ApiError("NOT_FOUND", "Patient not found.", status.HTTP_404_NOT_FOUND)
+    if u.get("email"):
+        raise ApiError(
+            "HAS_EMAIL",
+            "This patient signs in with an email. Ask them to use Forgot password.",
+            status.HTTP_409_CONFLICT,
+        )
+    number = u.get("icNumber") or u.get("passportNumber")
+    alias = login_alias(str(number or ""))
+    found = identity.find_by_email(alias) if number else None
+    if found is None or found[0] != uid:
+        raise ApiError(
+            "NO_ID_LOGIN",
+            "This account has no MyKad/passport sign-in. Ask an admin to check it.",
+            status.HTTP_409_CONFLICT,
+        )
+    code = issue_setup_code(codes, alias, uid)
+    audit.log(
+        user_id=user.uid,
+        action="WALK_IN_SETUP_CODE",
+        details="New counter setup code given to a patient without an email.",
+        target_type=Collection.USERS.value,
+        target_id=uid,
+    )
+    return {"uid": uid, "setupCode": code}
 
 
 @router.get("/doctors")

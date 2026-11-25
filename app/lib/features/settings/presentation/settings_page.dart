@@ -207,7 +207,7 @@ class _ProfileHeader extends StatelessWidget {
     final shortId = user.uid.length <= 6 ? user.uid : user.uid.substring(0, 6);
     return SettingsHeader(
       name: user.name,
-      lines: ['Patient ID: #${shortId.toUpperCase()}', user.email],
+      lines: ['Patient ID: #${shortId.toUpperCase()}', user.signInId],
       action: FilledButton.tonal(
         key: const Key('settings-edit-profile'),
         style: FilledButton.styleFrom(

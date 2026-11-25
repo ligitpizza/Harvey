@@ -44,6 +44,7 @@ from app.schemas.auth import (
 from app.services.assignments import AssignmentRepository, get_assignment_repository
 from app.services.ic import IcError, parse_identity
 from app.services.identity import IdentityProvider, get_identity_provider
+from app.services.login_alias import is_alias
 from app.services.users import UserRepository, get_user_repository, new_link_code
 
 log = logging.getLogger("careflow.auth")
@@ -374,6 +375,8 @@ def request_password_reset(
             "RATE_LIMITED", "Too many attempts. Try again later.", status.HTTP_429_TOO_MANY_REQUESTS
         )
     email = body.email.strip().lower()
+    if is_alias(email):  # D-129: never email a MyKad/passport login
+        return {"status": "sent_if_exists"}
     found = identity.password_reset_link(
         email, f"{settings.public_base_url.rstrip('/')}/reset-done.html"
     )

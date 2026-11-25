@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import 'family_theme.dart';
 import '../../../core/constants/enums.dart';
+import '../../../core/utils/ic_number.dart';
+import '../../../core/utils/login_alias.dart';
 import '../../../core/utils/validators.dart';
 import '../data/auth_repository.dart';
 import '../state/auth_providers.dart';
@@ -52,7 +54,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       await ref
           .read(authRepositoryProvider)
           .signIn(
-            email: _email.text,
+            // D-129: a patient may type a MyKad/passport number instead of an email.
+            email: _role == UserRole.patient ? signInEmail(_email.text) : _email.text,
             password: _password.text,
             selectedRole: _role,
             app: ref.read(clientAppProvider),
@@ -140,13 +143,20 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                               TextFormField(
                                 key: const Key('login-email'),
                                 controller: _email,
-                                keyboardType: TextInputType.emailAddress,
+                                keyboardType: family
+                                    ? TextInputType.emailAddress
+                                    : TextInputType.text,
                                 autofillHints: const [AutofillHints.email],
-                                decoration: const InputDecoration(
-                                  labelText: 'Email Address',
-                                  prefixIcon: Icon(Icons.mail_outline),
+                                decoration: InputDecoration(
+                                  labelText: family ? 'Email Address' : 'Email or MyKad/passport',
+                                  prefixIcon: const Icon(Icons.mail_outline),
                                 ),
-                                validator: Validators.email,
+                                // D-129: walk-in patients without an email use their ID.
+                                validator: (v) => !family && (v ?? '').trim().isEmpty
+                                    ? 'Enter your email or MyKad/passport number.'
+                                    : family || (v ?? '').contains('@')
+                                    ? Validators.email(v)
+                                    : validateIdentity(v),
                               ),
                               const SizedBox(height: 12),
                               TextFormField(
@@ -220,6 +230,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  if (!family)
+                    TextButton.icon(
+                      key: const Key('login-setup-code'),
+                      onPressed: () => context.push('/setup-code'),
+                      icon: const Icon(Icons.pin_outlined),
+                      label: const Text('Registered at the clinic? Use your setup code'),
+                    ),
                   Wrap(
                     alignment: WrapAlignment.center,
                     crossAxisAlignment: WrapCrossAlignment.center,

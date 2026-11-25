@@ -31,6 +31,7 @@ from app.schemas.auth import (
     CreateStaffRequest,
     CreateStaffResponse,
     UpdateUserRequest,
+    WalkInPatientRequest,
 )
 from app.services.analytics import AnalyticsSource, get_analytics_source, overall_level
 from app.services.appointments import (
@@ -46,6 +47,7 @@ from app.services.identity import (
     get_identity_provider,
 )
 from app.services.imports import USER_TEMPLATE, FileImportError, UserRow, parse, validate_rows
+from app.services.login_alias import login_alias
 from app.services.settings import SettingsRepository, get_settings_repository
 from app.services.users import UserRepository, get_user_repository
 
@@ -305,7 +307,7 @@ def patient_setup_email(name: str, email: str, link: str) -> EmailMessage:
 
 
 def open_patient_account(
-    body: CreatePatientRequest,
+    body: CreatePatientRequest | WalkInPatientRequest,
     identity: IdentityProvider,
     repo: UserRepository,
     email_client: EmailClient,
@@ -317,8 +319,10 @@ def open_patient_account(
     from app.routers.auth import _unique_link_code, patient_identity
 
     ident = patient_identity(body.icNumber, body.nationality, repo, "")
+    # D-129: without an email the Firebase login is the MyKad/passport alias.
+    login = body.email or login_alias(body.icNumber)
     try:
-        uid = identity.create_user(email=body.email, display_name=body.name)
+        uid = identity.create_user(email=login, display_name=body.name)
     except EmailAlreadyRegisteredError as exc:
         raise ApiError(
             "EMAIL_ALREADY_REGISTERED",
@@ -337,9 +341,12 @@ def open_patient_account(
             "onboardingComplete": False,
             "assignedDoctorId": None,
             "linkCode": _unique_link_code(repo),
+            **({"phone": phone} if (phone := getattr(body, "phone", None)) else {}),  # D-129
             **(extra or {}),
         },
     )
+    if not body.email:
+        return uid, False, ""  # D-129: the caller issues a counter setup code
     link = identity.password_setup_link(body.email)
     try:
         email_sent = email_client.send(patient_setup_email(body.name, body.email, link))

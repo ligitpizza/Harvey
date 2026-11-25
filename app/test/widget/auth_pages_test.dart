@@ -40,7 +40,7 @@ void main() {
       await t.pumpWidget(harness(const LoginPage(), repo: repo));
       await t.tap(find.byKey(const Key('login-submit')));
       await t.pump();
-      expect(find.text('Enter your email address.'), findsOneWidget);
+      expect(find.text('Enter your email or MyKad/passport number.'), findsOneWidget);
       expect(repo.calls, isEmpty);
     });
 

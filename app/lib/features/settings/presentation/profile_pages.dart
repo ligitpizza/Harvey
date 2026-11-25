@@ -223,7 +223,9 @@ class _ContactFormState extends ConsumerState<_ContactForm> with _SaveFlow<_Cont
 
   @override
   Widget build(BuildContext context) {
-    final email = ref.watch(currentUserProvider).value?.email ?? '';
+    final me = ref.watch(currentUserProvider).value;
+    final email = me?.signInId ?? '';
+    final byEmail = (me?.email ?? '').isNotEmpty || me == null;
     return Form(
       key: form,
       child: ListView(
@@ -231,9 +233,11 @@ class _ContactFormState extends ConsumerState<_ContactForm> with _SaveFlow<_Cont
         children: [
           ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.email_outlined),
+            leading: Icon(byEmail ? Icons.email_outlined : Icons.badge_outlined),
             title: Text(email),
-            subtitle: const Text('Sign-in email (cannot be changed here)'),
+            subtitle: Text(
+              byEmail ? 'Sign-in email (cannot be changed here)' : 'You sign in with this number',
+            ),
           ),
           TextFormField(
             key: const Key('settings-phone'),

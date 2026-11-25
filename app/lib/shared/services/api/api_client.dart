@@ -743,17 +743,24 @@ class ApiClient {
   Future<Map<String, dynamic>> findWalkInPatients(String q) =>
       _getQuery('/walk-in/patients', {'q': q});
 
+  /// D-129: email and phone are optional; without an email the answer has a `setupCode`.
   Future<Map<String, dynamic>> registerWalkIn(
     String name,
-    String email,
+    String? email,
     String icNumber, {
     String? nationality,
+    String? phone,
   }) => _post('/walk-in/patients', {
     'name': name,
-    'email': email,
+    'email': ?email,
+    'phone': ?phone,
     'icNumber': icNumber,
     'nationality': ?nationality, // D-103
   });
+
+  /// D-129: a new 7-day counter setup code for a patient without an email.
+  Future<Map<String, dynamic>> walkInSetupCode(String uid) =>
+      _post('/walk-in/patients/$uid/setup-code', const {});
 
   Future<Map<String, dynamic>> walkInDoctors() => _get('/walk-in/doctors');
 

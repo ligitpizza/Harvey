@@ -47,7 +47,18 @@ class AppUser {
   });
 
   final String uid;
+
+  /// '' for a walk-in patient registered without an email (D-129).
   final String email;
+
+  /// D-129: what this account signs in with (email, or MyKad/passport number).
+  String get signInId => email.isNotEmpty
+      ? email
+      : icNumber != null
+      ? 'MyKad $icNumber'
+      : passportNumber != null
+      ? 'Passport $passportNumber'
+      : '';
   final String name;
   final UserRole role;
   final bool isActive;

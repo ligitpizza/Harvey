@@ -34,6 +34,12 @@ class FakeAuthRepository implements AuthRepository {
   @override
   Stream<AppUser?> watchProfile(String uid) => Stream.value(null);
 
+  /// D-129: the login email sent (an alias when a MyKad/passport was typed).
+  String? lastSignInEmail;
+
+  /// D-129: the email the last code was verified for.
+  String? lastCodeEmail;
+
   @override
   Future<AppUser> signIn({
     required String email,
@@ -43,6 +49,7 @@ class FakeAuthRepository implements AuthRepository {
   }) async {
     calls.add('signIn');
     lastSelectedRole = selectedRole;
+    lastSignInEmail = email;
     if (holdSignIn) await _signInGate.future;
     if (signInError != null) throw signInError!;
     return AppUser(uid: 'u1', email: email, name: 'N', role: selectedRole, isActive: true);
@@ -88,6 +95,7 @@ class FakeAuthRepository implements AuthRepository {
     required String newPassword,
   }) async {
     calls.add('verify:$code:$newPassword');
+    lastCodeEmail = email;
     if (codeError != null) throw codeError!;
   }
 

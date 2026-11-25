@@ -16,7 +16,7 @@ String? authRedirect({
   required bool busy,
   required String home,
 }) {
-  const publicRoutes = {'/login', '/register', '/forgot-password'};
+  const publicRoutes = {'/login', '/register', '/forgot-password', '/setup-code'};
   final atPublic = publicRoutes.contains(location);
 
   // Sign-in/registration is mid-flight: let the page finish its own checks.
@@ -45,6 +45,7 @@ String? authRedirect({
     '/login',
     '/register',
     '/forgot-password',
+    '/setup-code',
     '/finish-registration',
     '/deactivated',
     '/wrong-app',

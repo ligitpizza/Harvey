@@ -21,6 +21,7 @@ import '../../features/admin/presentation/audit_logs_page.dart';
 import '../../features/admin/presentation/admin_users_page.dart';
 import '../../features/admin/presentation/create_staff_page.dart';
 import '../../features/auth/presentation/forgot_password_page.dart';
+import '../../features/auth/presentation/setup_code_page.dart';
 import '../../features/leave/leave_pages.dart';
 import '../../features/walk_in/walk_in_page.dart';
 import '../../features/auth/presentation/login_page.dart';
@@ -101,6 +102,7 @@ GoRouter _guardedRouter(
     routes: [
       GoRoute(path: '/splash', builder: (_, _) => const SplashPage()),
       GoRoute(path: '/forgot-password', builder: (_, _) => const ForgotPasswordPage()),
+      GoRoute(path: '/setup-code', builder: (_, _) => const SetupCodePage()), // D-129
       GoRoute(path: '/finish-registration', builder: (_, _) => const FinishRegistrationPage()),
       GoRoute(path: '/deactivated', builder: (_, _) => const DeactivatedPage()),
       GoRoute(path: '/wrong-app', builder: (_, _) => const WrongAppPage()),

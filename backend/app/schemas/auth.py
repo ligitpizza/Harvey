@@ -233,6 +233,27 @@ class CreatePatientRequest(_Strict):
     _email = field_validator("email")(_check_email)
 
 
+class WalkInPatientRequest(_Strict):
+    """D-129: a walk-in patient. Name and MyKad/passport are required; email and phone are
+    optional (no email -> the patient signs in with MyKad/passport and a counter code)."""
+
+    name: str = Field(min_length=2, max_length=100)
+    email: str | None = Field(default=None, max_length=254)
+    phone: str | None = Field(default=None, max_length=20)
+    icNumber: str = Field(min_length=5, max_length=20)  # D-103: MyKad or passport
+    nationality: str | None = Field(default=None, max_length=60)
+
+    @field_validator("email")
+    @classmethod
+    def _opt_email(cls, v: str | None) -> str | None:
+        return _check_email(v) if v and v.strip() else None
+
+    @field_validator("phone")
+    @classmethod
+    def _opt_phone(cls, v: str | None) -> str | None:
+        return _check_phone(v) if v and v.strip() else None
+
+
 class PasswordResetRequest(_Strict):
     """D-65: forgot password."""
 

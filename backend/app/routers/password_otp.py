@@ -30,11 +30,13 @@ from app.core.firebase import get_firestore
 from app.core.rate_limit import RateLimiter
 from app.integrations.email import EmailClient, EmailMessage, get_email_client
 from app.services.identity import IdentityProvider, get_identity_provider
+from app.services.login_alias import is_alias
 
 log = logging.getLogger("careflow.password_otp")
 router = APIRouter(prefix="/auth/password-otp", tags=["auth"])
 
 CODE_TTL = timedelta(minutes=10)
+SETUP_CODE_TTL = timedelta(days=7)  # D-129: counter code for a patient without an email
 MAX_TRIES = 5
 SEND_WINDOW = timedelta(minutes=15)
 MAX_SENDS = 3
@@ -88,6 +90,29 @@ def code_hash(code: str, salt: str) -> str:
 
 def new_code() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def issue_setup_code(repo: PasswordOtpRepository, login_email: str, uid: str) -> str:
+    """D-129: a 6-digit code the counter hands to a patient without an email. It is
+    verified by POST /verify like an emailed code (login email = the MyKad/passport alias),
+    lasts 7 days, allows 5 wrong tries and replaces any earlier code."""
+    code = new_code()
+    salt = secrets.token_hex(8)
+    now = _now()
+    repo.put(
+        email_key(login_email.lower()),
+        {
+            "uid": uid,
+            "salt": salt,
+            "codeHash": code_hash(code, salt),
+            "expiresAt": now + SETUP_CODE_TTL,
+            "attempts": 0,
+            "sentAt": [],
+            "createdAt": now,
+            "kind": "counter",
+        },
+    )
+    return code
 
 
 def otp_email(name: str, email: str, code: str) -> EmailMessage:
@@ -162,6 +187,9 @@ def request_code(
             "RATE_LIMITED", "Too many attempts. Try again later.", status.HTTP_429_TOO_MANY_REQUESTS
         )
     email = body.email.lower()
+    if is_alias(email):
+        # D-129: no mailbox behind a MyKad/passport login; keep any counter code intact.
+        return {"status": "sent_if_exists"}
     key = email_key(email)
     now = _now()
     existing = repo.get(key) or {}

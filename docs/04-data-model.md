@@ -20,7 +20,7 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | Field | Type | Description | Constraints / Notes |
 |---|---|---|---|
 | _id | String | Primary key (Firebase Auth UID) | Auto-generated |
-| email | String | Login email | Required, unique |
+| email | String | Login email | Required, unique; null for a walk-in patient registered without an email (D-129: their login is a MyKad/passport alias) |
 | name | String | Full name | Required |
 | role | String | patient / doctor / pharmacist / admin / family_member | Required |
 | isActive | Boolean | Whether the account is active | Default: true |
@@ -41,7 +41,7 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 > Pharmacist and Admin accounts use only the common fields above; no role-specific fields apply.
 
 | address, addressLat, addressLng | String, Number, Number | Patient delivery address and map point (D-69) | Optional |
-| phone | String | Staff contact number (D-77, portal Settings) | Optional; doctors, pharmacists, admins |
+| phone | String | Staff contact number (D-77, portal Settings); a walk-in patient's phone from the counter (D-129, +60…) | Optional; staff, and patients registered at the counter |
 | bellPrefs | Map | D-77: bell categories switched on/off (messages, alerts, appointments, orders, medication, other) | Optional; missing = on |
 | analyticsCharts | Array | D-79: an admin's saved custom charts (id, title, measure, type, days, page) | Admin only; max 12 |
 

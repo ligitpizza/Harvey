@@ -11,6 +11,7 @@ import '../../shared/providers/api_providers.dart';
 import '../../shared/services/api/api_client.dart';
 import '../appointments/domain/appointment_text.dart' show timeLabel;
 import '../../shared/widgets/page_header.dart';
+import '../settings/presentation/settings_widgets.dart' show validatePhone;
 
 /// D-80 walk-in (pharmacist): 1. find or register the patient, 2. pick their doctor and
 /// one of today's free slots, 3. book. The patient and doctor get a notification.
@@ -20,6 +21,8 @@ class WalkInPatient {
     required this.id,
     required this.name,
     this.email,
+    this.phone,
+    this.hasEmail = true,
     this.icLast4,
     this.doctorId,
     this.doctorName,
@@ -28,6 +31,10 @@ class WalkInPatient {
   final String id;
   final String name;
   final String? email;
+
+  /// D-129: optional contact number; a patient without an email signs in with their ID.
+  final String? phone;
+  final bool hasEmail;
   final String? icLast4;
   final String? doctorId;
   final String? doctorName;
@@ -36,6 +43,8 @@ class WalkInPatient {
     id: j['id'] as String,
     name: j['name'] as String? ?? 'Patient',
     email: j['email'] as String?,
+    phone: j['phone'] as String?,
+    hasEmail: j['hasEmail'] as bool? ?? j['email'] != null,
     icLast4: j['icLast4'] as String?,
     doctorId: j['doctorId'] as String?,
     doctorName: j['doctorName'] as String?,
@@ -153,6 +162,17 @@ class _WalkInPageState extends ConsumerState<WalkInPage> {
     if (created != null) _choose(created);
   }
 
+  /// D-129: a patient without an email lost their code or forgot their password.
+  Future<void> _newCode(WalkInPatient p) async {
+    try {
+      final res = await ref.read(apiClientProvider).walkInSetupCode(p.id);
+      if (!mounted) return;
+      await showSetupCode(context, p.name, res['setupCode'] as String);
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    }
+  }
+
   Future<void> _book() async {
     final p = _patient;
     final slot = _slot;
@@ -209,7 +229,7 @@ class _WalkInPageState extends ConsumerState<WalkInPage> {
           title: 'Walk-in',
           subtitle:
               'Book a patient who walked in for a visit with a doctor today. New patients get '
-              'an email to set their Harvey password.',
+              'an email to set their Harvey password, or a setup code if they have no email.',
           icon: Icons.how_to_reg_outlined,
           color: Colors.green.shade700,
         ),
@@ -231,14 +251,27 @@ class _WalkInPageState extends ConsumerState<WalkInPage> {
               title: Text(p.name),
               subtitle: Text(
                 [
-                  if (p.email != null) p.email!,
+                  if (p.email != null) p.email! else 'No email · signs in with MyKad/passport',
+                  if (p.phone != null) p.phone!,
                   if (p.icLast4 != null) 'IC …${p.icLast4}',
                   p.doctorName == null ? 'No doctor yet' : 'Doctor: ${p.doctorName}',
                 ].join(' · '),
               ),
-              trailing: TextButton(
-                onPressed: () => setState(() => _patient = null),
-                child: const Text('Change'),
+              trailing: Wrap(
+                spacing: 8,
+                children: [
+                  if (!p.hasEmail)
+                    OutlinedButton.icon(
+                      key: const Key('walk-in-new-code'),
+                      onPressed: () => _newCode(p),
+                      icon: const Icon(Icons.pin_outlined, size: 18),
+                      label: const Text('New setup code'),
+                    ),
+                  TextButton(
+                    onPressed: () => setState(() => _patient = null),
+                    child: const Text('Change'),
+                  ),
+                ],
               ),
             ),
           )
@@ -252,7 +285,7 @@ class _WalkInPageState extends ConsumerState<WalkInPage> {
                   onChanged: _onSearch,
                   decoration: InputDecoration(
                     prefixIcon: const Icon(Icons.search),
-                    labelText: 'Find by name, email or IC',
+                    labelText: 'Find by name, email, IC or phone',
                     suffixIcon: _searching
                         ? const Padding(
                             padding: EdgeInsets.all(12),
@@ -282,7 +315,7 @@ class _WalkInPageState extends ConsumerState<WalkInPage> {
               title: Text(r.name),
               subtitle: Text(
                 [
-                  if (r.email != null) r.email!,
+                  if (r.email != null) r.email! else if (r.phone != null) r.phone!,
                   if (r.icLast4 != null) 'IC …${r.icLast4}',
                   r.doctorName ?? 'No doctor yet',
                 ].join(' · '),
@@ -457,6 +490,7 @@ class _RegisterDialogState extends ConsumerState<_RegisterDialog> {
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _email = TextEditingController();
+  final _phone = TextEditingController(); // D-129
   final _ic = TextEditingController();
   final _nationality = TextEditingController(); // D-103
   bool _busy = false;
@@ -466,6 +500,7 @@ class _RegisterDialogState extends ConsumerState<_RegisterDialog> {
   void dispose() {
     _name.dispose();
     _email.dispose();
+    _phone.dispose();
     _ic.dispose();
     _nationality.dispose();
     super.dispose();
@@ -478,21 +513,29 @@ class _RegisterDialogState extends ConsumerState<_RegisterDialog> {
       _error = null;
     });
     try {
+      final email = _email.text.trim();
+      final phone = _phone.text.trim();
       final res = await ref
           .read(apiClientProvider)
           .registerWalkIn(
             _name.text.trim(),
-            _email.text.trim(),
+            email.isEmpty ? null : email,
             parseIdentity(_ic.text).value,
             nationality: looksLikePassport(_ic.text) ? _nationality.text.trim() : null,
+            phone: phone.isEmpty ? null : phone,
           );
+      if (!mounted) return;
+      final code = res['setupCode'] as String?;
+      if (code != null) await showSetupCode(context, _name.text.trim(), code);
       if (!mounted) return;
       Navigator.pop(
         context,
         WalkInPatient(
           id: res['uid'] as String,
           name: _name.text.trim(),
-          email: _email.text.trim(),
+          email: email.isEmpty ? null : email,
+          phone: phone.isEmpty ? null : phone,
+          hasEmail: email.isNotEmpty,
           icLast4: () {
             final v = parseIdentity(_ic.text).value.replaceAll('-', '');
             return v.substring((v.length - 4).clamp(0, 99));
@@ -526,8 +569,22 @@ class _RegisterDialogState extends ConsumerState<_RegisterDialog> {
               key: const Key('walk-in-email'),
               controller: _email,
               keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(labelText: 'Email (for their Harvey login)'),
-              validator: Validators.email,
+              decoration: const InputDecoration(
+                labelText: 'Email (optional)',
+                helperText: 'No email? They get a setup code to sign in with their MyKad/passport.',
+                helperMaxLines: 2,
+              ),
+              validator: (v) => (v ?? '').trim().isEmpty ? null : Validators.email(v),
+            ),
+            TextFormField(
+              key: const Key('walk-in-phone'),
+              controller: _phone,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Phone number (optional)',
+                hintText: '012-345 6789',
+              ),
+              validator: (v) => validatePhone(v, required: false),
             ),
             // D-103: MyKad or passport (with nationality).
             IdentityFields(
@@ -550,8 +607,50 @@ class _RegisterDialogState extends ConsumerState<_RegisterDialog> {
       FilledButton(
         key: const Key('walk-in-save'),
         onPressed: _busy ? null : _save,
-        child: const Text('Register and email setup link'),
+        child: const Text('Register patient'),
       ),
     ],
   );
 }
+
+/// D-129: the one-time setup code for a patient without an email, shown at the counter.
+Future<void> showSetupCode(BuildContext context, String name, String code) => showDialog<void>(
+  context: context,
+  barrierDismissible: false,
+  builder: (context) => AlertDialog(
+    key: const Key('walk-in-code-dialog'),
+    icon: const Icon(Icons.pin_outlined),
+    title: Text('Setup code for $name'),
+    content: SizedBox(
+      width: 420,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SelectableText(
+            code,
+            key: const Key('walk-in-code'),
+            style: Theme.of(
+              context,
+            ).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.bold, letterSpacing: 8),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Write this code down for the patient. In the Harvey app they tap '
+            '"Registered at the clinic? Use your setup code", enter their MyKad or passport '
+            'number and this code, and choose a password. Then they sign in with their '
+            'MyKad/passport number and fill in their health profile.\n\n'
+            'The code works once and lasts 7 days. It is not shown again; use "New setup '
+            'code" if it is lost.',
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      FilledButton(
+        key: const Key('walk-in-code-done'),
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Done'),
+      ),
+    ],
+  ),
+);
