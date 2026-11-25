@@ -134,6 +134,57 @@ void main() {
     });
   });
 
+  test('D-129 the printed slip has the code, ID hint, expiry and steps, escaped', () {
+    final html = setupSlipHtml(
+      name: 'Tan <Ah> Kow',
+      code: '901867',
+      expires: DateTime(2026, 12, 2, 10),
+      idLast4: '5566',
+    );
+    expect(html, contains('901867'));
+    expect(html, contains('ID ending 5566'));
+    expect(html, contains('Tan &lt;Ah&gt; Kow'));
+    expect(html, isNot(contains('<Ah>')));
+    expect(html, contains('Registered at the clinic? Use your setup code'));
+    expect(html, contains('2 Dec'));
+  });
+
+  testWidgets('D-129 Print slip sends the slip to the printer; a blocked tab is explained', (
+    t,
+  ) async {
+    final printed = <String>[];
+    var ok = true;
+    await t.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showSetupCode(
+              context,
+              'Ah Kow',
+              '901867',
+              idLast4: '5566',
+              printer: (html) {
+                printed.add(html);
+                return ok;
+              },
+            ),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+    await t.tap(find.text('open'));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('walk-in-print')));
+    await t.pump();
+    expect(printed.single, contains('901867'));
+    expect(find.byKey(const Key('walk-in-print-note')), findsNothing);
+    ok = false;
+    await t.tap(find.byKey(const Key('walk-in-print')));
+    await t.pump();
+    expect(find.byKey(const Key('walk-in-print-note')), findsOneWidget);
+  });
+
   group('D-129 walk-in counter', () {
     testWidgets('register without an email shows the setup code once', (t) async {
       final api = WalkInApi();

@@ -9,7 +9,8 @@ import '../../core/constants/enums.dart';
 import '../../core/utils/validators.dart';
 import '../../shared/providers/api_providers.dart';
 import '../../shared/services/api/api_client.dart';
-import '../appointments/domain/appointment_text.dart' show timeLabel;
+import '../appointments/domain/appointment_text.dart' show dateLabel, timeLabel;
+import '../../shared/utils/print_html.dart';
 import '../../shared/widgets/page_header.dart';
 import '../settings/presentation/settings_widgets.dart' show validatePhone;
 
@@ -167,7 +168,7 @@ class _WalkInPageState extends ConsumerState<WalkInPage> {
     try {
       final res = await ref.read(apiClientProvider).walkInSetupCode(p.id);
       if (!mounted) return;
-      await showSetupCode(context, p.name, res['setupCode'] as String);
+      await showSetupCode(context, p.name, res['setupCode'] as String, idLast4: p.icLast4);
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     }
@@ -526,7 +527,15 @@ class _RegisterDialogState extends ConsumerState<_RegisterDialog> {
           );
       if (!mounted) return;
       final code = res['setupCode'] as String?;
-      if (code != null) await showSetupCode(context, _name.text.trim(), code);
+      if (code != null) {
+        final id = parseIdentity(_ic.text).value.replaceAll('-', '');
+        await showSetupCode(
+          context,
+          _name.text.trim(),
+          code,
+          idLast4: id.substring((id.length - 4).clamp(0, 99)),
+        );
+      }
       if (!mounted) return;
       Navigator.pop(
         context,
@@ -614,43 +623,122 @@ class _RegisterDialogState extends ConsumerState<_RegisterDialog> {
 }
 
 /// D-129: the one-time setup code for a patient without an email, shown at the counter.
-Future<void> showSetupCode(BuildContext context, String name, String code) => showDialog<void>(
-  context: context,
-  barrierDismissible: false,
-  builder: (context) => AlertDialog(
-    key: const Key('walk-in-code-dialog'),
-    icon: const Icon(Icons.pin_outlined),
-    title: Text('Setup code for $name'),
-    content: SizedBox(
-      width: 420,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SelectableText(
-            code,
-            key: const Key('walk-in-code'),
-            style: Theme.of(
-              context,
-            ).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.bold, letterSpacing: 8),
+/// "Print slip" gives the patient a paper copy so they don't have to remember it.
+Future<void> showSetupCode(
+  BuildContext context,
+  String name,
+  String code, {
+  String? idLast4,
+  DateTime? now,
+  bool Function(String html) printer = printHtml,
+}) {
+  final expires = (now ?? DateTime.now()).add(const Duration(days: 7));
+  String? note; // shown when the print tab could not open
+  return showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) {
+        return AlertDialog(
+          key: const Key('walk-in-code-dialog'),
+          icon: const Icon(Icons.pin_outlined),
+          title: Text('Setup code for $name'),
+          scrollable: true,
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SelectableText(
+                  code,
+                  key: const Key('walk-in-code'),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.bold, letterSpacing: 8),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Print the slip (or write the code down) for the patient. In the Harvey app they '
+                  'tap "Registered at the clinic? Use your setup code", enter their MyKad or '
+                  'passport number and this code, and choose a password. Then they sign in with '
+                  'their MyKad/passport number and fill in their health profile.\n\n'
+                  'The code works once and lasts until ${dateLabel(expires)}. It is not shown '
+                  'again; use "New setup code" if it is lost.',
+                ),
+                if (note != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      note!,
+                      key: const Key('walk-in-print-note'),
+                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    ),
+                  ),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
-          const Text(
-            'Write this code down for the patient. In the Harvey app they tap '
-            '"Registered at the clinic? Use your setup code", enter their MyKad or passport '
-            'number and this code, and choose a password. Then they sign in with their '
-            'MyKad/passport number and fill in their health profile.\n\n'
-            'The code works once and lasts 7 days. It is not shown again; use "New setup '
-            'code" if it is lost.',
-          ),
-        ],
-      ),
+          actions: [
+            OutlinedButton.icon(
+              key: const Key('walk-in-print'),
+              onPressed: () {
+                final ok = printer(
+                  setupSlipHtml(name: name, code: code, expires: expires, idLast4: idLast4),
+                );
+                if (!ok) {
+                  setState(
+                    () => note =
+                        'The slip could not open. Allow pop-ups for this site, or write '
+                        'the code down.',
+                  );
+                }
+              },
+              icon: const Icon(Icons.print_outlined),
+              label: const Text('Print slip'),
+            ),
+            FilledButton(
+              key: const Key('walk-in-code-done'),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Done'),
+            ),
+          ],
+        );
+      },
     ),
-    actions: [
-      FilledButton(
-        key: const Key('walk-in-code-done'),
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Done'),
-      ),
-    ],
-  ),
-);
+  );
+}
+
+String _esc(String v) => v
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+
+/// D-129: the printed slip (A6-ish, black on white): name, ID hint, code, expiry, 3 steps.
+String setupSlipHtml({
+  required String name,
+  required String code,
+  required DateTime expires,
+  String? idLast4,
+}) =>
+    """<!doctype html><html><head><meta charset="utf-8"><title>Harvey setup code</title>
+<style>
+body{font-family:Arial,Helvetica,sans-serif;color:#000;margin:24px}
+.slip{max-width:360px;border:1px dashed #000;padding:16px 20px}
+h1{font-size:18px;margin:0 0 4px}.who{margin:0 0 12px;font-size:13px}
+.code{font-size:34px;font-weight:bold;letter-spacing:8px;text-align:center;
+border:2px solid #000;border-radius:6px;padding:8px 0;margin:8px 0}
+ol{padding-left:18px;font-size:13px;margin:10px 0}li{margin:4px 0}
+.small{font-size:11px;margin:8px 0 0}
+</style></head><body><div class="slip">
+<h1>Harvey app setup</h1>
+<p class="who">${_esc(name)}${idLast4 == null ? '' : ' &middot; ID ending ${_esc(idLast4)}'}</p>
+<div>Your setup code</div>
+<div class="code">${_esc(code)}</div>
+<ol>
+<li>Install <b>Harvey</b> and tap <b>Registered at the clinic? Use your setup code</b>.</li>
+<li>Enter your MyKad or passport number, this code, and choose a password.</li>
+<li>Next time, sign in with your MyKad or passport number and that password.</li>
+</ol>
+<p class="small">Valid once, until ${_esc(dateLabel(expires))}. Lost it? Ask the clinic counter for a new code.
+Keep this slip private: clinic staff will never ask you for this code.</p>
+</div></body></html>""";
