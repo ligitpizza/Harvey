@@ -511,7 +511,10 @@ void main() {
   tallTest('UC7.5 pre-visit summary with E1 data gaps', (t) async {
     await t.pumpWidget(app(repo, initial: '/appointments/a1/summary'));
     await t.pumpAndSettle();
-    expect(find.text('Average 146/92 mmHg (5 readings)'), findsOneWidget);
+    // D-127: average / highest / latest as tiles.
+    expect(find.text('146/92'), findsOneWidget);
+    expect(find.text('158/98'), findsOneWidget);
+    expect(find.textContaining('5 readings'), findsOneWidget);
     expect(find.textContaining('(estimate)'), findsOneWidget);
     expect(find.byKey(const Key('summary-gaps')), findsOneWidget);
     expect(find.text('Low adherence: Losartan 50mg'), findsOneWidget);
@@ -745,6 +748,9 @@ void main() {
       await t.pumpAndSettle();
       await t.tap(find.byKey(const Key('details-cancel')));
       await t.pumpAndSettle();
+      // D-127: quick reasons, and the doctor is told the admin team is notified.
+      expect(find.byKey(const Key('cancel-reason-Doctor unavailable')), findsOneWidget);
+      expect(find.textContaining('admin team will be notified'), findsOneWidget);
       expect(t.widget<FilledButton>(find.byKey(const Key('staff-note-confirm'))).onPressed, isNull);
       await t.enterText(find.byKey(const Key('staff-note')), 'Doctor on leave');
       await t.pump();

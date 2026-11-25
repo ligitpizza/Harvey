@@ -33,6 +33,21 @@ SWEEP = timedelta(minutes=15)
 STALE_READINGS = timedelta(days=7)
 
 
+LEVEL_ORDER = ["low", "moderate", "high", "critical"]
+
+
+def overall_level(scores: object) -> str | None:
+    """The highest level across the complications in a stored risk score, or None."""
+    if not isinstance(scores, dict):
+        return None
+    ranks = [
+        LEVEL_ORDER.index(str(v.get("level")))
+        for v in scores.values()
+        if isinstance(v, dict) and v.get("level") in LEVEL_ORDER
+    ]
+    return LEVEL_ORDER[max(ranks)] if ranks else None
+
+
 def when_text(moment: datetime) -> str:
     """'Thu 16 Oct, 10:00 AM' in Malaysia time."""
     local = moment.astimezone(MYT)
@@ -97,7 +112,8 @@ def build_pre_visit_summary(
         "vitals": vitals,
         "risk": (
             {
-                "overallLevel": risk.get("overallLevel"),
+                # D-03: not stored; D-127: the highest complication level.
+                "overallLevel": risk.get("overallLevel") or overall_level(risk.get("scores")),
                 "scores": risk.get("scores"),
                 "generatedAt": risk.get("generatedAt"),
             }

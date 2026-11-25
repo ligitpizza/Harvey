@@ -13,6 +13,7 @@ from tests.conftest import (
     InMemoryAppointmentRepository,
     InMemoryAuditLogger,
     InMemoryTokenRepository,
+    InMemoryUserRepository,
     bearer,
 )
 from tests.test_appointments import PATIENT, D, P, a_future_slot
@@ -309,3 +310,40 @@ def test_d57_any_time_only_when_switched_on(
     appointment_repo.appointments[res.json()["id"]]["status"] = "completed"
     res = client.post("/api/v1/appointments", json={"dateTime": past.isoformat()}, headers=PATIENT)
     assert res.status_code == 201  # a started visit, to try Complete / No-show at once
+
+
+def test_d127_doctor_cancel_tells_the_patient_and_the_admins(
+    client: TestClient,
+    appointment_repo: InMemoryAppointmentRepository,
+    repo: InMemoryUserRepository,
+    tokens: InMemoryTokenRepository,
+    push: LogPushClient,
+) -> None:
+    repo.users["u-admin"] = {"role": "admin", "name": "Admin Aina"}
+    repo.users["u-admin-off"] = {"role": "admin", "name": "Old Admin", "isActive": False}
+    tokens.add("u-admin", "token-of-admin", "web")
+    tokens.add("u-admin-off", "token-of-old-admin", "web")
+    appt_id, _ = book_one(client)
+    res = client.post(
+        url(appt_id, "/staff-cancel"), json={"reason": "Clinic closed that day"}, headers=DOCTOR
+    )
+    assert res.status_code == 200
+    assert appointment_repo.appointments[appt_id]["cancelledBy"] == "doctor"
+    sent = {(token, m.title): m.body for tokens_, m in push.sent for token in tokens_}
+    assert ("token-of-patient", "Appointment cancelled") in sent
+    body = sent[("token-of-admin", "Appointment cancelled by doctor")]
+    assert "Dr John" in body and "Siti" in body and "Clinic closed that day" in body
+    assert not any(t == "token-of-old-admin" for t, _ in sent)  # inactive admins are skipped
+
+
+def test_d127_pre_visit_summary_fills_in_the_overall_level() -> None:
+    from app.services.appointment_extras import overall_level
+
+    scores = {
+        "stroke": {"value": 0.04, "level": "moderate"},
+        "ckd": {"value": 0.226, "level": "high"},
+        "t2d": {"value": 0.03, "level": "low"},
+    }
+    assert overall_level(scores) == "high"
+    assert overall_level({}) is None
+    assert overall_level(None) is None

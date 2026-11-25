@@ -51,6 +51,7 @@ from app.services.appointments import (
 from app.services.cover import cover_for, refresh_cover_access
 from app.services.medications import MYT
 from app.services.notifications import Notifier, get_notifier
+from app.services.users import UserRepository, get_user_repository
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 patient_only = require_roles(UserRole.PATIENT)
@@ -222,6 +223,14 @@ def _own(repo: AppointmentRepository, appointment_id: str, uid: str) -> Appointm
 
 def _patient_name(repo: AppointmentRepository, uid: str) -> str:
     return str((repo.user(uid) or {}).get("name") or "A patient")
+
+
+def _active_admins(users: UserRepository) -> list[str]:
+    return [
+        uid
+        for uid, u in users.list_users()
+        if u.get("role") == UserRole.ADMIN.value and u.get("isActive", True) is not False
+    ]
 
 
 def _push(notifier: Notifier, uid: str | None, title: str, body: str, appt_id: str) -> None:
@@ -499,10 +508,12 @@ def staff_cancel(
     body: StaffCancelRequest,
     user: CurrentUser = Depends(require_roles(UserRole.DOCTOR, UserRole.ADMIN)),
     repo: AppointmentRepository = Depends(get_appointment_repository),
+    users: UserRepository = Depends(get_user_repository),
     notifier: Notifier = Depends(get_notifier),
     audit: AuditLogger = Depends(get_audit_logger),
 ) -> dict[str, Any]:
-    """D-55: the doctor or the admin cancels, with a reason; both sides are told."""
+    """D-55: the doctor or the admin cancels, with a reason; the patient is told, and the
+    doctor (admin cancelled) or the admins (D-127, doctor cancelled)."""
     appt = _staff_appointment(repo, appointment_id, user)
     a = appt.data
     if a.get("status") not in ACTIVE:
@@ -528,6 +539,19 @@ def staff_cancel(
             f"{_patient_name(repo, str(a['patientId']))}: {when}. {body.reason}",
             appointment_id,
         )
+    else:
+        # D-127: the admin team manages the schedule, so a doctor's cancellation is
+        # reported to every active admin with the reason.
+        doctor = str((repo.user(user.uid) or {}).get("name") or "A doctor")
+        for admin in _active_admins(users):
+            _push(
+                notifier,
+                admin,
+                "Appointment cancelled by doctor",
+                f"{doctor} cancelled {_patient_name(repo, str(a['patientId']))}'s appointment "
+                f"on {when}: {body.reason}",
+                appointment_id,
+            )
     audit.log(
         user_id=user.uid,
         action="STAFF_CANCEL_APPOINTMENT",
