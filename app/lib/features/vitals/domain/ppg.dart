@@ -185,6 +185,8 @@ PpgResult estimateHeartRate(PpgInput input, {PpgConfig config = const PpgConfig(
 
   final spanSeconds = (peaks.last - peaks.first) / fs;
   final bpm = ((peaks.length - 1) / spanSeconds * 60).round();
+  //BPM = (beats − 1) ÷ seconds × 60
+  //Heart rate = beats per minute, from the physics of light and blood.
   if (bpm < minBpm || bpm > maxBpm) return const PpgResult.failed(PpgFailure.outOfRange);
 
   // D-119: independent check in the frequency domain. Counting peaks can be fooled by
