@@ -42,6 +42,7 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 
 | address, addressLat, addressLng | String, Number, Number | Patient delivery address and map point (D-69) | Optional |
 | phone | String | Staff contact number (D-77, portal Settings); a walk-in patient's phone from the counter (D-129, +60…) | Optional; staff, and patients registered at the counter |
+| contactEmail | String | D-130: verified email of a MyKad/passport patient (D-129), for reminder emails and password reset; not a login | Optional; written only by FastAPI after an emailed code is checked |
 | bellPrefs | Map | D-77: bell categories switched on/off (messages, alerts, appointments, orders, medication, other) | Optional; missing = on |
 | analyticsCharts | Array | D-79: an admin's saved custom charts (id, title, measure, type, days, page) | Admin only; max 12 |
 

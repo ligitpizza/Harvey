@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/contact_email_dialog.dart';
 import '../../../shared/widgets/identity_fields.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/enums.dart';
+import '../../../shared/providers/api_providers.dart';
 import '../../../shared/services/api/api_client.dart';
 import '../../auth/domain/onboarding_data.dart';
 import '../../auth/presentation/onboarding/onboarding_labels.dart';
@@ -239,6 +241,7 @@ class _ContactFormState extends ConsumerState<_ContactForm> with _SaveFlow<_Cont
               byEmail ? 'Sign-in email (cannot be changed here)' : 'You sign in with this number',
             ),
           ),
+          if (!byEmail) _ContactEmailTile(current: me.contactEmail),
           TextFormField(
             key: const Key('settings-phone'),
             initialValue: _d.phone,
@@ -420,6 +423,64 @@ class _HealthFormState extends ConsumerState<_HealthForm> with _SaveFlow<_Health
               save(() => ref.read(settingsRepositoryProvider).updateHealth(_d));
             },
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// D-130: a MyKad/passport patient's email for reminders and password reset.
+class _ContactEmailTile extends ConsumerWidget {
+  const _ContactEmailTile({required this.current});
+
+  final String? current;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final api = ref.read(apiClientProvider);
+    Future<void> edit() async {
+      final saved = await showContactEmailDialog(
+        context,
+        current: current,
+        send: (e) => api.requestContactEmailCode(e),
+        verify: (e, c) => api.verifyContactEmail(e, c),
+      );
+      if (saved != null && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Email saved: $saved')));
+      }
+    }
+
+    Future<void> remove() async {
+      try {
+        await api.removeContactEmail();
+      } on ApiException catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        }
+      }
+    }
+
+    return ListTile(
+      key: const Key('settings-contact-email'),
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.alternate_email),
+      title: Text(current ?? 'No email added'),
+      subtitle: const Text('For appointment reminders and resetting your password'),
+      trailing: Wrap(
+        spacing: 4,
+        children: [
+          TextButton(
+            key: const Key('settings-contact-email-edit'),
+            onPressed: edit,
+            child: Text(current == null ? 'Add' : 'Change'),
+          ),
+          if (current != null)
+            IconButton(
+              key: const Key('settings-contact-email-remove'),
+              tooltip: 'Remove email',
+              onPressed: remove,
+              icon: const Icon(Icons.close),
+            ),
         ],
       ),
     );

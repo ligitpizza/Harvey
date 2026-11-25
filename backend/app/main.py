@@ -16,6 +16,7 @@ from app.routers import (
     assignments,
     auth,
     cashflow,
+    contact_email,
     conversations,
     devices,
     doctor_prescriptions,
@@ -112,6 +113,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(records.router, prefix=API_PREFIX)
     app.include_router(family.router, prefix=API_PREFIX)
     app.include_router(settings_routes.router, prefix=API_PREFIX)
+    app.include_router(contact_email.router, prefix=API_PREFIX)  # D-130
+    app.include_router(contact_email.counter_router, prefix=API_PREFIX)
     app.include_router(jobs.router)
     return app
 

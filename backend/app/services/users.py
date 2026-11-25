@@ -32,6 +32,10 @@ class UserRepository(Protocol):
         """The uid already using this IC number (D-51), if any."""
         ...
 
+    def contact_email_owner(self, email: str) -> str | None:
+        """D-130: the patient whose verified contact email this is, if any."""
+        ...
+
     def complete_onboarding(
         self, uid: str, profile: dict[str, Any], user_updates: dict[str, Any]
     ) -> None: ...
@@ -82,6 +86,10 @@ class FirestoreUserRepository:
 
     def passport_owner(self, passport: str) -> str | None:
         query = self._users().where(filter=firestore.FieldFilter("passportNumber", "==", passport))
+        return next((d.id for d in query.limit(1).stream()), None)
+
+    def contact_email_owner(self, email: str) -> str | None:
+        query = self._users().where(filter=firestore.FieldFilter("contactEmail", "==", email))
         return next((d.id for d in query.limit(1).stream()), None)
 
     def complete_onboarding(

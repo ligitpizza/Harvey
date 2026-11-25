@@ -205,8 +205,8 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
           const SizedBox(height: 8),
           // D-129: no email means no code by email; the counter gives a new one.
           Text(
-            'Registered at the clinic without an email? Ask the clinic counter for a new '
-            'setup code, then use "Registered at the clinic?" on the sign-in page.',
+            'Sign in with MyKad or passport? Enter the email you added in Settings. No email '
+            'added? Ask the clinic counter for a new setup code.',
             key: const Key('reset-no-email-note'),
             style: Theme.of(context).textTheme.bodySmall,
           ),

@@ -259,7 +259,7 @@ class AppointmentJob:
             ),
         )
         patient = self.repo.user(patient_id) or {}
-        address = patient.get("email")
+        address = patient.get("email") or patient.get("contactEmail")  # D-130
         if address:
             text = (
                 f"Hello {patient.get('name', '')},\n\nThis is a reminder of your appointment "

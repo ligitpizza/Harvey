@@ -8,6 +8,7 @@ import 'package:hypertension/features/auth/presentation/setup_code_page.dart';
 import 'package:hypertension/features/walk_in/walk_in_page.dart';
 import 'package:hypertension/shared/providers/api_providers.dart';
 import 'package:hypertension/shared/services/api/api_client.dart';
+import 'package:hypertension/shared/widgets/contact_email_dialog.dart';
 
 import '../helpers/fakes.dart';
 
@@ -31,6 +32,16 @@ class WalkInApi extends FakeApiClient {
     registered = {'name': name, 'email': email, 'ic': icNumber, 'phone': phone};
     return {'uid': 'p9', 'emailSent': false, 'setupCode': email == null ? '482913' : null};
   }
+
+  final contact = <String>[];
+
+  @override
+  Future<void> requestContactEmailCode(String email, {String? uid}) async =>
+      contact.add('send:$email:$uid');
+
+  @override
+  Future<void> verifyContactEmail(String email, String code, {String? uid}) async =>
+      contact.add('verify:$email:$code:$uid');
 
   @override
   Future<Map<String, dynamic>> walkInSetupCode(String uid) async {
@@ -185,6 +196,51 @@ void main() {
     expect(find.byKey(const Key('walk-in-print-note')), findsOneWidget);
   });
 
+  testWidgets('D-130 contact email: send a code, wrong code shows the reason, then saved', (
+    t,
+  ) async {
+    final calls = <String>[];
+    var wrong = true;
+    String? saved;
+    await t.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async => saved = await showContactEmailDialog(
+              context,
+              send: (e) async => calls.add('send:$e'),
+              verify: (e, c) async {
+                calls.add('verify:$e:$c');
+                if (wrong) throw ApiException('INVALID_CODE', 'That code is wrong. 4 tries left.');
+              },
+            ),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+    await t.tap(find.text('open'));
+    await t.pumpAndSettle();
+    await fill(t, 'contact-email-field', 'not-an-email');
+    await t.tap(find.byKey(const Key('contact-email-submit')));
+    await t.pump();
+    expect(calls, isEmpty);
+    await fill(t, 'contact-email-field', 'Kow@X.my');
+    await t.tap(find.byKey(const Key('contact-email-submit')));
+    await t.pumpAndSettle();
+    expect(calls, ['send:kow@x.my']);
+    await fill(t, 'contact-email-code', '000000');
+    await t.tap(find.byKey(const Key('contact-email-submit')));
+    await t.pumpAndSettle();
+    expect(find.text('That code is wrong. 4 tries left.'), findsOneWidget);
+    wrong = false;
+    await fill(t, 'contact-email-code', '123456');
+    await t.tap(find.byKey(const Key('contact-email-submit')));
+    await t.pumpAndSettle();
+    expect(saved, 'kow@x.my');
+    expect(find.byKey(const Key('contact-email-dialog')), findsNothing);
+  });
+
   group('D-129 walk-in counter', () {
     testWidgets('register without an email shows the setup code once', (t) async {
       final api = WalkInApi();
@@ -217,6 +273,27 @@ void main() {
       await t.tap(find.byKey(const Key('walk-in-save')));
       await t.pumpAndSettle();
       expect(api.registered, isNull);
+    });
+
+    testWidgets('D-130 the counter adds an email for a no-email patient', (t) async {
+      final api = WalkInApi();
+      await pumpWalkIn(t, api);
+      await fill(t, 'walk-in-search', '0123456789');
+      await t.pump(const Duration(milliseconds: 400));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('walk-in-result-p2')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('walk-in-add-email')));
+      await t.pumpAndSettle();
+      await fill(t, 'contact-email-field', 'kow@x.my');
+      await t.tap(find.byKey(const Key('contact-email-submit')));
+      await t.pumpAndSettle();
+      await fill(t, 'contact-email-code', '123456');
+      await t.tap(find.byKey(const Key('contact-email-submit')));
+      await t.pumpAndSettle();
+      expect(api.contact, ['send:kow@x.my:p2', 'verify:kow@x.my:123456:p2']);
+      expect(find.textContaining('kow@x.my · signs in with MyKad/passport'), findsOneWidget);
+      expect(find.text('Change email'), findsOneWidget);
     });
 
     testWidgets('a no-email patient can get a new setup code', (t) async {

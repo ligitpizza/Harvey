@@ -31,6 +31,7 @@ from app.core.rate_limit import RateLimiter
 from app.integrations.email import EmailClient, EmailMessage, get_email_client
 from app.services.identity import IdentityProvider, get_identity_provider
 from app.services.login_alias import is_alias
+from app.services.users import UserRepository, get_user_repository
 
 log = logging.getLogger("careflow.password_otp")
 router = APIRouter(prefix="/auth/password-otp", tags=["auth"])
@@ -181,6 +182,7 @@ def request_code(
     email_client: EmailClient = Depends(get_email_client),
     ip_limiter: RateLimiter = Depends(get_otp_ip_limiter),
     audit: AuditLogger = Depends(get_audit_logger),
+    users: UserRepository = Depends(get_user_repository),
 ) -> dict[str, str]:
     if not ip_limiter.allow(_client_ip(request)):
         raise ApiError(
@@ -203,6 +205,11 @@ def request_code(
             status.HTTP_429_TOO_MANY_REQUESTS,
         )
     found = identity.find_by_email(email)
+    if found is None:
+        # D-130: a MyKad/passport patient's verified contact email also gets reset codes.
+        owner = users.contact_email_owner(email)
+        if owner is not None:
+            found = (owner, str((users.get_user(owner) or {}).get("name") or ""))
     if found is None:
         # Same answer and no stored code: an unknown email can't be probed.
         return {"status": "sent_if_exists"}

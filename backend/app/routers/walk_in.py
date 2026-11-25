@@ -76,6 +76,7 @@ def _patient_row(uid: str, u: dict[str, Any], doctors: dict[str, str]) -> dict[s
         "email": u.get("email") or None,
         "phone": u.get("phone"),  # D-129
         "hasEmail": bool(u.get("email")),
+        "contactEmail": u.get("contactEmail"),  # D-130
         # Only the last 4 characters: enough to tell people apart at the counter.
         "icLast4": ic[-4:] if ic else None,
         "idKind": "passport" if u.get("passportNumber") else "mykad",  # D-103
@@ -104,7 +105,7 @@ def find_patients(
         if u.get("role") != UserRole.PATIENT.value:
             continue
         name = str(u.get("name") or "").lower()
-        email = str(u.get("email") or "").lower()
+        email = str(u.get("email") or u.get("contactEmail") or "").lower()
         ic = str(u.get("icNumber") or "")
         passport = str(u.get("passportNumber") or "").lower()
         phone = "".join(c for c in str(u.get("phone") or "") if c.isdigit())

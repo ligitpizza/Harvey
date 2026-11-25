@@ -758,6 +758,22 @@ class ApiClient {
     'nationality': ?nationality, // D-103
   });
 
+  /// D-130: a contact email for a MyKad/passport patient: the patient's own (no [uid]) or,
+  /// at the counter, the given patient's.
+  Future<void> requestContactEmailCode(String email, {String? uid}) => _post(
+    uid == null
+        ? '/settings/contact-email/request'
+        : '/walk-in/patients/$uid/contact-email/request',
+    {'email': email},
+  );
+
+  Future<void> verifyContactEmail(String email, String code, {String? uid}) => _post(
+    uid == null ? '/settings/contact-email/verify' : '/walk-in/patients/$uid/contact-email/verify',
+    {'email': email, 'code': code},
+  );
+
+  Future<void> removeContactEmail() => _send('DELETE', '/settings/contact-email', null);
+
   /// D-129: a new 7-day counter setup code for a patient without an email.
   Future<Map<String, dynamic>> walkInSetupCode(String uid) =>
       _post('/walk-in/patients/$uid/setup-code', const {});

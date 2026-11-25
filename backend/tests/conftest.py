@@ -171,6 +171,9 @@ class InMemoryUserRepository:
             (uid for uid, u in self.users.items() if u.get("passportNumber") == passport), None
         )
 
+    def contact_email_owner(self, email: str) -> str | None:
+        return next((uid for uid, u in self.users.items() if u.get("contactEmail") == email), None)
+
     def link_code_exists(self, code: str) -> bool:
         return code in self.taken_link_codes or any(
             u.get("linkCode") == code for u in self.users.values()

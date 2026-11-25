@@ -11,6 +11,7 @@ import '../../shared/providers/api_providers.dart';
 import '../../shared/services/api/api_client.dart';
 import '../appointments/domain/appointment_text.dart' show dateLabel, timeLabel;
 import '../../shared/utils/print_html.dart';
+import '../../shared/widgets/contact_email_dialog.dart';
 import '../../shared/widgets/page_header.dart';
 import '../settings/presentation/settings_widgets.dart' show validatePhone;
 
@@ -24,6 +25,7 @@ class WalkInPatient {
     this.email,
     this.phone,
     this.hasEmail = true,
+    this.contactEmail,
     this.icLast4,
     this.doctorId,
     this.doctorName,
@@ -36,6 +38,21 @@ class WalkInPatient {
   /// D-129: optional contact number; a patient without an email signs in with their ID.
   final String? phone;
   final bool hasEmail;
+
+  /// D-130: a verified email added later (reminders and password reset only).
+  final String? contactEmail;
+
+  WalkInPatient withContactEmail(String email) => WalkInPatient(
+    id: id,
+    name: name,
+    email: this.email,
+    phone: phone,
+    hasEmail: hasEmail,
+    contactEmail: email,
+    icLast4: icLast4,
+    doctorId: doctorId,
+    doctorName: doctorName,
+  );
   final String? icLast4;
   final String? doctorId;
   final String? doctorName;
@@ -46,6 +63,7 @@ class WalkInPatient {
     email: j['email'] as String?,
     phone: j['phone'] as String?,
     hasEmail: j['hasEmail'] as bool? ?? j['email'] != null,
+    contactEmail: j['contactEmail'] as String?,
     icLast4: j['icLast4'] as String?,
     doctorId: j['doctorId'] as String?,
     doctorName: j['doctorName'] as String?,
@@ -163,6 +181,21 @@ class _WalkInPageState extends ConsumerState<WalkInPage> {
     if (created != null) _choose(created);
   }
 
+  /// D-130: add the patient's email at the counter (they read the code from their email).
+  Future<void> _addEmail(WalkInPatient p) async {
+    final api = ref.read(apiClientProvider);
+    final saved = await showContactEmailDialog(
+      context,
+      current: p.contactEmail,
+      atCounter: true,
+      send: (e) => api.requestContactEmailCode(e, uid: p.id),
+      verify: (e, c) => api.verifyContactEmail(e, c, uid: p.id),
+    );
+    if (saved != null && mounted && _patient?.id == p.id) {
+      setState(() => _patient = p.withContactEmail(saved));
+    }
+  }
+
   /// D-129: a patient without an email lost their code or forgot their password.
   Future<void> _newCode(WalkInPatient p) async {
     try {
@@ -252,7 +285,12 @@ class _WalkInPageState extends ConsumerState<WalkInPage> {
               title: Text(p.name),
               subtitle: Text(
                 [
-                  if (p.email != null) p.email! else 'No email · signs in with MyKad/passport',
+                  if (p.email != null)
+                    p.email!
+                  else if (p.contactEmail != null)
+                    '${p.contactEmail} · signs in with MyKad/passport'
+                  else
+                    'No email · signs in with MyKad/passport',
                   if (p.phone != null) p.phone!,
                   if (p.icLast4 != null) 'IC …${p.icLast4}',
                   p.doctorName == null ? 'No doctor yet' : 'Doctor: ${p.doctorName}',
@@ -261,6 +299,13 @@ class _WalkInPageState extends ConsumerState<WalkInPage> {
               trailing: Wrap(
                 spacing: 8,
                 children: [
+                  if (!p.hasEmail)
+                    TextButton.icon(
+                      key: const Key('walk-in-add-email'),
+                      onPressed: () => _addEmail(p),
+                      icon: const Icon(Icons.alternate_email, size: 18),
+                      label: Text(p.contactEmail == null ? 'Add email' : 'Change email'),
+                    ),
                   if (!p.hasEmail)
                     OutlinedButton.icon(
                       key: const Key('walk-in-new-code'),

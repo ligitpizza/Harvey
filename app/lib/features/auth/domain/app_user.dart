@@ -44,7 +44,11 @@ class AppUser {
     this.address,
     this.addressLat,
     this.addressLng,
+    this.contactEmail,
   });
+
+  /// D-130: a verified email added by a MyKad/passport patient (reminders, password reset).
+  final String? contactEmail;
 
   final String uid;
 
@@ -95,6 +99,7 @@ class AppUser {
   factory AppUser.fromFirestore(String uid, Map<String, dynamic> data) => AppUser(
     uid: uid,
     email: data['email'] as String? ?? '',
+    contactEmail: data['contactEmail'] as String?,
     name: data['name'] as String? ?? '',
     role: UserRole.fromValue(data['role'] as String),
     isActive: data['isActive'] as bool? ?? true,
