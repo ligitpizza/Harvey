@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     app_env: Literal["dev", "prod"] = "prod"
     app_version: str = "0.1.0"
     firebase_project_id: str = "hypertension-dd85f"
+    # D-131: the web API key (public by design, also in the web app) so FastAPI can check a
+    # password with Firebase Auth before resolving an IC/contact-email sign-in.
+    firebase_web_api_key: str = ""
     # Default Firebase Storage bucket (Module 6 health records, D-58).
     storage_bucket: str = "hypertension-dd85f.firebasestorage.app"
 

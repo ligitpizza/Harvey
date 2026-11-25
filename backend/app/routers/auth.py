@@ -13,6 +13,7 @@ from functools import lru_cache
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request, status
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.audit import AuditLogger, get_audit_logger
 from app.core.auth import CurrentUser, get_current_user, require_roles
@@ -45,6 +46,7 @@ from app.services.assignments import AssignmentRepository, get_assignment_reposi
 from app.services.ic import IcError, parse_identity
 from app.services.identity import IdentityProvider, get_identity_provider
 from app.services.login_alias import is_alias
+from app.services.password_check import PasswordVerifier, get_password_verifier
 from app.services.users import UserRepository, get_user_repository, new_link_code
 
 log = logging.getLogger("careflow.auth")
@@ -356,6 +358,68 @@ def password_reset_email(name: str, email: str, link: str) -> EmailMessage:
         text=text,
         html=body,
     )
+
+
+@lru_cache
+def _resolve_limiter() -> RateLimiter:
+    # D-131: per IP; each try also counts against Firebase's own per-account limits.
+    return RateLimiter(20, window_seconds=15 * 60)
+
+
+def get_resolve_limiter() -> RateLimiter:
+    return _resolve_limiter()
+
+
+class ResolveSignInRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    identifier: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=1, max_length=128)
+
+
+def _wrong() -> ApiError:
+    return ApiError(
+        "INVALID_CREDENTIALS", "Incorrect email or password.", status.HTTP_400_BAD_REQUEST
+    )
+
+
+@router.post("/resolve-sign-in")
+def resolve_sign_in(
+    body: ResolveSignInRequest,
+    request: Request,
+    limiter: RateLimiter = Depends(get_resolve_limiter),
+    users: UserRepository = Depends(get_user_repository),
+    identity: IdentityProvider = Depends(get_identity_provider),
+    verifier: PasswordVerifier = Depends(get_password_verifier),
+) -> dict[str, str]:
+    """D-131: a patient may sign in with any of their identifiers: the login email, the
+    MyKad/passport number (D-129) or the verified contact email (D-130). The app first
+    tries Firebase directly; when that fails it asks here. The account's real login is
+    returned only after Firebase accepts the password, so an IC or email can't be used to
+    look up someone else's login. Every failure gets the same answer."""
+    if not limiter.allow(_client_ip(request)):
+        raise ApiError(
+            "RATE_LIMITED", "Too many attempts. Try again later.", status.HTTP_429_TOO_MANY_REQUESTS
+        )
+    raw = body.identifier
+    if "@" in raw:
+        uid = users.contact_email_owner(raw.lower())
+    else:
+        try:
+            ident = parse_identity(raw)
+        except IcError as exc:
+            raise _wrong() from exc
+        uid = (
+            users.ic_owner(ident.value)
+            if ident.kind == "mykad"
+            else users.passport_owner(ident.value)
+        )
+    user = users.get_user(uid) if uid else None
+    if not user or user.get("role") != UserRole.PATIENT.value:
+        raise _wrong()
+    login = identity.login_email(str(uid))
+    if not login or not verifier.check(login, body.password):
+        raise _wrong()
+    return {"email": login}
 
 
 @router.post("/password-reset", status_code=status.HTTP_202_ACCEPTED)

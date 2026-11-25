@@ -758,6 +758,16 @@ class ApiClient {
     'nationality': ?nationality, // D-103
   });
 
+  /// D-131: the login of a patient who typed their MyKad/passport or contact email instead
+  /// (answered only when the password is right).
+  Future<String> resolveSignIn(String identifier, String password) async {
+    final res = await _post('/auth/resolve-sign-in', {
+      'identifier': identifier,
+      'password': password,
+    });
+    return res['email'] as String;
+  }
+
   /// D-130: a contact email for a MyKad/passport patient: the patient's own (no [uid]) or,
   /// at the counter, the given patient's.
   Future<void> requestContactEmailCode(String email, {String? uid}) => _post(

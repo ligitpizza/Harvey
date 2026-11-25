@@ -186,6 +186,7 @@ class _WalkInPageState extends ConsumerState<WalkInPage> {
     final api = ref.read(apiClientProvider);
     final saved = await showContactEmailDialog(
       context,
+      scope: 'counter:${p.id}',
       current: p.contactEmail,
       atCounter: true,
       send: (e) => api.requestContactEmailCode(e, uid: p.id),

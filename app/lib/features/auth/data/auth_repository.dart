@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/constants/enums.dart';
+import '../../../core/utils/login_alias.dart';
 import '../../../shared/services/api/api_client.dart';
 import '../../../shared/services/push/push_service.dart';
 import '../domain/app_user.dart';
@@ -120,6 +121,26 @@ class FirebaseAuthRepository implements AuthRepository {
     required String password,
     required UserRole selectedRole,
     required ClientApp app,
+  }) => _signIn(email, password, selectedRole, app, resolve: true);
+
+  /// D-131: a patient's account has one Firebase login (an email, or a MyKad/passport alias)
+  /// but may be typed as another identifier (MyKad/passport, login email or contact email).
+  /// When Firebase rejects it, FastAPI checks the password and names the real login.
+  Future<String?> _resolve(String typed, String password) async {
+    final identifier = isLoginAlias(typed) ? typed.split('@').first : typed;
+    try {
+      return await _api.resolveSignIn(identifier, password);
+    } catch (_) {
+      return null; // wrong password, unknown identifier or offline: the original error stands
+    }
+  }
+
+  Future<AppUser> _signIn(
+    String email,
+    String password,
+    UserRole selectedRole,
+    ClientApp app, {
+    required bool resolve,
   }) async {
     final trimmed = email.trim();
     try {
@@ -142,6 +163,14 @@ class FirebaseAuthRepository implements AuthRepository {
       return AppUser.fromFirestore(user.uid, snap.data()!);
     } on FirebaseAuthException catch (e) {
       final failure = mapFirebaseSignInError(e.code);
+      if (resolve &&
+          failure.reason == LoginFailureReason.invalidCredentials &&
+          selectedRole == UserRole.patient) {
+        final login = await _resolve(trimmed, password);
+        if (login != null && login.toLowerCase() != trimmed.toLowerCase()) {
+          return _signIn(login, password, selectedRole, app, resolve: false);
+        }
+      }
       await _reportFailure(trimmed, failure.reason, app);
       throw failure;
     } on AuthFailure catch (f) {

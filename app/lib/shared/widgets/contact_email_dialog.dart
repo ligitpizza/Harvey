@@ -8,17 +8,48 @@ import '../services/api/api_client.dart';
 /// code to the address; step 2 checks it. Used by the patient in Settings and by the
 /// counter (with the patient present, who reads the code from their email).
 /// Returns the saved email, or null if closed.
+///
+/// [scope] names whose email this is (e.g. the patient's uid). A code already sent for that
+/// scope in the last 10 minutes reopens on the code step, so closing the dialog by mistake
+/// does not mean asking for a second code. Tapping outside does not close it.
 Future<String?> showContactEmailDialog(
   BuildContext context, {
+  required String scope,
   required Future<void> Function(String email) send,
   required Future<void> Function(String email, String code) verify,
   String? current,
   bool atCounter = false,
-}) => showDialog<String>(
-  context: context,
-  builder: (_) =>
-      _ContactEmailDialog(send: send, verify: verify, current: current, atCounter: atCounter),
-);
+  DateTime Function() now = DateTime.now,
+}) async {
+  final pending = _pending[scope];
+  final open = pending != null && now().difference(pending.$2) < codeLifetime ? pending.$1 : null;
+  if (open == null) _pending.remove(scope);
+  final saved = await showDialog<String>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => _ContactEmailDialog(
+      send: (e) async {
+        await send(e);
+        _pending[scope] = (e, now());
+      },
+      verify: verify,
+      current: current,
+      atCounter: atCounter,
+      pendingEmail: open,
+    ),
+  );
+  if (saved != null) _pending.remove(scope);
+  return saved;
+}
+
+/// Matches the backend's code lifetime (10 minutes).
+const codeLifetime = Duration(minutes: 10);
+
+/// Codes sent but not yet entered, per scope: (email, sent at). Kept for the app session.
+final _pending = <String, (String, DateTime)>{};
+
+/// For tests.
+void clearPendingContactEmails() => _pending.clear();
 
 class _ContactEmailDialog extends StatefulWidget {
   const _ContactEmailDialog({
@@ -26,8 +57,11 @@ class _ContactEmailDialog extends StatefulWidget {
     required this.verify,
     required this.current,
     required this.atCounter,
+    this.pendingEmail,
   });
 
+  /// A code was already sent to this address: start on the code step.
+  final String? pendingEmail;
   final Future<void> Function(String email) send;
   final Future<void> Function(String email, String code) verify;
   final String? current;
@@ -39,9 +73,9 @@ class _ContactEmailDialog extends StatefulWidget {
 
 class _ContactEmailDialogState extends State<_ContactEmailDialog> {
   final _form = GlobalKey<FormState>();
-  late final _email = TextEditingController(text: widget.current ?? '');
+  late final _email = TextEditingController(text: widget.pendingEmail ?? widget.current ?? '');
   final _code = TextEditingController();
-  bool _codeStep = false;
+  late bool _codeStep = widget.pendingEmail != null;
   bool _busy = false;
   String? _error;
 

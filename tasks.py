@@ -280,6 +280,12 @@ def _local_env(key: str) -> str:
     return ""
 
 
+def _app_env(key: str) -> str:
+    """A value from app/.env (never printed)."""
+    env_file = APP / ".env"
+    return read_env_file(env_file).get(key, "") if env_file.exists() else ""
+
+
 def _secret_exists(name: str) -> bool:
     code, _ = capture(
         [
@@ -429,6 +435,9 @@ def task_deploy_backend() -> None:
             f"JOBS_OIDC_AUDIENCE={JOBS_AUDIENCE}",
             f"JOBS_SERVICE_ACCOUNT={SCHEDULER_SA}",
             f"FIREBASE_PROJECT_ID={PROJECT_ID}",
+            # D-131: public web API key (shipped in the portal) so FastAPI can check a
+            # password before resolving an IC / contact-email sign-in.
+            f"FIREBASE_WEB_API_KEY={_app_env('FIREBASE_WEB_API_KEY')}",
             "ML_ARTIFACTS_DIR=/srv/ml_artifacts",
             "FCM_ENABLED=true",
             f"GEMINI_MODEL={_local_env('GEMINI_MODEL') or 'gemini-3.1-flash-lite'}",

@@ -441,6 +441,7 @@ class _ContactEmailTile extends ConsumerWidget {
     Future<void> edit() async {
       final saved = await showContactEmailDialog(
         context,
+        scope: ref.read(currentUserProvider).value?.uid ?? 'me',
         current: current,
         send: (e) => api.requestContactEmailCode(e),
         verify: (e, c) => api.verifyContactEmail(e, c),

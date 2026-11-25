@@ -115,7 +115,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   RoleToggle(
                     roles: const [UserRole.patient, UserRole.familyMember],
                     selected: _role,
-                    onChanged: (r) => setState(() => _role = r),
+                    // Switching role starts a fresh sign-in (as on the staff portal, D-84).
+                    onChanged: (r) => setState(() {
+                      _role = r;
+                      _email.clear();
+                      _password.clear();
+                      _error = null;
+                      _form.currentState?.reset();
+                    }),
                   ),
                   const SizedBox(height: 24),
                   Card(

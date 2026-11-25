@@ -208,6 +208,7 @@ void main() {
           builder: (context) => TextButton(
             onPressed: () async => saved = await showContactEmailDialog(
               context,
+              scope: 'test',
               send: (e) async => calls.add('send:$e'),
               verify: (e, c) async {
                 calls.add('verify:$e:$c');
@@ -239,6 +240,53 @@ void main() {
     await t.pumpAndSettle();
     expect(saved, 'kow@x.my');
     expect(find.byKey(const Key('contact-email-dialog')), findsNothing);
+  });
+
+  testWidgets('D-131 closing the dialog after sending reopens on the code step', (t) async {
+    clearPendingContactEmails();
+    final sent = <String>[];
+    await t.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showContactEmailDialog(
+              context,
+              scope: 'u1',
+              send: (e) async => sent.add(e),
+              verify: (e, c) async {},
+            ),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+    await t.tap(find.text('open'));
+    await t.pumpAndSettle();
+    await fill(t, 'contact-email-field', 'kow@x.my');
+    await t.tap(find.byKey(const Key('contact-email-submit')));
+    await t.pumpAndSettle();
+    // Tapping outside does nothing; Cancel closes it.
+    await t.tapAt(const Offset(5, 5));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('contact-email-code')), findsOneWidget);
+    await t.tap(find.text('Cancel'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('open'));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('contact-email-code')), findsOneWidget);
+    expect(find.textContaining('kow@x.my'), findsOneWidget);
+    expect(sent, ['kow@x.my']); // no second code
+  });
+
+  tallTest('D-131 switching Patient/Family clears the fields and the error', (t) async {
+    final repo = FakeAuthRepository();
+    await t.pumpWidget(harness(const LoginPage(), repo: repo));
+    await fill(t, 'login-email', 'kow@x.my');
+    await fill(t, 'login-password', 'secret123');
+    await t.tap(find.text('Family'));
+    await t.pumpAndSettle();
+    expect(find.text('kow@x.my'), findsNothing);
+    expect(find.text('secret123'), findsNothing);
   });
 
   group('D-129 walk-in counter', () {

@@ -30,6 +30,10 @@ class IdentityProvider(Protocol):
         """D-80: (uid, display name) of the account with this email, or None."""
         ...
 
+    def login_email(self, uid: str) -> str | None:
+        """D-131: the email this account signs in with (an alias for an ID login)."""
+        ...
+
     def set_password(self, uid: str, password: str) -> None:
         """D-80: set a new password (after an email OTP was verified)."""
         ...
@@ -84,6 +88,13 @@ class FirebaseIdentityProvider:
         except fb_auth.UserNotFoundError:
             return None
         return str(user.uid), str(user.display_name or "")
+
+    def login_email(self, uid: str) -> str | None:
+        try:
+            user = fb_auth.get_user(uid, app=get_firebase_app())
+        except fb_auth.UserNotFoundError:
+            return None
+        return str(user.email) if user.email else None
 
     def set_password(self, uid: str, password: str) -> None:
         fb_auth.update_user(uid, password=password, app=get_firebase_app())

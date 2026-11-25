@@ -40,7 +40,7 @@ from app.integrations.sms import LogSmsClient, get_sms_client
 from app.main import create_app
 from app.ml.risk_model import get_risk_model
 from app.routers.agent import get_agent_limiter
-from app.routers.auth import get_failed_login_limiter, get_reset_limiter
+from app.routers.auth import get_failed_login_limiter, get_reset_limiter, get_resolve_limiter
 from app.routers.leave import get_leave_repository
 from app.routers.messages import get_message_repository
 from app.routers.password_otp import get_otp_ip_limiter, get_password_otp_repository
@@ -60,6 +60,7 @@ from app.services.inbox import get_inbox_repository
 from app.services.medications import MedicationDoc, get_medication_repository
 from app.services.notifications import Notifier, get_notifier, get_token_repository
 from app.services.orders import get_order_repository
+from app.services.password_check import get_password_verifier
 from app.services.pharmacy_chat import get_pharmacy_chat_repository
 from app.services.provider import get_provider_repository
 from app.services.records import get_file_store, get_record_repository
@@ -109,6 +110,14 @@ class FakeIdentityProvider:
         self.disabled: set[str] = set()
         self.passwords: dict[str, str] = {}
         self._next = 0
+
+    def login_email(self, uid: str) -> str | None:
+        return next((e for e, u in self.emails.items() if u == uid), None)
+
+    def check(self, email: str, password: str) -> bool:
+        """D-131 PasswordVerifier stand-in (the conftest wires it up)."""
+        uid = self.emails.get(email.lower())
+        return uid is not None and uid not in self.disabled and self.passwords.get(uid) == password
 
     def create_user(self, *, email: str, display_name: str) -> str:
         if email in self.emails:
@@ -1728,6 +1737,10 @@ def make_client(
         app.dependency_overrides[get_password_otp_repository] = lambda: password_otps
         app.dependency_overrides[get_leave_repository] = lambda: leave_repo
         app.dependency_overrides[get_otp_ip_limiter] = lambda: RateLimiter(100, 900)
+        # D-131: the fake identity also checks passwords; fresh limiter per client.
+        app.dependency_overrides[get_password_verifier] = lambda: identity
+        resolve_limiter = RateLimiter(100, 900)
+        app.dependency_overrides[get_resolve_limiter] = lambda: resolve_limiter
         return TestClient(app)
 
     return _make
