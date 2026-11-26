@@ -56,6 +56,8 @@ DISPATCH_ATTEMPTS = 2  # UC13.4 E1: retry once before asking the patient
 # D-89: a booking with no driver after this long is cancelled and the delivery fails.
 DRIVER_SEARCH_LIMIT = timedelta(minutes=30)
 NO_DRIVER_REASON = "No driver accepted the delivery within 30 minutes."
+# D-132: after this many failed deliveries the order switches to self-collection.
+MAX_FAILED_DELIVERIES = 3
 PREPARATION_TIME = timedelta(hours=2)  # D-72: estimated ready time after payment
 
 SELF_COLLECTION = "self_collection"
@@ -98,6 +100,11 @@ def add_month(moment: datetime) -> datetime:
     year, month = (local.year + 1, 1) if local.month == 12 else (local.year, local.month + 1)
     day = min(local.day, calendar.monthrange(year, month)[1])
     return local.replace(year=year, month=month, day=day).astimezone(UTC)
+
+
+def order_created_at(o: dict[str, Any]) -> datetime:
+    v = o.get("createdAt") or o.get("cycleDate")
+    return v if isinstance(v, datetime) else datetime.min.replace(tzinfo=UTC)
 
 
 def order_id_for(rx_id: str, cycle: datetime) -> str:
@@ -510,10 +517,15 @@ class OrderService:
     # ----- UC13.1 / UC13.2: the monthly cycle -----
 
     def start_cycle(
-        self, rx_id: str, rx: dict[str, Any], cycle: datetime, actor: str
+        self,
+        rx_id: str,
+        rx: dict[str, Any],
+        cycle: datetime,
+        actor: str,
+        order_id: str | None = None,
     ) -> str | None:
         """Creates this cycle's order (pending payment) and prompts the patient."""
-        order_id = order_id_for(rx_id, cycle)
+        order_id = order_id or order_id_for(rx_id, cycle)
         patient = self.repo.user(str(rx["patientId"])) or {}
         items = rx.get("items") or []
         # D-69: catalogue prescriptions are priced from their items; older single-text ones
@@ -562,6 +574,36 @@ class OrderService:
                 order_id,
             )
         return order_id
+
+    def reorder(self, rx_id: str, rx: dict[str, Any], actor: str) -> str:
+        """D-132: the doctor sends a new order after the pharmacy cancelled this month's.
+        Same cycle (the monthly schedule is unchanged), a new order id."""
+        mine = self.repo.orders_for_prescription(rx_id)
+        if not mine:
+            raise OrderError("NO_ORDER", "This prescription has no order to replace.")
+        last_id, last = max(mine, key=lambda p: order_created_at(p[1]))
+        if last.get("fulfilmentStatus") != CANCELLED:
+            raise OrderError(
+                "ORDER_NOT_CANCELLED", "Only a cancelled order can be replaced by a new one."
+            )
+        cycle = last.get("cycleDate")
+        cycle = cycle if isinstance(cycle, datetime) else datetime.now(UTC)
+        base = order_id_for(rx_id, cycle)
+        taken = {oid for oid, _ in mine}
+        n = 2
+        while f"{base}-{n}" in taken:
+            n += 1
+        new_id = self.start_cycle(rx_id, rx, cycle, actor, order_id=f"{base}-{n}")
+        if new_id is None:
+            raise OrderError("ORDER_EXISTS", "A new order was already sent. Refresh the page.")
+        self.audit.log(
+            user_id=actor,
+            action="ORDER_REISSUED",
+            details=f"Doctor sent a new order to replace cancelled order {last_id}.",
+            target_type=Collection.MEDICATION_ORDERS.value,
+            target_id=new_id,
+        )
+        return new_id
 
     def latest_cycle(self, rx_id: str) -> datetime | None:
         cycles: list[datetime] = [
@@ -997,12 +1039,24 @@ class OrderService:
         if actor != "courier" and o.get("courierRef"):
             # Failed on our side (e.g. the admin demo): release the courier booking (D-68).
             self.courier.cancel(str(o["courierRef"]))
-        update = {
+        failures = int(o.get("failedDeliveries") or 0) + 1
+        update: dict[str, Any] = {
             "fulfilmentStatus": FAILED,
             "deliveryStatus": "failed",
             "failureReason": reason,
             "awaitingDriver": False,
+            "failedDeliveries": failures,  # D-132
         }
+        last = failures >= MAX_FAILED_DELIVERIES
+        if last:
+            # D-132: no more couriers; the medicine waits at the pharmacy for collection.
+            update.update(
+                {
+                    "method": SELF_COLLECTION,
+                    "fulfilmentStatus": READY_FOR_COLLECTION,
+                    "readyAt": now,
+                }
+            )
         self.repo.update_order(order_id, update)
         self.repo.add_event(
             {"orderId": order_id, "status": "failed", "location": None, "timestamp": now}
@@ -1010,16 +1064,41 @@ class OrderService:
         self.audit.log(
             user_id=actor,
             action="ORDER_DELIVERY_FAILED",
-            details=f"Delivery failed: {reason}",
+            details=f"Delivery failed ({failures} of {MAX_FAILED_DELIVERIES}): {reason}",
             target_type=Collection.MEDICATION_ORDERS.value,
             target_id=order_id,
         )
-        self._push(
-            str(o["patientId"]),
-            "Delivery problem",
-            "We couldn't deliver your medication. Reschedule or switch to self-collection.",
-            order_id,
-        )
+        if last:
+            self.audit.log(
+                user_id=actor,
+                action="ORDER_SWITCHED_TO_COLLECTION",
+                details=f"Delivery failed {failures} times; switched to self-collection (D-132).",
+                target_type=Collection.MEDICATION_ORDERS.value,
+                target_id=order_id,
+            )
+            self._push(
+                str(o["patientId"]),
+                "Please collect your medicine",
+                f"Delivery failed {failures} times, so your medicine is waiting at the pharmacy. "
+                "Show your collection slip when you collect it.",
+                order_id,
+            )
+            self._push_role(
+                UserRole.PHARMACIST,
+                "Delivery switched to collection",
+                f"An order for {o.get('medicationDetails')} failed delivery {failures} times; "
+                "the patient will collect it.",
+                order_id,
+            )
+        else:
+            left = MAX_FAILED_DELIVERIES - failures
+            self._push(
+                str(o["patientId"]),
+                "Delivery problem",
+                "We couldn't deliver your medication. Reschedule or switch to self-collection "
+                f"({left} delivery attempt{'s' if left != 1 else ''} left).",
+                order_id,
+            )
         return {**o, **update}
 
     def courier_update(
@@ -1141,6 +1220,12 @@ class OrderService:
         o = self._order(order_id)
         if o.get("fulfilmentStatus") != FAILED:
             raise OrderError("ORDER_NOT_FAILED", "Only a failed delivery can be rescheduled.")
+        if int(o.get("failedDeliveries") or 0) >= MAX_FAILED_DELIVERIES:
+            raise OrderError(
+                "DELIVERY_LIMIT",
+                f"Delivery failed {MAX_FAILED_DELIVERIES} times; "
+                "please collect it at the pharmacy.",
+            )
         o = {**o, "fulfilmentStatus": READY_FOR_DELIVERY}
         return self.dispatch(order_id, o, uid)
 
@@ -1176,6 +1261,26 @@ class OrderService:
             f"Your order for {o.get('medicationDetails')} was cancelled: {reason}",
             order_id,
         )
+        if role != "doctor":
+            # D-132: the prescribing doctor learns the patient won't get this month's supply.
+            rx = self.repo.prescription(str(o.get("prescriptionId") or "")) or {}
+            doctor = rx.get("doctorId")
+            if doctor:
+                patient = self.repo.user(str(o["patientId"])) or {}
+                who = "the pharmacy" if role == UserRole.PHARMACIST.value else "an admin"
+                self.notifier.notify(
+                    str(doctor),
+                    PushMessage(
+                        "Order cancelled by pharmacy",
+                        f"{patient.get('name') or 'Your patient'}'s order for "
+                        f"{o.get('medicationDetails')} was cancelled by {who}: {reason}",
+                        {
+                            "type": "order",
+                            "orderId": order_id,
+                            "patientId": str(o["patientId"]),
+                        },
+                    ),
+                )
 
     def cancel_for_prescription(self, rx_id: str, uid: str) -> int:
         """D-74: the doctor stopped the prescription; its unpaid orders are cancelled."""

@@ -50,6 +50,7 @@ from app.services.medications import (
 )
 from app.services.notifications import Notifier, get_notifier
 from app.services.orders import (
+    OrderError,
     OrderRepository,
     OrderService,
     get_order_repository,
@@ -352,6 +353,29 @@ def delete_prescription(
         target_type=Collection.PRESCRIPTIONS.value,
         target_id=rx_id,
     )
+
+
+@router.post("/{patient_id}/prescriptions/{rx_id}/reorder", status_code=status.HTTP_201_CREATED)
+def reorder_prescription(
+    patient_id: str,
+    rx_id: str,
+    doctor: CurrentUser = Depends(doctor_only),
+    repo: ProviderRepository = Depends(get_provider_repository),
+    orders: OrderService = Depends(get_order_service),
+) -> dict[str, Any]:
+    """D-132: after the pharmacy cancelled this prescription's order, the issuing doctor
+    sends a new one; the patient confirms and pays it as usual."""
+    _assigned_patient(patient_id, doctor, repo)
+    rx = repo.prescription(rx_id)
+    if rx is None or rx.get("patientId") != patient_id or rx.get("doctorId") != doctor.uid:
+        raise ApiError(
+            "PRESCRIPTION_NOT_FOUND", "Prescription not found.", status.HTTP_404_NOT_FOUND
+        )
+    try:
+        order_id = orders.reorder(rx_id, {**rx, "id": rx_id}, doctor.uid)
+    except OrderError as e:
+        raise ApiError(e.code, e.message, status.HTTP_409_CONFLICT) from e
+    return {"orderId": order_id}
 
 
 @router.get("/{patient_id}/delivery")

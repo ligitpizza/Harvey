@@ -46,6 +46,12 @@ class D78Api extends FakeApiClient {
   Future<Map<String, dynamic>> doctorPrescriptions() async => {'prescriptions': prescriptions};
 
   @override
+  Future<Map<String, dynamic>> reorderPrescription(String patientId, String prescriptionId) async {
+    calls.add('reorder:$patientId:$prescriptionId');
+    return {'orderId': 'o2'};
+  }
+
+  @override
   Future<Map<String, dynamic>> setRecurring(String prescriptionId, bool recurring) async {
     calls.add('recurring:$prescriptionId:$recurring');
     return {};
@@ -213,6 +219,44 @@ void main() {
     await t.tap(find.byKey(const Key('rx-edit-rx2')));
     await t.pumpAndSettle();
     expect(find.text('EDIT p2'), findsOneWidget);
+  });
+
+  testWidgets('D-132 an order cancelled by the pharmacy shows why; the doctor sends a new one', (
+    t,
+  ) async {
+    await wide(t);
+    api.prescriptions = [
+      {
+        'id': 'rx1',
+        'patientId': 'p1',
+        'patientName': 'Siti',
+        'medicationDetails': 'Amlodipine 5mg x30',
+        'isRecurring': true,
+        'latestOrder': {
+          'ref': 'CF-ABC123',
+          'status': 'cancelled',
+          'cancelReason': 'Duplicate order',
+          'cancelledBy': 'pharmacist',
+        },
+      },
+      {
+        'id': 'rx2',
+        'patientId': 'p2',
+        'patientName': 'Ali',
+        'medicationDetails': 'Losartan 50mg',
+        'isRecurring': false,
+        // Stopped by the doctor: no notice.
+        'latestOrder': {'status': 'cancelled', 'cancelledBy': 'doctor'},
+      },
+    ];
+    await t.pumpWidget(host(const PrescriptionsOverviewPage()));
+    await t.pumpAndSettle();
+    expect(find.text('Order cancelled by the pharmacy: Duplicate order'), findsOneWidget);
+    expect(find.byKey(const Key('rx-cancelled-rx2')), findsNothing);
+    await t.tap(find.byKey(const Key('rx-reorder-rx1')));
+    await t.pumpAndSettle();
+    expect(api.calls, contains('reorder:p1:rx1'));
+    expect(find.textContaining('New order sent'), findsOneWidget);
   });
 
   testWidgets('vitals: crisis colour and warning, day groups, no dev tools by default', (t) async {

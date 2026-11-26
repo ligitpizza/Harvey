@@ -386,6 +386,21 @@ void main() {
       expect(find.text('Preparing your order'), findsOneWidget);
     });
 
+    tallTest('D-132 a cancelled order says why and cannot be paid', (t) async {
+      repo.orders = {id: anOrder(status: Fulfilment.awaitingPayment, method: selfCollection)};
+      repo.startError = ApiException(
+        'ORDER_CANCELLED',
+        'This order was cancelled: Duplicate order',
+      );
+      await t.pumpWidget(host('/orders/$id/pay'));
+      await t.pumpAndSettle();
+      expect(find.text('This order was cancelled: Duplicate order'), findsOneWidget);
+      expect(find.byKey(const Key('pay-back-to-orders')), findsOneWidget);
+      expect(find.text('Retry'), findsNothing);
+      expect(find.text('Payment not available'), findsOneWidget);
+      expect(find.byKey(const Key('pay-total')), findsNothing);
+    });
+
     tallTest('UC13.3 E1 declined card stays and asks for another method', (t) async {
       repo.orders = {id: anOrder(status: Fulfilment.awaitingPayment, method: selfCollection)};
       await t.pumpWidget(host('/orders/$id/pay'));

@@ -219,6 +219,7 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | stockItemId | Reference (medication_stock) | Stock the units were taken from (D-66) | Optional |
 | receiptRecordId | Reference (health_records) | Receipt PDF saved for the patient (D-66) | Optional |
 | failureReason | String | Out-of-stock note or delivery failure reason (D-66) | Optional |
+| failedDeliveries | Number | D-132: failed home deliveries so far; at 3 the order switches to self-collection and no courier is rebooked | Optional; default 0 |
 | awaitingDriver | Boolean | Courier booked but still looking for a driver; shown as "Finding a driver" (D-89) | Optional; written by the backend only |
 | receivedAt | Timestamp | When the patient pressed "Medicine received" (D-94) | Optional; set once by the patient through the API |
 | skipReason | String | Why the doctor skipped this month (D-104) | Optional; 3–300 chars; set by the assigned doctor through the API |

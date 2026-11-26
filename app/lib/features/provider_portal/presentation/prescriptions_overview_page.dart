@@ -22,7 +22,16 @@ class DoctorPrescription {
     this.orderRef,
     this.orderStatus,
     this.paymentStatus,
+    this.cancelReason,
+    this.cancelledBy,
   });
+
+  /// D-132: why the latest order was cancelled, and by whom (pharmacist / admin / doctor).
+  final String? cancelReason;
+  final String? cancelledBy;
+
+  bool get cancelledByPharmacy =>
+      orderStatus == 'cancelled' && (cancelledBy == 'pharmacist' || cancelledBy == 'admin');
 
   final String id;
   final String patientId;
@@ -50,6 +59,8 @@ class DoctorPrescription {
       orderRef: o?['ref'] as String?,
       orderStatus: o?['status'] as String?,
       paymentStatus: o?['paymentStatus'] as String?,
+      cancelReason: o?['cancelReason'] as String?,
+      cancelledBy: o?['cancelledBy'] as String?,
     );
   }
 }
@@ -238,6 +249,7 @@ class _State extends ConsumerState<PrescriptionsOverviewPage> {
                               ),
                               const SizedBox(height: 4),
                               Text(p.details),
+                              if (p.cancelledByPharmacy) CancelledOrderNotice(prescription: p),
                               Text(
                                 [
                                   if (p.issuedAt != null) 'Issued ${dateLabel(p.issuedAt!)}',
@@ -327,6 +339,73 @@ class _OrderChip extends StatelessWidget {
       child: Text(
         orderLabel(status),
         style: TextStyle(color: c, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+}
+
+/// D-132: the pharmacy cancelled this prescription's order. Shows why, and lets the doctor
+/// send a new order (the patient confirms and pays it as usual).
+class CancelledOrderNotice extends ConsumerStatefulWidget {
+  const CancelledOrderNotice({super.key, required this.prescription});
+
+  final DoctorPrescription prescription;
+
+  @override
+  ConsumerState<CancelledOrderNotice> createState() => _CancelledOrderNoticeState();
+}
+
+class _CancelledOrderNoticeState extends ConsumerState<CancelledOrderNotice> {
+  bool _busy = false;
+
+  Future<void> _reorder() async {
+    final p = widget.prescription;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      await ref.read(apiClientProvider).reorderPrescription(p.patientId, p.id);
+      ref.invalidate(doctorPrescriptionsProvider);
+      messenger.showSnackBar(
+        SnackBar(content: Text('New order sent. ${p.patientName} will be asked to confirm it.')),
+      );
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.prescription;
+    final error = Theme.of(context).colorScheme.error;
+    final who = p.cancelledBy == 'admin' ? 'an admin' : 'the pharmacy';
+    return Container(
+      key: Key('rx-cancelled-${p.id}'),
+      margin: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
+      decoration: BoxDecoration(
+        color: error.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.cancel_outlined, size: 18, color: error),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Order cancelled by $who'
+              '${p.cancelReason == null ? '' : ': ${p.cancelReason}'}',
+              style: TextStyle(color: error),
+            ),
+          ),
+          TextButton.icon(
+            key: Key('rx-reorder-${p.id}'),
+            onPressed: _busy ? null : _reorder,
+            icon: const Icon(Icons.send_outlined, size: 18),
+            label: const Text('Send new order'),
+          ),
+        ],
       ),
     );
   }

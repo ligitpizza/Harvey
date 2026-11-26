@@ -83,6 +83,9 @@ String? notificationRoute(String? type, Map<String, String> data, UserRole? role
     'pharmacy_chat' when role == UserRole.pharmacist => '/pharmacy/messages',
     'order' when role == UserRole.pharmacist =>
       orderId == null ? '/pharmacy' : '/pharmacy/order/$orderId',
+    // D-132: the pharmacy cancelled a patient's order: open that patient.
+    'order' when role == UserRole.doctor =>
+      data['patientId'] == null ? '/doctor/prescriptions' : '/doctor/patient/${data['patientId']}',
     'order' when role == UserRole.admin =>
       orderId == null ? '/admin/orders' : '/admin/orders/$orderId',
     'clinical_alert' ||

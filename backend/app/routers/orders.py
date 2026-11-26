@@ -255,7 +255,17 @@ def start_payment(
     """UC13.3: a PaymentIntent for the order total; the app opens Stripe's PaymentSheet
     with the client secret (or the simulated card form in fake mode)."""
     o = _own_order(svc, order_id, user.uid)
-    if o.get("fulfilmentStatus") != AWAITING_PAYMENT or o.get("paymentStatus") == "paid":
+    if o.get("fulfilmentStatus") == CANCELLED:
+        # D-132: say why instead of "Confirm the order first".
+        reason = o.get("cancelReason")
+        raise ApiError(
+            "ORDER_CANCELLED",
+            "This order was cancelled" + (f": {reason}" if reason else "."),
+            status.HTTP_409_CONFLICT,
+        )
+    if o.get("paymentStatus") == "paid":
+        raise ApiError("ORDER_PAID", "This order is already paid.", status.HTTP_409_CONFLICT)
+    if o.get("fulfilmentStatus") != AWAITING_PAYMENT:
         raise ApiError("ORDER_NOT_PAYABLE", "Confirm the order first.", status.HTTP_409_CONFLICT)
     total = total_of(o)
     if total is None:

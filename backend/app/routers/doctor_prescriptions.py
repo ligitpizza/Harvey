@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends
 from app.core.auth import CurrentUser, require_roles
 from app.core.enums import UserRole
 from app.services.catalog import items_total
-from app.services.orders import OrderRepository, get_order_repository, order_ref
+from app.services.orders import OrderRepository, get_order_repository, order_created_at, order_ref
 from app.services.provider import ProviderRepository, get_provider_repository
 
 router = APIRouter(prefix="/provider/prescriptions", tags=["provider"])
@@ -38,7 +38,10 @@ def my_prescriptions(
         pid = str(rx.get("patientId"))
         if pid not in names:
             names[pid] = str((repo.patient(pid) or {}).get("name") or "Patient")
-        cycles = sorted(orders.orders_for_prescription(rx_id), key=lambda p: p[0])
+        # D-132: newest by creation (a re-sent order shares its month with the cancelled one).
+        cycles = sorted(
+            orders.orders_for_prescription(rx_id), key=lambda p: (order_created_at(p[1]), p[0])
+        )
         latest = None
         if cycles:
             oid, o = cycles[-1]
@@ -47,6 +50,8 @@ def my_prescriptions(
                 "ref": order_ref(oid),
                 "status": o.get("fulfilmentStatus"),
                 "paymentStatus": o.get("paymentStatus"),
+                "cancelReason": o.get("cancelReason"),
+                "cancelledBy": o.get("cancelledBy"),
             }
         items = list(rx.get("items") or [])
         out.append(

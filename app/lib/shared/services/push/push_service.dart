@@ -7,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../api/api_client.dart';
 import 'notification_taps.dart';
+import 'push_events.dart';
 
 /// Module 9 alert delivery on the device (FR-9.1, FR-9.5, D-33).
 ///
@@ -82,6 +83,7 @@ class FcmPushService implements PushService {
   }
 
   Future<void> _showForeground(RemoteMessage message) async {
+    PushEvents.add(message.data); // D-132: open screens refresh
     final n = message.notification;
     if (n == null) return;
     final channel = n.android?.channelId == alertsChannel.id ? alertsChannel : generalChannel;

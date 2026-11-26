@@ -1,19 +1,58 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/services/api/api_client.dart';
+import '../../../shared/services/push/push_events.dart';
 import '../data/order_models.dart';
 import '../state/orders_providers.dart';
 import 'order_widgets.dart';
 import '../../../shared/widgets/patient_hero.dart';
 
 /// The patient's monthly recurring orders (UC13.2), newest first.
-class OrdersPage extends ConsumerWidget {
+/// D-132: reloads when an order notification arrives or the app comes back to the front,
+/// so an order the pharmacy cancelled doesn't stay "Waiting for payment".
+class OrdersPage extends ConsumerStatefulWidget {
   const OrdersPage({super.key, this.completed = false});
 
   /// D-97: open on the Completed tab (from a finished order's notification).
   final bool completed;
+
+  @override
+  ConsumerState<OrdersPage> createState() => _OrdersPageState();
+}
+
+class _OrdersPageState extends ConsumerState<OrdersPage> with WidgetsBindingObserver {
+  StreamSubscription<Map<String, String>>? _pushes;
+
+  bool get completed => widget.completed;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _pushes = PushEvents.stream.listen((d) {
+      if (d['type'] == 'order') _reload();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _reload();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pushes?.cancel();
+    super.dispose();
+  }
+
+  void _reload() {
+    if (mounted) ref.invalidate(myOrdersProvider);
+  }
 
   Future<void> _nextCycle(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
@@ -37,7 +76,7 @@ class OrdersPage extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final orders = ref.watch(myOrdersProvider);
     return DefaultTabController(
       length: 2,

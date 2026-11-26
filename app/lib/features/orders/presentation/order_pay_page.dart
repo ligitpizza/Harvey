@@ -45,11 +45,24 @@ class _OrderPayPageState extends ConsumerState<OrderPayPage> {
       // D-102: show the order as confirmed (method and delivery fee), not a cached copy.
       ref.invalidate(orderProvider(widget.orderId));
     } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (!mounted) return;
+      setState(() {
+        _error = e.message;
+        _closed = e.code == 'ORDER_CANCELLED' || e.code == 'ORDER_PAID';
+      });
+      if (_closed) {
+        // D-132: the list and the order page show the real status from now on.
+        ref
+          ..invalidate(orderProvider(widget.orderId))
+          ..invalidate(myOrdersProvider);
+      }
     } catch (_) {
       if (mounted) setState(() => _error = 'Could not start the payment.');
     }
   }
+
+  /// D-132: the order can't be paid any more (cancelled by the pharmacy, or already paid).
+  bool _closed = false;
 
   Future<void> _pay() async {
     final start = _start;
@@ -119,6 +132,8 @@ class _OrderPayPageState extends ConsumerState<OrderPayPage> {
           const SizedBox(height: 8),
           if (start == null && _error == null)
             const Center(child: CircularProgressIndicator())
+          else if (_closed)
+            const SizedBox.shrink()
           else if (start != null && start.isFake)
             Card(
               key: const Key('fake-card-form'),
@@ -158,7 +173,7 @@ class _OrderPayPageState extends ConsumerState<OrderPayPage> {
               ),
             ),
           const SizedBox(height: 16),
-          if (order != null)
+          if (order != null && !_closed)
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -195,7 +210,13 @@ class _OrderPayPageState extends ConsumerState<OrderPayPage> {
               key: const Key('pay-error'),
               style: TextStyle(color: theme.colorScheme.error),
             ),
-            if (start == null)
+            if (_closed)
+              TextButton(
+                key: const Key('pay-back-to-orders'),
+                onPressed: () => Navigator.of(context).maybePop(),
+                child: const Text('Back to orders'),
+              )
+            else if (start == null)
               TextButton(
                 onPressed: () {
                   setState(() => _error = null);
@@ -212,7 +233,13 @@ class _OrderPayPageState extends ConsumerState<OrderPayPage> {
           key: const Key('pay-button'),
           onPressed: start == null || _busy ? null : _pay,
           icon: const Icon(Icons.lock_outline),
-          label: Text(_busy ? 'Processing…' : 'Pay ${total == null ? '' : rm(total)}'.trim()),
+          label: Text(
+            _closed
+                ? 'Payment not available'
+                : _busy
+                ? 'Processing…'
+                : 'Pay ${total == null ? '' : rm(total)}'.trim(),
+          ),
         ),
       ),
     );

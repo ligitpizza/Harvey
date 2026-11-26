@@ -582,3 +582,61 @@ def test_d74_deleting_the_prescription_cancels_its_unpaid_order(
     o = order_repo.orders[body["orderId"]]
     assert o["fulfilmentStatus"] == "cancelled" and o["cancelledBy"] == "doctor"
     assert o["cancelReason"] == "Prescription stopped by your doctor."
+
+
+def test_d132_pharmacy_cancel_tells_the_doctor_and_payment_says_cancelled(
+    client: TestClient, push: LogPushClient, tokens: InMemoryTokenRepository
+) -> None:
+    tokens.add(D, f"token-{D}", "android")
+    oid = issue(client)["orderId"]
+    client.post(
+        f"/api/v1/pharmacy/orders/{oid}/cancel", json={"reason": "Duplicate order"}, headers=PHARM
+    )
+    doctor = [m for toks, m in push.sent if f"token-{D}" in toks]
+    assert [m.title for m in doctor] == ["Order cancelled by pharmacy"]
+    assert "Siti Aminah" in doctor[0].body and "Duplicate order" in doctor[0].body
+    assert doctor[0].data["patientId"] == P
+    res = client.post(f"/api/v1/orders/{oid}/pay", headers=PATIENT)
+    assert res.status_code == 409
+    assert res.json()["error"]["code"] == "ORDER_CANCELLED"
+    assert "Duplicate order" in res.json()["error"]["message"]
+
+
+def test_d132_doctor_stopping_a_prescription_does_not_notify_themself(
+    client: TestClient, push: LogPushClient, tokens: InMemoryTokenRepository
+) -> None:
+    tokens.add(D, f"token-{D}", "android")
+    body = issue(client)
+    client.delete(f"{RX_URL}/{body['id']}", headers=DOCTOR)
+    assert "Order cancelled by pharmacy" not in titles(push, D)
+
+
+def test_d132_doctor_sends_a_new_order_after_a_pharmacy_cancel(
+    client: TestClient, order_repo: InMemoryOrderRepository, push: LogPushClient
+) -> None:
+    body = issue(client)
+    rx, oid = body["id"], body["orderId"]
+    url = f"{RX_URL}/{rx}/reorder"
+    # Not cancelled yet: nothing to replace.
+    assert client.post(url, headers=DOCTOR).json()["error"]["code"] == "ORDER_NOT_CANCELLED"
+    client.post(
+        f"/api/v1/pharmacy/orders/{oid}/cancel", json={"reason": "Duplicate order"}, headers=PHARM
+    )
+    listed = client.get("/api/v1/provider/prescriptions", headers=DOCTOR).json()["prescriptions"]
+    latest = next(p for p in listed if p["id"] == rx)["latestOrder"]
+    assert latest["status"] == "cancelled" and latest["cancelReason"] == "Duplicate order"
+    assert latest["cancelledBy"] == "pharmacist"
+
+    res = client.post(url, headers=DOCTOR)
+    assert res.status_code == 201, res.text
+    new = res.json()["orderId"]
+    assert new != oid and new.startswith(oid)
+    o = order_repo.orders[new]
+    assert o["fulfilmentStatus"] == "awaiting_confirmation"
+    assert o["cycleDate"] == order_repo.orders[oid]["cycleDate"]
+    assert "Confirm this month's order" in titles(push, P)
+    listed = client.get("/api/v1/provider/prescriptions", headers=DOCTOR).json()["prescriptions"]
+    assert next(p for p in listed if p["id"] == rx)["latestOrder"]["id"] == new
+    # Only once per cancellation; other roles can't.
+    assert client.post(url, headers=DOCTOR).json()["error"]["code"] == "ORDER_NOT_CANCELLED"
+    assert client.post(url, headers=PHARM).status_code == 403

@@ -768,3 +768,23 @@ def test_sweep_runs_the_order_job(client: TestClient, order_repo: InMemoryOrderR
     res = client.post("/internal/jobs/escalation")
     assert res.json()["deliveryUpdates"] == 3
     assert order_repo.orders[oid]["fulfilmentStatus"] == "delivered"
+
+
+def test_d132_third_failed_delivery_switches_to_collection(
+    client: TestClient, order_repo: InMemoryOrderRepository, push: LogPushClient
+) -> None:
+    oid = _deliver(client, order_repo)
+    fail = f"/api/v1/admin/deliveries/{oid}/simulate-failure"
+    for n in (1, 2):
+        res = client.post(fail, json={}, headers=ADMIN)
+        assert res.json()["fulfilmentStatus"] == "failed"
+        assert order_repo.orders[oid]["failedDeliveries"] == n
+        assert client.post(f"/api/v1/orders/{oid}/reschedule", headers=PATIENT).status_code == 200
+    res = client.post(fail, json={}, headers=ADMIN)
+    o = order_repo.orders[oid]
+    assert o["failedDeliveries"] == 3
+    assert o["method"] == "self_collection" and o["fulfilmentStatus"] == "ready_for_collection"
+    assert "Please collect your medicine" in titles(push, P)
+    # No fourth courier, from the patient or the pharmacist.
+    assert client.post(f"/api/v1/orders/{oid}/reschedule", headers=PATIENT).status_code == 409
+    assert client.post(f"/api/v1/pharmacy/orders/{oid}/rebook", headers=PHARM).status_code == 409

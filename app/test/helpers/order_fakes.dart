@@ -73,9 +73,13 @@ class FakeOrdersRepository implements OrdersRepository {
     return quotedFee;
   }
 
+  /// D-132: what starting a payment throws (e.g. the order was cancelled).
+  Object? startError;
+
   @override
   Future<PaymentStart> startPayment(String id) async {
     calls.add('pay:$id');
+    if (startError != null) throw startError!;
     return payment;
   }
 

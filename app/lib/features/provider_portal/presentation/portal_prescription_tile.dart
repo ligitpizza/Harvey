@@ -6,6 +6,7 @@ import '../../auth/state/auth_providers.dart';
 import '../domain/portal_models.dart';
 import '../state/portal_providers.dart';
 import 'portal_widgets.dart';
+import 'prescriptions_overview_page.dart';
 
 /// A prescription in the doctor's views: blue when doctor-issued, green when reported by
 /// the patient (D-50). The issuing doctor can delete their own (development use).
@@ -69,7 +70,13 @@ class PortalPrescriptionTile extends ConsumerWidget {
     final mine =
         !p.byPatient && p.doctorId != null && p.doctorId == ref.watch(authUidProvider).value;
     final color = prescriptionColor(p);
-    return ListTile(
+    // D-132: the pharmacy cancelled this prescription's latest order.
+    final cancelled = mine
+        ? (ref.watch(doctorPrescriptionsProvider).value ?? const <DoctorPrescription>[])
+              .where((d) => d.id == p.id && d.cancelledByPharmacy)
+              .firstOrNull
+        : null;
+    final tile = ListTile(
       key: Key('portal-rx-${p.id}'),
       dense: true,
       leading: Container(width: 4, height: 36, color: color),
@@ -106,6 +113,17 @@ class PortalPrescriptionTile extends ConsumerWidget {
               ],
             )
           : null,
+    );
+    if (cancelled == null) return tile;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        tile,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: CancelledOrderNotice(prescription: cancelled),
+        ),
+      ],
     );
   }
 }

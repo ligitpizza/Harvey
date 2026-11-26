@@ -612,6 +612,10 @@ class ApiClient {
   Future<Map<String, dynamic>> devNextOrderCycle() => _send('POST', '/orders/dev/next-cycle', null);
 
   /// UC13.1: the doctor flags a prescription recurring (or stops it).
+  /// D-132: a new order to replace one the pharmacy cancelled.
+  Future<Map<String, dynamic>> reorderPrescription(String patientId, String prescriptionId) =>
+      _post('/provider/patients/$patientId/prescriptions/$prescriptionId/reorder', const {});
+
   Future<Map<String, dynamic>> setRecurring(String prescriptionId, bool recurring) =>
       _post('/prescriptions/$prescriptionId/recurring', {'isRecurring': recurring});
 
