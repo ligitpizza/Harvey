@@ -3,6 +3,7 @@
 POST /provider/patients/{id}/notes          clinical note (Fig 4.3.12.5)
 POST /provider/patients/{id}/reports        D-100: written report saved to the patient's Records
 PUT  /provider/patients/{id}/care-plan      the patient's single living care plan
+PUT  /provider/patients/{id}/health-profile D-133: correct the patient's health profile
 POST /provider/patients/{id}/prescriptions  with drug interaction warning (UC8.4 E1)
 DELETE /provider/patients/{id}/prescriptions/{rxId}  the issuing doctor only (D-50)
 GET  /provider/patients/{id}/medication-effect  risk before vs after medication (D-44)
@@ -29,6 +30,7 @@ from app.schemas.provider import (
     NoteRequest,
     PrescriptionRequest,
 )
+from app.schemas.settings import HealthProfileUpdate
 from app.services.agent_context import MYT, AgentDataRepository, get_agent_data_repository
 from app.services.catalog import (
     FREQUENCIES,
@@ -39,6 +41,7 @@ from app.services.catalog import (
     items_total,
 )
 from app.services.cover import can_see_patient
+from app.services.health_profile import FIELD_LABELS, rescore, save_health_profile
 from app.services.health_report import report_pdf, save_report, snapshot
 from app.services.interactions import check
 from app.services.medication_effect import medication_effect
@@ -69,6 +72,7 @@ from app.services.records import (
     record_view,
 )
 from app.services.risk import RiskDataRepository, get_risk_data_repository
+from app.services.settings import SettingsRepository, get_settings_repository
 
 router = APIRouter(prefix="/provider/patients", tags=["provider"])
 
@@ -203,6 +207,61 @@ def update_care_plan(
         target_id=patient_id,
     )
     return {"id": patient_id}
+
+
+@router.put("/{patient_id}/health-profile")
+def update_health_profile(
+    patient_id: str,
+    body: HealthProfileUpdate,
+    doctor: CurrentUser = Depends(doctor_only),
+    repo: ProviderRepository = Depends(get_provider_repository),
+    settings_repo: SettingsRepository = Depends(get_settings_repository),
+    risk_repo: RiskDataRepository = Depends(get_risk_data_repository),
+    model: RiskModel | None = Depends(get_risk_model),
+    notifier: Notifier = Depends(get_notifier),
+    audit: AuditLogger = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    """D-133: the assigned doctor corrects the patient's health profile (a covering doctor
+    only views it). Each changed field is tagged with the doctor's name; the patient is told
+    and can change it back. Risk inputs changed -> re-scored, as for the patient (UC12.2)."""
+    patient = _assigned_patient(patient_id, doctor, repo)
+    if not patient.get("onboardingComplete") or settings_repo.health_profile(patient_id) is None:
+        raise ApiError(
+            "ONBOARDING_INCOMPLETE",
+            "The patient hasn't set up their health profile yet.",
+            status.HTTP_409_CONFLICT,
+        )
+    me = settings_repo.user(doctor.uid) or {}
+    name = str(me.get("name") or "").strip()
+    by_name = (name if name.lower().startswith("dr") else f"Dr {name}") if name else "Your doctor"
+    changed, risk_changed = save_health_profile(
+        settings_repo,
+        patient_id,
+        body,
+        editor={"by": doctor.uid, "byName": by_name},
+        now=datetime.now(UTC),
+    )
+    if not changed:
+        return {"status": "ok", "changed": [], "rescored": False}
+    rescored = risk_changed and rescore(patient_id, risk_repo, model)
+    labels = ", ".join(FIELD_LABELS[k] for k in changed)
+    audit.log(
+        user_id=doctor.uid,
+        action="DOCTOR_UPDATE_HEALTH_PROFILE",
+        details=f"Doctor updated the health profile ({labels})"
+        f"{'; risk re-scored' if rescored else ''}.",
+        target_type=Collection.HEALTH_PROFILES.value,
+        target_id=patient_id,
+    )
+    notifier.notify(
+        patient_id,
+        PushMessage(
+            f"{by_name} updated your health profile",
+            f"Changed: {labels}. Open Settings > Health profile to check it.",
+            {"type": "health_profile"},
+        ),
+    )
+    return {"status": "ok", "changed": changed, "rescored": rescored}
 
 
 def _catalog_items(body: PrescriptionRequest, catalog: CatalogRepository) -> list[dict[str, Any]]:

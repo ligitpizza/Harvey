@@ -488,6 +488,13 @@ class ApiClient {
   Future<Map<String, dynamic>> updateHealthProfile(Map<String, dynamic> body) =>
       _send('PUT', '/settings/health-profile', body);
 
+  /// D-133: the assigned doctor corrects a patient's health profile.
+  /// Returns {changed: [field keys], rescored}.
+  Future<Map<String, dynamic>> updatePatientHealthProfile(
+    String patientId,
+    Map<String, dynamic> body,
+  ) => _send('PUT', '/provider/patients/$patientId/health-profile', body);
+
   Future<Map<String, dynamic>> updateNotificationPrefs(Map<String, dynamic> body) =>
       _send('PUT', '/settings/notifications', body);
 

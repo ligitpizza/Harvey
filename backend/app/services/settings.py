@@ -59,7 +59,9 @@ class SettingsRepository(Protocol):
 
     def update_user(self, uid: str, data: dict[str, Any]) -> None: ...
 
-    def update_health_profile(self, uid: str, data: dict[str, str]) -> None: ...
+    def update_health_profile(self, uid: str, data: dict[str, Any]) -> None:
+        """Replaces each given top-level field (D-133: doctorEdits as a whole)."""
+        ...
 
     def export_records(self, uid: str) -> dict[str, list[dict[str, Any]]]:
         """Every exported collection's documents for this patient (D-47)."""
@@ -99,10 +101,10 @@ class FirestoreSettingsRepository:
             {**data, "updatedAt": firestore.SERVER_TIMESTAMP}
         )
 
-    def update_health_profile(self, uid: str, data: dict[str, str]) -> None:
-        self._col(Collection.HEALTH_PROFILES).document(uid).set(
-            {**data, "patientId": uid}, merge=True
-        )
+    def update_health_profile(self, uid: str, data: dict[str, Any]) -> None:
+        # merge on these fields only, so a whole map (doctorEdits) is replaced, not merged.
+        doc = {**data, "patientId": uid}
+        self._col(Collection.HEALTH_PROFILES).document(uid).set(doc, merge=list(doc))
 
     def export_records(self, uid: str) -> dict[str, list[dict[str, Any]]]:
         out: dict[str, list[dict[str, Any]]] = {}

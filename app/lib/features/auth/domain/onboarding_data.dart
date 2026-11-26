@@ -29,6 +29,10 @@ class OnboardingData {
   int? exerciseDaysPerWeek;
   SaltIntake? saltIntake;
 
+  /// D-133: fields the assigned doctor changed last (field key -> who and when). Read-only
+  /// here; the server sets and clears it.
+  Map<String, DoctorEdit> doctorEdits = const {};
+
   bool get hasEmergencyContact =>
       emergencyName.trim().isNotEmpty ||
       emergencyPhone.trim().isNotEmpty ||
@@ -78,15 +82,25 @@ class OnboardingData {
   };
 
   /// Settings (UC12.2 health profile) request body.
-  Map<String, dynamic> toHealthJson() {
-    final all = toApiJson();
-    return {
-      'heightCm': heightCm,
-      'weightKg': weightKg,
-      'medicalHistory': all['medicalHistory'],
-      'lifestyleFactors': all['lifestyleFactors'],
-    };
-  }
+  /// D-133: built without [toApiJson] so it works without a date of birth (the doctor's
+  /// copy of the profile has none).
+  Map<String, dynamic> toHealthJson() => {
+    'heightCm': heightCm,
+    'weightKg': weightKg,
+    'medicalHistory': {
+      'hypertensionDiagnosedYear': hypertensionDiagnosedYear,
+      'conditions': conditions.map((e) => e.value).toList(),
+      'familyHistory': familyHistory.map((e) => e.value).toList(),
+      'allergies': allergies.trim(),
+      'notes': notes.trim(),
+    },
+    'lifestyleFactors': {
+      'smokingStatus': smokingStatus!.value,
+      'alcohol': alcohol!.value,
+      'exerciseDaysPerWeek': exerciseDaysPerWeek,
+      'saltIntake': saltIntake!.value,
+    },
+  };
 
   /// The stored profile (D-25 JSON strings in `health_profiles`) for editing in Settings.
   factory OnboardingData.fromStored({
@@ -95,6 +109,7 @@ class OnboardingData {
     required Map<String, dynamic> lifestyleFactors,
     DateTime? dateOfBirth,
     Gender? gender,
+    Object? doctorEdits,
   }) {
     final emergency = personalInfo['emergencyContact'];
     final e = emergency is Map ? emergency : const {};
@@ -109,7 +124,8 @@ class OnboardingData {
         'emergencyRelationship': e['relationship'],
       })
       ..dateOfBirth = dateOfBirth
-      ..gender = gender;
+      ..gender = gender
+      ..doctorEdits = DoctorEdit.parseAll(doctorEdits);
   }
 
   /// Draft persisted on the device so onboarding can resume (UC1.4 A1).
@@ -165,4 +181,44 @@ class OnboardingData {
   static String _isoDate(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
+}
+
+/// D-133: "Updated by Dr Tan · 27 Nov" on a health-profile field the doctor changed.
+class DoctorEdit {
+  const DoctorEdit({required this.byName, this.at});
+
+  final String byName;
+  final DateTime? at;
+
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', //
+  ];
+
+  String get label {
+    final when = at == null ? '' : ' · ${at!.day} ${_months[at!.month - 1]} ${at!.year}';
+    return 'Updated by $byName$when';
+  }
+
+  /// `health_profiles.doctorEdits` from Firestore ({key: {byName, at: Timestamp}}).
+  static Map<String, DoctorEdit> parseAll(Object? raw) {
+    if (raw is! Map) return const {};
+    return {
+      for (final e in raw.entries)
+        if (e.value is Map)
+          '${e.key}': DoctorEdit(
+            byName: '${(e.value as Map)['byName'] ?? 'Your doctor'}',
+            at: _date((e.value as Map)['at']),
+          ),
+    };
+  }
+
+  static DateTime? _date(Object? v) {
+    if (v is DateTime) return v.toLocal();
+    try {
+      // cloud_firestore Timestamp, without importing it into the domain layer.
+      return ((v as dynamic)?.toDate() as DateTime?)?.toLocal();
+    } catch (_) {
+      return null;
+    }
+  }
 }

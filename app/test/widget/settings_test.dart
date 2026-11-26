@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hypertension/core/constants/enums.dart';
 import 'package:hypertension/features/auth/domain/app_user.dart';
 import 'package:hypertension/features/auth/domain/onboarding_data.dart';
+import 'package:hypertension/features/notifications/state/notification_providers.dart';
 import 'package:hypertension/features/auth/state/auth_providers.dart';
 import 'package:hypertension/features/dashboard/state/dashboard_providers.dart';
 import 'package:hypertension/features/medications/state/medication_providers.dart';
@@ -352,6 +353,34 @@ void main() {
     });
   });
 
+  testWidgets('D-133 answers the doctor changed are tagged with the doctor', (t) async {
+    repo.stored = stored()
+      ..doctorEdits = {'smokingStatus': DoctorEdit(byName: 'Dr Tan', at: DateTime(2026, 11, 27))};
+    await t.pumpWidget(app(repo, auth, initial: '/settings/health'));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('doctor-edited-note')), findsOneWidget);
+    await t.scrollUntilVisible(
+      find.text('Updated by Dr Tan · 27 Nov 2026'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Updated by Dr Tan · 27 Nov 2026'), findsOneWidget);
+  });
+
+  test('D-133 the doctor-edit notification opens the health profile', () {
+    expect(notificationRoute('health_profile', const {}, UserRole.patient), '/settings/health');
+  });
+
+  test('D-133 doctorEdits from Firestore', () {
+    final e = DoctorEdit.parseAll({
+      'weightKg': {'byName': 'Dr Tan', 'at': DateTime.utc(2026, 11, 27, 4)},
+      'bad': 'x',
+    });
+    expect(e.keys, ['weightKg']);
+    expect(e['weightKg']!.label, startsWith('Updated by Dr Tan · 27 Nov 2026'));
+    expect(DoctorEdit.parseAll(null), isEmpty);
+  });
+
   testWidgets('UC12.2 health profile edits are sent', (t) async {
     await t.pumpWidget(app(repo, auth, initial: '/settings/health'));
     await t.pumpAndSettle();
@@ -360,12 +389,16 @@ void main() {
       200,
       scrollable: find.byType(Scrollable).first,
     );
+    await t.ensureVisible(find.text('Heart failure'));
+    await t.pumpAndSettle();
     await t.tap(find.text('Heart failure'));
     await t.scrollUntilVisible(
       find.text('Smoke now'),
       200,
       scrollable: find.byType(Scrollable).first,
     );
+    await t.ensureVisible(find.text('Smoke now'));
+    await t.pumpAndSettle();
     await t.tap(find.text('Smoke now'));
     await t.scrollUntilVisible(
       find.byKey(const Key('settings-save')),

@@ -11,6 +11,7 @@ import '../../auth/domain/onboarding_data.dart';
 import '../../auth/presentation/onboarding/onboarding_labels.dart';
 import '../../auth/state/auth_providers.dart';
 import '../state/settings_providers.dart';
+import 'health_profile_fields.dart';
 import 'settings_widgets.dart';
 import '../../../core/utils/ic_number.dart';
 
@@ -316,7 +317,6 @@ class _HealthFormState extends ConsumerState<_HealthForm> with _SaveFlow<_Health
 
   @override
   Widget build(BuildContext context) {
-    final year = DateTime.now().year;
     return Form(
       key: form,
       child: ListView(
@@ -326,92 +326,17 @@ class _HealthFormState extends ConsumerState<_HealthForm> with _SaveFlow<_Health
             'Changes to these answers update your risk assessment.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          Row(
-            children: [
-              Expanded(
-                child: NumberField(
-                  key: const Key('settings-height'),
-                  label: 'Height (cm)',
-                  initial: _d.heightCm,
-                  min: 100,
-                  max: 250,
-                  decimals: true,
-                  onChanged: (v) => _d.heightCm = v?.toDouble(),
-                ),
+          // D-133: a value your doctor changed shows "Updated by Dr …" until you change it.
+          if (_d.doctorEdits.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Your doctor updated some answers. You can change them if they are wrong.',
+                key: const Key('doctor-edited-note'),
+                style: Theme.of(context).textTheme.bodySmall,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: NumberField(
-                  key: const Key('settings-weight'),
-                  label: 'Weight (kg)',
-                  initial: _d.weightKg,
-                  min: 25,
-                  max: 300,
-                  decimals: true,
-                  onChanged: (v) => _d.weightKg = v?.toDouble(),
-                ),
-              ),
-            ],
-          ),
-          NumberField(
-            label: 'Year diagnosed with high blood pressure (optional)',
-            initial: _d.hypertensionDiagnosedYear,
-            min: 1900,
-            max: year,
-            required: false,
-            onChanged: (v) => _d.hypertensionDiagnosedYear = v?.toInt(),
-          ),
-          const SectionLabel('Conditions you have'),
-          MultiChips<MedicalCondition>(
-            values: MedicalCondition.values,
-            selected: _d.conditions,
-            label: OnboardingLabels.condition,
-            onChanged: (s) => setState(() => _d.conditions = s),
-          ),
-          const SectionLabel('Family history'),
-          MultiChips<FamilyHistoryCondition>(
-            values: FamilyHistoryCondition.values,
-            selected: _d.familyHistory,
-            label: OnboardingLabels.family,
-            onChanged: (s) => setState(() => _d.familyHistory = s),
-          ),
-          TextFormField(
-            key: const Key('settings-allergies'),
-            initialValue: _d.allergies,
-            decoration: const InputDecoration(labelText: 'Allergies'),
-            maxLength: 500,
-            onChanged: (v) => _d.allergies = v,
-          ),
-          const SectionLabel('Smoking'),
-          ChoiceChips<SmokingStatus>(
-            key: const Key('settings-smoking'),
-            values: SmokingStatus.values,
-            selected: _d.smokingStatus,
-            label: OnboardingLabels.smoking,
-            onSelected: (v) => setState(() => _d.smokingStatus = v),
-          ),
-          const SectionLabel('Alcohol'),
-          ChoiceChips<AlcoholUse>(
-            values: AlcoholUse.values,
-            selected: _d.alcohol,
-            label: OnboardingLabels.alcohol,
-            onSelected: (v) => setState(() => _d.alcohol = v),
-          ),
-          const SectionLabel('Salt in your diet'),
-          ChoiceChips<SaltIntake>(
-            values: SaltIntake.values,
-            selected: _d.saltIntake,
-            label: OnboardingLabels.salt,
-            onSelected: (v) => setState(() => _d.saltIntake = v),
-          ),
-          const SizedBox(height: 8),
-          NumberField(
-            label: 'Days of exercise per week',
-            initial: _d.exerciseDaysPerWeek,
-            min: 0,
-            max: 7,
-            onChanged: (v) => _d.exerciseDaysPerWeek = v?.toInt(),
-          ),
+            ),
+          HealthProfileFields(data: _d),
           SaveBar(
             saving: saving,
             error: error,

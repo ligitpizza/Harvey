@@ -289,11 +289,15 @@ def test_d47_pdf_lines_all_start_at_the_left_margin(client: TestClient) -> None:
     import zlib
 
     pdf = client.get("/api/v1/settings/export", headers=PATIENT).content
-    text = b"".join(
-        zlib.decompress(m.group(1))
-        for m in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", pdf, re.S)
-        if m.group(1)[:1] == b"x"
-    )
+    # Decompress from each stream start; decompressobj stops at the end of the zlib data, so
+    # compressed bytes that happen to contain "\nendstream" can't cut a stream short.
+    parts = []
+    for m in re.finditer(rb"(?<!end)stream\r?\n", pdf):
+        try:
+            parts.append(zlib.decompressobj().decompress(pdf[m.end() :]))
+        except zlib.error:
+            continue
+    text = b"".join(parts)
     xs = {round(float(x)) for x in re.findall(rb"BT ([\d.]+) [\d.]+ Td", text)}
     assert len(xs) == 1
     assert b"Blood pressure readings (3)" in text.replace(rb"\(", b"(").replace(rb"\)", b")")

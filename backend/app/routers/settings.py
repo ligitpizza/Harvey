@@ -30,13 +30,12 @@ from app.schemas.settings import (
     PersonalInfoUpdate,
     StaffProfileUpdate,
 )
+from app.services.health_profile import rescore, save_health_profile
 from app.services.ic import IcError, parse_identity
 from app.services.identity import IdentityProvider, get_identity_provider
 from app.services.notifications import TokenRepository, get_token_repository
 from app.services.risk import (
-    NotEnoughReadingsError,
     RiskDataRepository,
-    generate_risk_score,
     get_risk_data_repository,
 )
 from app.services.settings import (
@@ -63,20 +62,6 @@ def _active_patient(repo: SettingsRepository, uid: str) -> dict[str, Any]:
             "ACCOUNT_DEACTIVATED", "This account is deactivated.", status.HTTP_403_FORBIDDEN
         )
     return user
-
-
-def _rescore(uid: str, risk_repo: RiskDataRepository, model: RiskModel | None) -> bool:
-    """UC12.2 step 3: re-run UC9.1 after a relevant change. Never fails the save."""
-    if model is None:
-        return False
-    try:
-        generate_risk_score(uid, risk_repo, model)
-    except NotEnoughReadingsError:
-        return False
-    except Exception:
-        log.exception("Re-score after profile edit failed for %s", uid)
-        return False
-    return True
 
 
 @router.put("/profile")
@@ -120,7 +105,7 @@ def update_profile(
                 status.HTTP_409_CONFLICT,
             )
     repo.update_user(user.uid, updates)
-    rescored = changed_inputs and _rescore(user.uid, risk_repo, model)
+    rescored = changed_inputs and rescore(user.uid, risk_repo, model)
     audit.log(
         user_id=user.uid,
         action="UPDATE_PROFILE",
@@ -195,18 +180,6 @@ def update_contact(
     return {"status": "ok"}
 
 
-def _risk_relevant(personal: dict[str, Any], history: dict[str, Any], life: dict[str, Any]) -> Any:
-    """The health-profile values the risk model reads (D-31)."""
-    return (
-        personal.get("heightCm"),
-        personal.get("weightKg"),
-        sorted(history.get("conditions") or []),
-        sorted(history.get("familyHistory") or []),
-        history.get("hypertensionDiagnosedYear"),
-        life.get("smokingStatus"),
-    )
-
-
 @router.put("/health-profile")
 def update_health_profile(
     body: HealthProfileUpdate,
@@ -223,27 +196,9 @@ def update_health_profile(
             "Finish onboarding first.",
             status.HTTP_409_CONFLICT,
         )
-    stored = repo.health_profile(user.uid) or {}
-    personal = parse_profile_field(stored.get("personalInfo"))
-    before = _risk_relevant(
-        personal,
-        parse_profile_field(stored.get("medicalHistory")),
-        parse_profile_field(stored.get("lifestyleFactors")),
-    )
-    personal.update({"heightCm": body.heightCm, "weightKg": body.weightKg})
-    history = body.medicalHistory.model_dump(mode="json")
-    life = body.lifestyleFactors.model_dump(mode="json")
-    repo.update_health_profile(
-        user.uid,
-        {
-            "personalInfo": json.dumps(personal),
-            "medicalHistory": json.dumps(history),
-            "lifestyleFactors": json.dumps(life),
-        },
-    )
-    rescored = _risk_relevant(personal, history, life) != before and _rescore(
-        user.uid, risk_repo, model
-    )
+    # D-133: fields the patient changes lose their "updated by your doctor" tag.
+    _, risk_changed = save_health_profile(repo, user.uid, body)
+    rescored = risk_changed and rescore(user.uid, risk_repo, model)
     audit.log(
         user_id=user.uid,
         action="UPDATE_HEALTH_PROFILE",

@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hypertension/core/constants/enums.dart';
+import 'package:hypertension/features/auth/domain/onboarding_data.dart';
 import 'package:hypertension/features/auth/state/auth_providers.dart';
 import 'package:hypertension/features/charts/state/trends_providers.dart';
 import 'package:hypertension/features/dashboard/data/dashboard_repository.dart';
@@ -218,6 +219,21 @@ class FakePortalRepository implements PortalRepository {
 
   @override
   Stream<CarePlan?> carePlan(String patientId) => Stream.value(plan);
+
+  OnboardingData? health;
+  final healthSaves = <(String, Map<String, dynamic>)>[];
+
+  @override
+  Stream<OnboardingData?> healthProfile(String patientId) => Stream.value(health);
+
+  @override
+  Future<({List<String> changed, bool rescored})> saveHealthProfile(
+    String patientId,
+    OnboardingData data,
+  ) async {
+    healthSaves.add((patientId, data.toHealthJson()));
+    return (changed: const ['smokingStatus'], rescored: true);
+  }
 
   @override
   Future<void> addNote(String patientId, String content) async => addedNotes.add(content);
@@ -876,6 +892,79 @@ void main() {
       await t.pumpAndSettle();
       expect(repo.rxCalls, [false]);
       expect(find.byKey(const Key('rx-saved')), findsNothing);
+    });
+  });
+
+  group('D-133 health profile', () {
+    OnboardingData profile() => OnboardingData.fromStored(
+      personalInfo: {'heightCm': 160, 'weightKg': 64},
+      medicalHistory: {
+        'conditions': ['diabetes'],
+        'familyHistory': ['stroke'],
+        'allergies': '',
+        'notes': '',
+      },
+      lifestyleFactors: {
+        'smokingStatus': 'never',
+        'alcohol': 'none',
+        'exerciseDaysPerWeek': 2,
+        'saltIntake': 'high',
+      },
+      doctorEdits: {
+        'weightKg': {'byName': 'Dr Tan', 'at': DateTime(2026, 11, 20)},
+      },
+    );
+
+    Future<void> openTab(WidgetTester t, String id) async {
+      await t.pumpWidget(portal(repo, data, '/doctor/patient/$id'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Health profile'));
+      await t.pumpAndSettle();
+    }
+
+    tallTest('the doctor sees the answers and who changed them', (t) async {
+      repo.health = profile();
+      await openTab(t, 'p1');
+      expect(find.text('64 kg (BMI 25.0)'), findsOneWidget);
+      expect(find.text('Diabetes'), findsWidgets);
+      expect(find.text('Updated by Dr Tan · 20 Nov 2026'), findsOneWidget);
+    });
+
+    tallTest('the assigned doctor corrects an answer', (t) async {
+      repo.health = profile();
+      await openTab(t, 'p1');
+      await t.tap(find.byKey(const Key('edit-health-profile')));
+      await t.pumpAndSettle();
+      final dialog = find.byKey(const Key('health-profile-dialog'));
+      await t.tap(find.descendant(of: dialog, matching: find.text('Smoke now')));
+      await t.tap(find.byKey(const Key('save-health-profile')));
+      await t.pumpAndSettle();
+      expect(repo.healthSaves.single.$1, 'p1');
+      final life = repo.healthSaves.single.$2['lifestyleFactors'] as Map;
+      expect(life['smokingStatus'], 'current');
+      expect(dialog, findsNothing);
+      expect(find.textContaining('The patient has been told'), findsOneWidget);
+    });
+
+    tallTest('a covering doctor only views it', (t) async {
+      repo
+        ..patients = [
+          PortalPatient(
+            uid: 'p9',
+            name: 'Cover Case',
+            assignedDoctorId: 'u-other',
+            coverAccess: {'u-doctor': DateTime(2026, 12, 1)},
+          ),
+        ]
+        ..health = profile();
+      await openTab(t, 'p9');
+      expect(find.text('64 kg (BMI 25.0)'), findsOneWidget);
+      expect(find.byKey(const Key('edit-health-profile')), findsNothing);
+    });
+
+    tallTest('a patient who has not finished onboarding', (t) async {
+      await openTab(t, 'p1');
+      expect(find.text("The patient hasn't set up their health profile yet."), findsOneWidget);
     });
   });
 

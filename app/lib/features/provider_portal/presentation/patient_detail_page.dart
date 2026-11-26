@@ -31,6 +31,7 @@ import '../../appointments/state/appointment_providers.dart';
 import 'dose_history.dart';
 import 'medication_effect_card.dart';
 import 'portal_prescription_tile.dart';
+import 'health_profile_tab.dart';
 import 'portal_widgets.dart';
 import '../../../core/utils/ic_number.dart';
 import 'delivery_preference_card.dart';
@@ -96,7 +97,7 @@ class _PatientDetailPageState extends ConsumerState<PatientDetailPage> {
               _trendCard(now),
             ],
             const SizedBox(height: 16),
-            _HistoryTabs(patientId: id),
+            _HistoryTabs(patientId: id, covering: covering),
           ],
         );
       },
@@ -344,9 +345,12 @@ class _VitalsAndRisk extends ConsumerWidget {
 
 /// Tabs for the rest of the record (UC8.3 E1: each tab has its own empty state).
 class _HistoryTabs extends ConsumerWidget {
-  const _HistoryTabs({required this.patientId});
+  const _HistoryTabs({required this.patientId, this.covering = false});
 
   final String patientId;
+
+  /// D-120 / D-133: a covering doctor sees the health profile but doesn't edit it.
+  final bool covering;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -361,7 +365,7 @@ class _HistoryTabs extends ConsumerWidget {
     final appts = ref.watch(patientAppointmentHistoryProvider(patientId)); // D-82
 
     return DefaultTabController(
-      length: 7,
+      length: 8,
       child: Card(
         child: Column(
           children: [
@@ -369,6 +373,7 @@ class _HistoryTabs extends ConsumerWidget {
               isScrollable: true,
               tabs: [
                 Tab(text: 'Vitals'),
+                Tab(text: 'Health profile'), // D-133
                 Tab(text: 'Medications'),
                 Tab(text: 'Care plan'),
                 Tab(text: 'Clinical notes'),
@@ -408,6 +413,7 @@ class _HistoryTabs extends ConsumerWidget {
                       ),
                     ),
                   ),
+                  _pad(HealthProfileTab(patientId: patientId, canEdit: !covering)),
                   _pad(
                     ListView(
                       children: [

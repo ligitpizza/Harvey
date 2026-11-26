@@ -418,7 +418,7 @@ class InMemorySettingsRepository:
     def update_user(self, uid: str, data: dict[str, Any]) -> None:
         self._users.users[uid].update(data)
 
-    def update_health_profile(self, uid: str, data: dict[str, str]) -> None:
+    def update_health_profile(self, uid: str, data: dict[str, Any]) -> None:
         self._users.health_profiles.setdefault(uid, {"patientId": uid}).update(data)
 
     def export_records(self, uid: str) -> dict[str, list[dict[str, Any]]]:

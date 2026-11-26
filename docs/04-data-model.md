@@ -55,6 +55,7 @@ Source: Chapter 4, Section 4.2.3 Data Dictionary (20 collections). Class diagram
 | medicalHistory | String | Structured/free-text medical history | Required |
 | lifestyleFactors | String | Lifestyle factors captured at onboarding | Required |
 | personalInfo | String | Additional personal information (D-25 JSON: heightCm, weightKg, phone as +60…, emergencyContact, homeAddress (D-82)) | Required |
+| doctorEdits | Map | D-133: answers the assigned doctor changed last: {field key (heightCm, weightKg, hypertensionDiagnosedYear, conditions, familyHistory, allergies, notes, smokingStatus, alcohol, exerciseDaysPerWeek, saltIntake): {by: doctor uid, byName, at: Timestamp}} | Optional; set by the doctor's save, a key removed when the patient changes that answer; server-written |
 
 ### `vital_readings`  (Table 4.2.3.3)
 

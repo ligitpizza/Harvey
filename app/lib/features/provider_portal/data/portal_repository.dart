@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/constants/enums.dart';
 import '../../../shared/services/api/api_client.dart';
+import '../../auth/domain/onboarding_data.dart';
 import '../domain/portal_models.dart';
 
 /// Module 8 doctor portal data (Fig 4.1.1.8 ProviderCtrl).
@@ -27,6 +30,15 @@ abstract interface class PortalRepository {
   Stream<List<Prescription>> prescriptions(String patientId);
 
   Stream<CarePlan?> carePlan(String patientId);
+
+  /// D-133: the patient's health profile (D-25), with the fields this doctor changed.
+  Stream<OnboardingData?> healthProfile(String patientId);
+
+  /// D-133: assigned doctor only; returns whether the risk score was re-generated.
+  Future<({List<String> changed, bool rescored})> saveHealthProfile(
+    String patientId,
+    OnboardingData data,
+  );
 
   Future<void> addNote(String patientId, String content);
 
@@ -141,6 +153,44 @@ class FirestorePortalRepository implements PortalRepository {
       .doc(patientId)
       .snapshots()
       .map((s) => s.exists ? CarePlan.fromFirestore(s.data()!) : null);
+
+  @override
+  Stream<OnboardingData?> healthProfile(String patientId) =>
+      _db.collection(Collections.healthProfiles).doc(patientId).snapshots().map((s) {
+        final d = s.data();
+        if (d == null) return null;
+        Map<String, dynamic> json(Object? raw) {
+          if (raw is Map) return Map<String, dynamic>.from(raw);
+          if (raw is String && raw.isNotEmpty) {
+            try {
+              final v = jsonDecode(raw);
+              if (v is Map) return Map<String, dynamic>.from(v);
+            } on FormatException {
+              return const {};
+            }
+          }
+          return const {};
+        }
+
+        return OnboardingData.fromStored(
+          personalInfo: json(d['personalInfo']),
+          medicalHistory: json(d['medicalHistory']),
+          lifestyleFactors: json(d['lifestyleFactors']),
+          doctorEdits: d['doctorEdits'],
+        );
+      });
+
+  @override
+  Future<({List<String> changed, bool rescored})> saveHealthProfile(
+    String patientId,
+    OnboardingData data,
+  ) async {
+    final r = await _api.updatePatientHealthProfile(patientId, data.toHealthJson());
+    return (
+      changed: [for (final k in (r['changed'] as List? ?? const [])) '$k'],
+      rescored: r['rescored'] == true,
+    );
+  }
 
   @override
   Future<void> addNote(String patientId, String content) =>

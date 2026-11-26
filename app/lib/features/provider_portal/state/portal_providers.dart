@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/enums.dart';
 import '../../../shared/models/health_models.dart';
 import '../../../shared/providers/api_providers.dart';
+import '../../auth/domain/onboarding_data.dart';
 import '../../auth/state/auth_providers.dart';
 import '../../dashboard/state/dashboard_providers.dart';
 import '../data/portal_repository.dart';
@@ -104,6 +105,12 @@ final patientNotesProvider = StreamProvider.family<List<ClinicalNote>, String>(
 
 final patientPrescriptionsProvider = StreamProvider.family<List<Prescription>, String>(
   (ref, id) => ref.watch(portalRepositoryProvider).prescriptions(id),
+  retry: _noRetry,
+);
+
+/// D-133: the patient's health profile on the doctor's patient page.
+final patientHealthProfileProvider = StreamProvider.autoDispose.family<OnboardingData?, String>(
+  (ref, id) => ref.watch(portalRepositoryProvider).healthProfile(id),
   retry: _noRetry,
 );
 

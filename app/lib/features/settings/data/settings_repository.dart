@@ -78,6 +78,7 @@ class ApiSettingsRepository implements SettingsRepository {
           lifestyleFactors: _json(d['lifestyleFactors']),
           dateOfBirth: user.dateOfBirth,
           gender: user.gender,
+          doctorEdits: d['doctorEdits'], // D-133
         );
       });
 

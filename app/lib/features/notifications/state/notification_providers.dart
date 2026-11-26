@@ -72,6 +72,7 @@ String? notificationRoute(String? type, Map<String, String> data, UserRole? role
       'bp_alert' || 'risk' || 'triage' => '/dashboard',
       'family_link' || 'family_request' => '/family-requests',
       'record_shared' => '/records',
+      'health_profile' => '/settings/health', // D-133: the doctor changed it
       _ => null,
     };
   }
